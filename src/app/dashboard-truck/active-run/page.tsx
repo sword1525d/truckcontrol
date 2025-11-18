@@ -81,12 +81,15 @@ function ActiveRunContent() {
       const runSnap = await getDoc(runRef);
 
       if (runSnap.exists()) {
-        const runData = { id: runSnap.id, ...runSnap.data(), stops: runSnap.data().stops || [] } as Run;
-        setRun(runData);
+        const runData = runSnap.data();
+        const stopsArray = Array.isArray(runData.stops) ? runData.stops : [];
+        const transformedRunData = { id: runSnap.id, ...runData, stops: stopsArray } as Run;
+        setRun(transformedRunData);
+        
         // Pre-fill stop data if run is reloaded
         const initialStopData: typeof stopData = {};
-        if (Array.isArray(runData.stops)) {
-            runData.stops.forEach(stop => {
+        if (Array.isArray(transformedRunData.stops)) {
+            transformedRunData.stops.forEach(stop => {
               if (stop.status === 'IN_PROGRESS' || stop.status === 'COMPLETED') {
                 initialStopData[stop.name] = {
                   occupied: stop.collectedOccupiedCars?.toString() || '',
@@ -197,7 +200,9 @@ function ActiveRunContent() {
   const handleFinishRun = async () => {
     if (!run || !firestore || !runId) return;
     
-    const lastStop = run.stops[run.stops.length - 1];
+    const stopsArray = Array.isArray(run.stops) ? run.stops : [];
+    const lastStop = stopsArray.length > 0 ? stopsArray[stopsArray.length - 1] : null;
+
     if (!lastStop || !lastStop.mileageAtStop) {
         toast({ variant: 'destructive', title: 'Erro', description: 'A quilometragem da última parada é necessária.' });
         return;
@@ -223,7 +228,7 @@ function ActiveRunContent() {
     }
   }
 
-  const allStopsCompleted = run?.stops.every(s => s.status === 'COMPLETED');
+  const allStopsCompleted = run && Array.isArray(run.stops) && run.stops.every(s => s.status === 'COMPLETED');
 
 
   if (isLoading || !run) {
@@ -234,6 +239,8 @@ function ActiveRunContent() {
     );
   }
   
+  const stopsArray = Array.isArray(run.stops) ? run.stops : [];
+
   return (
     <div className="flex flex-col min-h-screen font-sans bg-gray-100">
       <header className="p-4 flex items-center justify-between text-foreground bg-card border-b sticky top-0 z-10">
@@ -252,13 +259,13 @@ function ActiveRunContent() {
             </CardHeader>
         </Card>
 
-        {run.stops.map((stop, index) => {
+        {stopsArray.map((stop, index) => {
             const stopNameIdentifier = stop.name.replace(/\s+/g, '-');
             const isPending = stop.status === 'PENDING';
             const isInProgress = stop.status === 'IN_PROGRESS';
             const isCompleted = stop.status === 'COMPLETED';
             
-            const canStartThisStop = isPending && (index === 0 || run.stops[index-1].status === 'COMPLETED');
+            const canStartThisStop = isPending && (index === 0 || stopsArray[index-1].status === 'COMPLETED');
             
             return (
                 <Card key={index} className={isCompleted ? 'bg-green-50 border-green-200' : 'bg-card'}>
