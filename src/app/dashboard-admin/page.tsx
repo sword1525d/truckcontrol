@@ -122,16 +122,17 @@ const AdminDashboardPage = () => {
     if (!firestore || !user) return [];
     
     // Simplifica a consulta para evitar a necessidade de um índice composto complexo.
-    // O filtro de data será aplicado no lado do cliente.
+    // A ordenação será feita no lado do cliente.
     const runsQuery = query(
         collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/runs`),
-        where('status', '==', 'COMPLETED'),
-        orderBy('endTime', 'desc')
+        where('status', '==', 'COMPLETED')
     );
 
     try {
         const querySnapshot = await getDocs(runsQuery);
-        return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Run));
+        const runs = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Run));
+        // Ordena os resultados no cliente
+        return runs.sort((a, b) => (b.endTime?.seconds || 0) - (a.endTime?.seconds || 0));
     } catch (error: any) {
         console.error("Error fetching completed runs: ", error);
         toast({ variant: 'destructive', title: 'Erro ao buscar histórico', description: 'Não foi possível carregar o histórico. Tente recarregar a página.' });
@@ -144,7 +145,8 @@ const AdminDashboardPage = () => {
   }
 
   return (
-    <div className="container mx-auto p-4 sm:p-6 lg:p-8 bg-background min-h-screen">
+    <div className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-900">
+      <div className="container mx-auto p-4 sm:p-6 lg:p-8 bg-background rounded-2xl shadow-xl border w-full max-w-7xl">
        <Header />
        <Tabs defaultValue="realtime" className="w-full">
         <TabsList className="grid w-full grid-cols-2 max-w-lg mx-auto">
@@ -158,6 +160,7 @@ const AdminDashboardPage = () => {
             <HistoryDashboard fetchCompletedRuns={fetchCompletedRuns} />
         </TabsContent>
       </Tabs>
+      </div>
     </div>
   );
 };
@@ -484,4 +487,5 @@ const DateFilter = ({ date, setDate }: { date: DateRange | undefined, setDate: (
 
 export default AdminDashboardPage;
 
+    
     
