@@ -118,30 +118,23 @@ const AdminDashboardPage = () => {
   }, [firestore, user, toast]);
 
   // Função para buscar corridas completas (histórico)
-  const fetchCompletedRuns = useCallback(async (startDate?: Date, endDate?: Date) => {
+  const fetchCompletedRuns = useCallback(async () => {
     if (!firestore || !user) return [];
     
-    let runsQuery = query(
+    // Simplifica a consulta para evitar a necessidade de um índice composto complexo.
+    // O filtro de data será aplicado no lado do cliente.
+    const runsQuery = query(
         collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/runs`),
-        where('status', '==', 'COMPLETED')
+        where('status', '==', 'COMPLETED'),
+        orderBy('endTime', 'desc')
     );
-      
-    if (startDate && endDate) {
-       const startTimestamp = Timestamp.fromDate(startDate);
-       const endTimestamp = Timestamp.fromDate(endDate);
-       runsQuery = query(runsQuery, where('endTime', '>=', startTimestamp), where('endTime', '<=', endTimestamp));
-    }
-
-    // Add ordering after all filters
-    runsQuery = query(runsQuery, orderBy('endTime', 'desc'));
-
 
     try {
         const querySnapshot = await getDocs(runsQuery);
         return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Run));
     } catch (error: any) {
         console.error("Error fetching completed runs: ", error);
-        toast({ variant: 'destructive', title: 'Erro ao buscar histórico', description: error.message || 'Não foi possível carregar as corridas concluídas.' });
+        toast({ variant: 'destructive', title: 'Erro ao buscar histórico', description: 'Não foi possível carregar o histórico. Tente recarregar a página.' });
         return [];
     }
   }, [firestore, user, toast]);
@@ -151,7 +144,7 @@ const AdminDashboardPage = () => {
   }
 
   return (
-    <div className="container mx-auto p-4 sm:p-6 lg:p-8 bg-gray-50 dark:bg-black min-h-screen">
+    <div className="container mx-auto p-4 sm:p-6 lg:p-8 bg-background min-h-screen">
        <Header />
        <Tabs defaultValue="realtime" className="w-full">
         <TabsList className="grid w-full grid-cols-2 max-w-lg mx-auto">
@@ -172,11 +165,20 @@ const AdminDashboardPage = () => {
 // --- Componente Header ---
 const Header = () => {
     const [time, setTime] = useState(new Date());
+     const router = useRouter();
 
     useEffect(() => {
         const timer = setInterval(() => setTime(new Date()), 1000 * 30);
         return () => clearInterval(timer);
     }, []);
+
+    const handleLogout = () => {
+        if (confirm('Tem certeza que deseja sair da conta?')) {
+            localStorage.clear();
+            router.push('/login');
+        }
+    };
+
 
     return (
      <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
@@ -186,6 +188,7 @@ const Header = () => {
             {format(time, "eeee, dd 'de' MMMM 'de' yyyy, HH:mm", { locale: ptBR })}
           </p>
         </div>
+         <Button onClick={handleLogout} variant="outline">Sair</Button>
       </header>
     );
 };
@@ -287,8 +290,8 @@ const RunAccordionItem = ({ run }: { run: Run }) => {
 }
 
 // --- Componente Aba Histórico ---
-const HistoryDashboard = ({ fetchCompletedRuns }: { fetchCompletedRuns: (startDate?: Date, endDate?: Date) => Promise<Run[]> }) => {
-    const [runs, setRuns] = useState<Run[]>([]);
+const HistoryDashboard = ({ fetchCompletedRuns }: { fetchCompletedRuns: () => Promise<Run[]> }) => {
+    const [allRuns, setAllRuns] = useState<Run[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [date, setDate] = useState<DateRange | undefined>({
       from: startOfDay(new Date()),
@@ -297,21 +300,31 @@ const HistoryDashboard = ({ fetchCompletedRuns }: { fetchCompletedRuns: (startDa
 
     useEffect(() => {
         setIsLoading(true);
-        fetchCompletedRuns(date?.from, date?.to).then(data => {
-            setRuns(data);
+        fetchCompletedRuns().then(data => {
+            setAllRuns(data);
             setIsLoading(false);
         });
-    }, [date, fetchCompletedRuns]);
+    }, [fetchCompletedRuns]);
+
+    const filteredRuns = useMemo(() => {
+        if (!date?.from) return allRuns;
+        const toDate = date.to || date.from; // If no 'to' date, filter for a single day.
+        return allRuns.filter(run => {
+            if (!run.endTime?.seconds) return false;
+            const runDate = new Date(run.endTime.seconds * 1000);
+            return runDate >= startOfDay(date.from) && runDate <= endOfDay(toDate);
+        });
+    }, [allRuns, date]);
 
     const kpis = useMemo(() => {
-      const totalRuns = runs.length;
-      const totalDistance = runs.reduce((acc, run) => {
+      const totalRuns = filteredRuns.length;
+      const totalDistance = filteredRuns.reduce((acc, run) => {
         if (run.endMileage && run.startMileage) {
           return acc + (run.endMileage - run.startMileage);
         }
         return acc;
       }, 0);
-      const totalDurationSeconds = runs.reduce((acc, run) => {
+      const totalDurationSeconds = filteredRuns.reduce((acc, run) => {
         if (run.endTime && run.startTime) {
           return acc + (run.endTime.seconds - run.startTime.seconds);
         }
@@ -320,16 +333,17 @@ const HistoryDashboard = ({ fetchCompletedRuns }: { fetchCompletedRuns: (startDa
       const avgDurationMinutes = totalRuns > 0 ? (totalDurationSeconds / totalRuns / 60) : 0;
       
       return { totalRuns, totalDistance, avgDurationMinutes };
-    }, [runs]);
-
+    }, [filteredRuns]);
+    
+    // Chart data is based on last 7 days regardless of filter, using all runs data
     const chartData = useMemo(() => {
         const last7Days = Array.from({ length: 7 }).map((_, i) => subDays(new Date(), i)).reverse();
         
         return last7Days.map(day => {
             const dayStart = startOfDay(day);
             const dayEnd = endOfDay(day);
-            const runsOnDay = runs.filter(run => {
-                if (!run.endTime) return false;
+            const runsOnDay = allRuns.filter(run => {
+                if (!run.endTime?.seconds) return false;
                 const endTime = new Date(run.endTime.seconds * 1000);
                 return endTime >= dayStart && endTime <= dayEnd;
             });
@@ -338,7 +352,7 @@ const HistoryDashboard = ({ fetchCompletedRuns }: { fetchCompletedRuns: (startDa
                 total: runsOnDay.length,
             };
         });
-    }, [runs]);
+    }, [allRuns]);
 
 
     return (
@@ -367,7 +381,7 @@ const HistoryDashboard = ({ fetchCompletedRuns }: { fetchCompletedRuns: (startDa
                         <ResponsiveContainer width="100%" height={250}>
                             <BarChart data={chartData}>
                                 <XAxis dataKey="name" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
-                                <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
+                                <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} allowDecimals={false} />
                                 <Tooltip />
                                 <Bar dataKey="total" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
                             </BarChart>
@@ -379,7 +393,7 @@ const HistoryDashboard = ({ fetchCompletedRuns }: { fetchCompletedRuns: (startDa
                 <Card>
                     <CardHeader>
                         <CardTitle>Histórico de Corridas</CardTitle>
-                        <CardDescription>Lista das últimas corridas concluídas.</CardDescription>
+                        <CardDescription>Lista das corridas concluídas no período.</CardDescription>
                     </CardHeader>
                     <CardContent>
                       {isLoading ? <div className="flex justify-center items-center h-[250px]"><Loader2 className="w-8 h-8 animate-spin"/></div> :
@@ -394,7 +408,7 @@ const HistoryDashboard = ({ fetchCompletedRuns }: { fetchCompletedRuns: (startDa
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {runs.length > 0 ? runs.map(run => <HistoryTableRow key={run.id} run={run} />) : <TableRow><TableCell colSpan={4} className="text-center">Nenhuma corrida encontrada</TableCell></TableRow>}
+                                    {filteredRuns.length > 0 ? filteredRuns.map(run => <HistoryTableRow key={run.id} run={run} />) : <TableRow><TableCell colSpan={4} className="text-center">Nenhuma corrida encontrada</TableCell></TableRow>}
                                 </TableBody>
                             </Table>
                         </div>}
@@ -469,3 +483,5 @@ const DateFilter = ({ date, setDate }: { date: DateRange | undefined, setDate: (
 );
 
 export default AdminDashboardPage;
+
+    
