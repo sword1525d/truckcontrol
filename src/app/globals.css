@@ -82,3 +82,43 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Splash Screen Animations */
+.splash-container {
+  animation: fadeOut 0.5s ease-in-out forwards 2.5s;
+}
+
+.splash-animation {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.truck-icon {
+  animation: slideInFromLeft 1.2s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+  transform: translateX(-150%);
+}
+
+.app-name {
+  animation: fadeIn 1s ease-in-out forwards 0.8s;
+  opacity: 0;
+}
+
+@keyframes slideInFromLeft {
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes fadeIn {
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeOut {
+  to {
+    opacity: 0;
+  }
+}
