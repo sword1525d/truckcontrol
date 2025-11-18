@@ -1,0 +1,162 @@
+{
+  "entities": {
+    "Company": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Company",
+      "type": "object",
+      "description": "Represents a company that uses the Frotacontrol system.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Company entity."
+        },
+        "name": {
+          "type": "string",
+          "description": "The name of the company."
+        },
+        "description": {
+          "type": "string",
+          "description": "A brief description of the company."
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ]
+    },
+    "Sector": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Sector",
+      "type": "object",
+      "description": "Represents a sector within a company.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Sector entity."
+        },
+        "companyId": {
+          "type": "string",
+          "description": "Reference to Company. (Relationship: Company 1:N Sector)"
+        },
+        "name": {
+          "type": "string",
+          "description": "The name of the sector."
+        },
+        "description": {
+          "type": "string",
+          "description": "A brief description of the sector."
+        }
+      },
+      "required": [
+        "id",
+        "companyId",
+        "name"
+      ]
+    },
+    "User": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "User",
+      "type": "object",
+      "description": "Represents a user within the Frotacontrol system.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the User entity (matricula)."
+        },
+        "companyId": {
+          "type": "string",
+          "description": "Reference to Company. (Relationship: Company 1:N User)"
+        },
+        "sectorId": {
+          "type": "string",
+          "description": "Reference to Sector. (Relationship: Sector 1:N User)"
+        },
+        "name": {
+          "type": "string",
+          "description": "The user's full name."
+        },
+        "truck": {
+          "type": "boolean",
+          "description": "Indicates if the user is a truck driver."
+        }
+      },
+      "required": [
+        "id",
+        "companyId",
+        "sectorId",
+        "name"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/companies/{companyId}",
+        "definition": {
+          "entityName": "Company",
+          "schema": {
+            "$ref": "#/backend/entities/Company"
+          },
+          "description": "Stores company information.",
+          "params": [
+            {
+              "name": "companyId",
+              "description": "Unique identifier for the company."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/companies/{companyId}/sectors/{sectorId}",
+        "definition": {
+          "entityName": "Sector",
+          "schema": {
+            "$ref": "#/backend/entities/Sector"
+          },
+          "description": "Stores sector information within a company.",
+          "params": [
+            {
+              "name": "companyId",
+              "description": "Unique identifier for the company."
+            },
+            {
+              "name": "sectorId",
+              "description": "Unique identifier for the sector."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/companies/{companyId}/sectors/{sectorId}/users/{userId}",
+        "definition": {
+          "entityName": "User",
+          "schema": {
+            "$ref": "#/backend/entities/User"
+          },
+          "description": "Stores user information within a company and sector, keyed by matricula (userId).",
+          "params": [
+            {
+              "name": "companyId",
+              "description": "Unique identifier for the company."
+            },
+            {
+              "name": "sectorId",
+              "description": "Unique identifier for the sector."
+            },
+            {
+              "name": "userId",
+              "description": "Unique identifier for the user (matricula)."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "This Firestore structure prioritizes authorization independence and efficient data retrieval for the Frotacontrol application. It leverages path-based ownership for user data within companies and sectors, eliminating the need for `get()` calls in security rules. The structure enforces homogeneous security postures within collections and subcollections.\n\n*   `/companies/{companyId}`: Stores company information.\n*   `/companies/{companyId}/sectors/{sectorId}`: Stores sector information within each company.\n*   `/companies/{companyId}/sectors/{sectorId}/users/{userId}`: Stores user information, keyed by their unique identifier (`matricula`). This structure allows for direct access to user data based on company, sector, and ID, crucial for authentication and authorization. This design uses the appropriate Hierarchical Paths for User-Owned Data.\n\nThis design facilitates simple, robust security rules:\n\n*   Rules can directly verify `request.auth.uid` against the `userId` path segment, ensuring that users can only access their own data within a specific company and sector.\n*   `list` operations are secured because each subcollection contains only documents with the same security requirements (users belonging to a specific sector within a specific company).\n\nDenormalization Strategy:\n\nWhile the current design focuses on user authentication, future features might require denormalization for collaborative data access. If sectors or companies need shared data (e.g., shared vehicle logs), a membership map (`members: {uid1: 'role', uid2: 'role'}`) should be added to relevant documents and denormalized to child documents to maintain authorization independence. However, for the core login functionality, this is unnecessary."
+  }
+}
