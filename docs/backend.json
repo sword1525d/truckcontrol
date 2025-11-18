@@ -13,10 +13,6 @@
         "name": {
           "type": "string",
           "description": "The name of the company."
-        },
-        "description": {
-          "type": "string",
-          "description": "A brief description of the company."
         }
       },
       "required": [
@@ -41,10 +37,6 @@
         "name": {
           "type": "string",
           "description": "The name of the sector."
-        },
-        "description": {
-          "type": "string",
-          "description": "A brief description of the sector."
         }
       },
       "required": [
@@ -75,6 +67,10 @@
           "type": "string",
           "description": "The user's full name."
         },
+        "password": {
+          "type": "string",
+          "description": "The user's password. This should be handled securely."
+        },
         "truck": {
           "type": "boolean",
           "description": "Indicates if the user is a truck driver."
@@ -84,7 +80,37 @@
         "id",
         "companyId",
         "sectorId",
-        "name"
+        "name",
+        "password"
+      ]
+    },
+    "Vehicle": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Vehicle",
+      "type": "object",
+      "description": "Represents a vehicle within a company.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Vehicle entity (e.g., license plate)."
+        },
+        "companyId": {
+          "type": "string",
+          "description": "Reference to Company. (Relationship: Company 1:N Vehicle)"
+        },
+        "model": {
+          "type": "string",
+          "description": "The model of the vehicle."
+        },
+        "year": {
+          "type": "number",
+          "description": "The manufacturing year of the vehicle."
+        }
+      },
+      "required": [
+        "id",
+        "companyId",
+        "model"
       ]
     }
   },
@@ -152,6 +178,26 @@
             {
               "name": "userId",
               "description": "Unique identifier for the user (matricula)."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/companies/{companyId}/vehicles/{vehicleId}",
+        "definition": {
+          "entityName": "Vehicle",
+          "schema": {
+            "$ref": "#/backend/entities/Vehicle"
+          },
+          "description": "Stores vehicle information within a company.",
+          "params": [
+            {
+              "name": "companyId",
+              "description": "Unique identifier for the company."
+            },
+            {
+              "name": "vehicleId",
+              "description": "Unique identifier for the vehicle."
             }
           ]
         }
