@@ -118,15 +118,16 @@ function ActiveRunContent() {
 
  const handleRegisterArrival = async (stopIndex: number) => {
     if (!run || !firestore || !runId) return;
+    const stopsArray = Array.isArray(run.stops) ? run.stops : [];
 
-    if (run.stops[stopIndex].status !== 'PENDING') return;
+    if (stopsArray[stopIndex].status !== 'PENDING') return;
 
     try {
       const companyId = localStorage.getItem('companyId');
       const sectorId = localStorage.getItem('sectorId');
       const runRef = doc(firestore, `companies/${companyId}/sectors/${sectorId}/runs`, runId);
       
-      const updatedStops = [...run.stops];
+      const updatedStops = [...stopsArray];
       updatedStops[stopIndex].status = 'IN_PROGRESS';
       updatedStops[stopIndex].arrivalTime = serverTimestamp();
 
@@ -138,7 +139,7 @@ function ActiveRunContent() {
       updatedStops[stopIndex].arrivalTime = new Date(); 
       setRun({ ...run, stops: updatedStops });
       
-      toast({ title: 'Chegada registrada!', description: `Você chegou em ${run.stops[stopIndex].name}.` });
+      toast({ title: 'Chegada registrada!', description: `Você chegou em ${stopsArray[stopIndex].name}.` });
     } catch (error) {
       console.error("Erro ao registrar chegada: ", error);
       toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível registrar a chegada.' });
@@ -147,8 +148,9 @@ function ActiveRunContent() {
 
   const handleFinishStop = async (stopIndex: number) => {
     if (!run || !firestore || !runId) return;
+    const stopsArray = Array.isArray(run.stops) ? run.stops : [];
 
-    const stopName = run.stops[stopIndex].name;
+    const stopName = stopsArray[stopIndex].name;
     const currentStopData = stopData[stopName] || { occupied: '', empty: '', mileage: '' };
     const { occupied, empty, mileage } = currentStopData;
 
@@ -162,7 +164,7 @@ function ActiveRunContent() {
       const sectorId = localStorage.getItem('sectorId');
       const runRef = doc(firestore, `companies/${companyId}/sectors/${sectorId}/runs`, runId);
 
-      const updatedStops = [...run.stops];
+      const updatedStops = [...stopsArray];
       updatedStops[stopIndex] = {
         ...updatedStops[stopIndex],
         status: 'COMPLETED',
@@ -228,7 +230,7 @@ function ActiveRunContent() {
     }
   }
 
-  const allStopsCompleted = run && Array.isArray(run.stops) && run.stops.every(s => s.status === 'COMPLETED');
+  const allStopsCompleted = run && Array.isArray(run.stops) && run.stops.length > 0 && run.stops.every(s => s.status === 'COMPLETED');
 
 
   if (isLoading || !run) {
@@ -265,7 +267,7 @@ function ActiveRunContent() {
             const isInProgress = stop.status === 'IN_PROGRESS';
             const isCompleted = stop.status === 'COMPLETED';
             
-            const canStartThisStop = isPending && (index === 0 || stopsArray[index-1].status === 'COMPLETED');
+            const canStartThisStop = isPending && (index === 0 || (stopsArray[index-1] && stopsArray[index-1].status === 'COMPLETED'));
             
             return (
                 <Card key={index} className={isCompleted ? 'bg-green-50 border-green-200' : 'bg-card'}>
