@@ -82,6 +82,7 @@ function ActiveRunContent() {
 
       if (runSnap.exists()) {
         const runData = runSnap.data();
+        // Ensure runData.stops is always an array
         const stopsArray = Array.isArray(runData.stops) ? runData.stops : [];
         const transformedRunData = { id: runSnap.id, ...runData, stops: stopsArray } as Run;
         setRun(transformedRunData);
@@ -118,9 +119,10 @@ function ActiveRunContent() {
 
  const handleRegisterArrival = async (stopIndex: number) => {
     if (!run || !firestore || !runId) return;
+    
+    // Ensure run.stops is an array before proceeding
     const stopsArray = Array.isArray(run.stops) ? run.stops : [];
-
-    if (stopsArray[stopIndex].status !== 'PENDING') return;
+    if (stopsArray.length === 0 || stopsArray[stopIndex].status !== 'PENDING') return;
 
     try {
       const companyId = localStorage.getItem('companyId');
@@ -135,9 +137,16 @@ function ActiveRunContent() {
         stops: updatedStops,
       });
 
+      // Clone the arrivalTime for local state update to avoid non-serializable value warning
+      const localArrivalTime = new Date();
+      
       // Update local state to reflect the change immediately
-      updatedStops[stopIndex].arrivalTime = new Date(); 
-      setRun({ ...run, stops: updatedStops });
+      setRun(prevRun => {
+          if (!prevRun) return null;
+          const newStops = [...(Array.isArray(prevRun.stops) ? prevRun.stops : [])];
+          newStops[stopIndex] = { ...newStops[stopIndex], status: 'IN_PROGRESS', arrivalTime: localArrivalTime };
+          return { ...prevRun, stops: newStops };
+      });
       
       toast({ title: 'Chegada registrada!', description: `Você chegou em ${stopsArray[stopIndex].name}.` });
     } catch (error) {
@@ -148,7 +157,10 @@ function ActiveRunContent() {
 
   const handleFinishStop = async (stopIndex: number) => {
     if (!run || !firestore || !runId) return;
+    
+    // Ensure run.stops is an array
     const stopsArray = Array.isArray(run.stops) ? run.stops : [];
+    if(stopsArray.length === 0) return;
 
     const stopName = stopsArray[stopIndex].name;
     const currentStopData = stopData[stopName] || { occupied: '', empty: '', mileage: '' };
@@ -165,22 +177,40 @@ function ActiveRunContent() {
       const runRef = doc(firestore, `companies/${companyId}/sectors/${sectorId}/runs`, runId);
 
       const updatedStops = [...stopsArray];
+      const finalOccupied = Number(occupied);
+      const finalEmpty = Number(empty);
+      const finalMileage = Number(mileage);
+
       updatedStops[stopIndex] = {
         ...updatedStops[stopIndex],
         status: 'COMPLETED',
         departureTime: serverTimestamp(),
-        collectedOccupiedCars: Number(occupied),
-        collectedEmptyCars: Number(empty),
-        mileageAtStop: Number(mileage),
+        collectedOccupiedCars: finalOccupied,
+        collectedEmptyCars: finalEmpty,
+        mileageAtStop: finalMileage,
       };
 
       await updateDoc(runRef, {
         stops: updatedStops,
       });
 
+      // Clone the departureTime for local state update to avoid non-serializable value warning
+      const localDepartureTime = new Date();
+
       // Update local state to reflect the change immediately
-      updatedStops[stopIndex].departureTime = new Date(); // Placeholder for server time
-      setRun({ ...run, stops: updatedStops });
+      setRun(prevRun => {
+          if (!prevRun) return null;
+          const newStops = [...(Array.isArray(prevRun.stops) ? prevRun.stops : [])];
+          newStops[stopIndex] = { 
+              ...newStops[stopIndex], 
+              status: 'COMPLETED', 
+              departureTime: localDepartureTime,
+              collectedOccupiedCars: finalOccupied,
+              collectedEmptyCars: finalEmpty,
+              mileageAtStop: finalMileage
+          };
+          return { ...prevRun, stops: newStops };
+      });
       
       toast({ title: 'Parada finalizada!', description: `Parada em ${stopName} concluída.` });
     } catch (error) {
@@ -193,7 +223,7 @@ function ActiveRunContent() {
     setStopData(prev => ({
         ...prev,
         [stopName]: {
-            ...prev[stopName],
+            ...(prev[stopName] || { occupied: '', empty: '', mileage: '' }),
             [field]: value
         }
     }));
