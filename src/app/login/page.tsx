@@ -154,10 +154,10 @@ export default function LoginPage() {
 
             setTimeout(() => {
                 let redirectUrl = "/dashboard"; 
-                if (userData.truck) {
+                if (userData.isAdmin && data.sectorId === "MILKRUN") {
+                    redirectUrl = "/dashboard-admin";
+                } else if (userData.truck) {
                     redirectUrl = "/dashboard-truck";
-                } else if (data.companyId === "LSL" && data.sectorId === "MILKRUN") {
-                    redirectUrl = "/dashboard-driver";
                 }
                 router.push(redirectUrl);
             }, 1000);
