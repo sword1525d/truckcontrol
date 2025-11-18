@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useFirebase } from '@/firebase';
-import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
+import { collection, getDocs } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -21,7 +21,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Loader2, Plus, Trash2, Edit, ArrowUp, ArrowDown } from 'lucide-react';
+import { ArrowLeft, Loader2, Plus, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 
 type UserData = {
   id: string;
@@ -115,14 +115,26 @@ export default function TruckRunPage() {
   const handleAddPoint = () => {
     if (newPoint && !stopPoints.includes(newPoint)) {
       setStopPoints(prev => [...prev, newPoint]);
-      setNewPoint('');
+      setNewPoint(''); // Limpa o select
     } else if (stopPoints.includes(newPoint)) {
       toast({ variant: "destructive", description: "Este ponto já foi adicionado." });
     }
   };
 
-  const handleRemovePoint = (index: number) => {
-    setStopPoints(prev => prev.filter((_, i) => i !== index));
+  const handleRemovePoint = (indexToRemove: number) => {
+    setStopPoints(prev => prev.filter((_, index) => index !== indexToRemove));
+  };
+
+  const handleMovePoint = (index: number, direction: 'up' | 'down') => {
+    if (direction === 'up' && index > 0) {
+      const newPoints = [...stopPoints];
+      [newPoints[index - 1], newPoints[index]] = [newPoints[index], newPoints[index - 1]];
+      setStopPoints(newPoints);
+    } else if (direction === 'down' && index < stopPoints.length - 1) {
+      const newPoints = [...stopPoints];
+      [newPoints[index + 1], newPoints[index]] = [newPoints[index], newPoints[index + 1]];
+      setStopPoints(newPoints);
+    }
   };
   
   const handleStartRun = () => {
@@ -137,15 +149,15 @@ export default function TruckRunPage() {
 
   if (!user || isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-100">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      <div className={`flex items-center justify-center min-h-screen ${companyStyles.bgColor}`}>
+        <Loader2 className="w-8 h-8 animate-spin text-white" />
       </div>
     );
   }
 
   return (
     <div className={`flex flex-col min-h-screen font-sans ${companyStyles.bgColor}`}>
-      <header className={`p-4 flex items-center justify-between text-white ${companyStyles.bgColor}`}>
+      <header className={`p-4 flex items-center justify-between text-white ${companyStyles.bgColor} shadow-lg`}>
         <Button variant="ghost" size="icon" onClick={() => router.back()}>
           <ArrowLeft />
         </Button>
@@ -153,14 +165,15 @@ export default function TruckRunPage() {
         <div className="w-8"></div>
       </header>
 
-      <main className="flex-1 bg-white rounded-t-3xl p-5 mt-[-20px] shadow-lg">
+      <main className="flex-1 bg-gray-100 rounded-t-3xl p-4 mt-[-20px] shadow-lg overflow-y-auto">
+        
         {/* Informações do Veículo */}
-        <Card className={`mb-4 ${companyStyles.borderColor} border-l-4`}>
+        <Card className={`${companyStyles.borderColor} border-l-4 mb-4`}>
           <CardHeader>
             <CardTitle>Informações do Veículo</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-2">
+            <div className="space-y-1">
               <Label htmlFor="veiculo">Veículo</Label>
               <Select value={selectedVehicle} onValueChange={setSelectedVehicle}>
                 <SelectTrigger id="veiculo">
@@ -171,7 +184,7 @@ export default function TruckRunPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1">
               <Label htmlFor="quilometragem">Quilometragem Atual</Label>
               <Input id="quilometragem" type="number" placeholder="KM atual do veículo" value={mileage} onChange={e => setMileage(e.target.value)} />
             </div>
@@ -179,12 +192,12 @@ export default function TruckRunPage() {
         </Card>
 
         {/* Adicionar Pontos */}
-        <Card className="mb-4 bg-white shadow-md rounded-xl">
+        <Card className="mb-4">
            <CardHeader>
             <CardTitle>Adicionar Pontos de Parada</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2 mb-4">
+            <div className="space-y-1 mb-4">
               <Label htmlFor="novo-ponto">Ponto de Parada</Label>
               <Select value={newPoint} onValueChange={setNewPoint}>
                 <SelectTrigger id="novo-ponto">
@@ -195,7 +208,7 @@ export default function TruckRunPage() {
                 </SelectContent>
               </Select>
             </div>
-            <Button className="w-full" onClick={handleAddPoint}><Plus className="mr-2"/> Adicionar Ponto</Button>
+            <Button className="w-full" onClick={handleAddPoint}><Plus className="mr-2 h-4 w-4"/> Adicionar Ponto</Button>
           </CardContent>
         </Card>
 
@@ -203,16 +216,24 @@ export default function TruckRunPage() {
         {stopPoints.length > 0 && (
           <Card className="mb-4">
              <CardHeader>
-                <CardTitle>Pontos Adicionados</CardTitle>
+                <CardTitle>Pontos Adicionados ({stopPoints.length})</CardTitle>
             </CardHeader>
             <CardContent>
-                <ul className="space-y-3">
+                <ul className="space-y-2">
                     {stopPoints.map((point, index) => (
-                        <li key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                           <span className="font-medium">{index + 1}. {point}</span>
-                           <Button variant="ghost" size="icon" onClick={() => handleRemovePoint(index)}>
-                                <Trash2 className="text-destructive h-5 w-5"/>
-                           </Button>
+                        <li key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg group">
+                           <span className="font-medium text-gray-800">{index + 1}. {point}</span>
+                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleMovePoint(index, 'up')} disabled={index === 0}>
+                                  <ArrowUp className="h-4 w-4"/>
+                              </Button>
+                               <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleMovePoint(index, 'down')} disabled={index === stopPoints.length - 1}>
+                                  <ArrowDown className="h-4 w-4"/>
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleRemovePoint(index)}>
+                                  <Trash2 className="text-destructive h-4 w-4"/>
+                              </Button>
+                           </div>
                         </li>
                     ))}
                 </ul>
@@ -220,10 +241,10 @@ export default function TruckRunPage() {
           </Card>
         )}
 
-        {/* Iniciar Acompanhamento */}
-        <div className="mt-auto pt-4">
+        {/* Botão para Iniciar Acompanhamento */}
+        <div className="mt-6 sticky bottom-4">
           <Button 
-            className={`w-full text-lg h-14 ${companyStyles.bgColor}`} 
+            className={`w-full text-lg h-14 shadow-lg ${companyStyles.bgColor}`} 
             onClick={handleStartRun}
             disabled={!selectedVehicle || !mileage || stopPoints.length === 0}
           >
