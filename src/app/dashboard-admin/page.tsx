@@ -26,13 +26,13 @@ import {
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, PlayCircle, CheckCircle, Clock, MapPin, Truck, User, LineChart, Calendar as CalendarIcon, Route, X } from 'lucide-react';
+import { Loader2, PlayCircle, CheckCircle, Clock, MapPin, Truck, User, LineChart, Calendar as CalendarIcon, Route, X, Timer } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts';
-import { format, subDays, startOfDay, endOfDay } from 'date-fns';
+import { format, subDays, startOfDay, endOfDay, formatDistanceStrict } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
@@ -75,6 +75,14 @@ export type Run = {
   locationHistory?: LocationPoint[];
 };
 
+export type Segment = {
+    label: string;
+    path: [number, number][];
+    color: string;
+    travelTime: string;
+    stopTime: string;
+}
+
 type UserData = {
   name: string;
   isAdmin: boolean;
@@ -99,10 +107,72 @@ const RealTimeMap = dynamic(() => import('./RealTimeMap'), {
   loading: () => <div className="flex justify-center items-center h-full"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
 });
 
+const SEGMENT_COLORS = [
+    '#3b82f6', '#ef4444', '#10b981', '#f97316', '#8b5cf6', '#ec4899', 
+    '#6366f1', '#f59e0b', '#14b8a6', '#d946ef'
+];
+
+
+const formatTimeDiff = (start: Date, end: Date) => {
+    if (!start || !end) return 'N/A';
+    return formatDistanceStrict(end, start, { locale: ptBR, unit: 'minute' });
+}
+
+const processRunSegments = (run: Run): Segment[] => {
+    if (!run.locationHistory || run.locationHistory.length === 0) return [];
+    
+    const sortedLocations = [...run.locationHistory].sort((a,b) => a.timestamp.seconds - b.timestamp.seconds);
+    const sortedStops = [...run.stops].filter(s => s.status !== 'CANCELED').sort((a, b) => (a.arrivalTime?.seconds || 0) - (b.arrivalTime?.seconds || 0));
+
+    const segments: Segment[] = [];
+    let lastDepartureTime = run.startTime;
+
+    for(let i = 0; i < sortedStops.length; i++) {
+        const stop = sortedStops[i];
+        if (!stop.arrivalTime) continue;
+
+        const stopArrivalTime = new Date(stop.arrivalTime.seconds * 1000);
+        const stopDepartureTime = stop.departureTime ? new Date(stop.departureTime.seconds * 1000) : null;
+
+        const segmentPath = sortedLocations
+            .filter(loc => {
+                const locTime = loc.timestamp.seconds;
+                return locTime >= lastDepartureTime.seconds && locTime <= stop.arrivalTime!.seconds;
+            })
+            .map(loc => [loc.longitude, loc.latitude] as [number, number]);
+
+        // Adiciona a primeira localização da parada para fechar o trajeto
+        if(segmentPath.length > 0 && i > 0) {
+           const prevStop = sortedStops[i-1];
+           const prevStopTime = prevStop.departureTime ? new Date(prevStop.departureTime.seconds * 1000) : null;
+           if(prevStopTime) {
+              const firstPointOfCurrentSegment = sortedLocations.find(l => l.timestamp.seconds >= prevStopTime.getTime() / 1000);
+              if(firstPointOfCurrentSegment) {
+                 segmentPath.unshift([firstPointOfCurrentSegment.longitude, firstPointOfCurrentSegment.latitude]);
+              }
+           }
+        }
+        
+        segments.push({
+            label: `Trajeto para ${stop.name}`,
+            path: segmentPath,
+            color: SEGMENT_COLORS[i % SEGMENT_COLORS.length],
+            travelTime: formatTimeDiff(new Date(lastDepartureTime.seconds * 1000), stopArrivalTime),
+            stopTime: stopDepartureTime ? formatTimeDiff(stopArrivalTime, stopDepartureTime) : 'Em andamento',
+        });
+        
+        if (stopDepartureTime) {
+            lastDepartureTime = stop.departureTime!;
+        }
+    }
+
+    return segments;
+}
+
 
 // --- Componente Principal ---
 const AdminDashboardPage = () => {
-  const { firestore } = useFirebase();
+  const { firestore, auth } = useFirebase();
   const { toast } = useToast();
   const router = useRouter();
   
@@ -215,6 +285,8 @@ const AdminDashboardPage = () => {
      return <div className="flex justify-center items-center h-screen"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   }
 
+  const mapSegments = selectedRunForMap ? processRunSegments(selectedRunForMap) : [];
+
   return (
     <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-black">
       <Header />
@@ -249,12 +321,12 @@ const AdminDashboardPage = () => {
           <DialogHeader>
             <DialogTitle>Trajeto da Corrida - {selectedRunForMap?.driverName} ({selectedRunForMap?.vehicleId})</DialogTitle>
             <DialogDescription>
-              Visualização do trajeto completo da corrida.
+              Visualização do trajeto completo da corrida, segmentado por paradas.
             </DialogDescription>
           </DialogHeader>
           <div className="h-[calc(80vh-100px)] bg-muted rounded-md">
             {selectedRunForMap?.locationHistory && (
-              <RealTimeMap locationHistory={selectedRunForMap.locationHistory} />
+              <RealTimeMap segments={mapSegments} fullLocationHistory={selectedRunForMap.locationHistory} />
             )}
           </div>
         </DialogContent>
@@ -276,8 +348,8 @@ const Header = () => {
     }, []);
 
     const handleLogout = () => {
-        if (confirm('Tem certeza que deseja sair da conta?')) {
-            auth?.signOut();
+        if (auth && confirm('Tem certeza que deseja sair da conta?')) {
+            auth.signOut();
             localStorage.clear();
             router.push('/login');
         }
@@ -372,9 +444,9 @@ const RunAccordionItem = ({ run, onViewRoute }: { run: Run, onViewRoute: () => v
   const progress = totalStops > 0 ? (completedStops / totalStops) * 100 : 0;
   const currentStop = run.stops.find(s => s.status === 'IN_PROGRESS');
 
-  const formatTime = (timestamp: FirebaseTimestamp | null) => {
+  const formatFirebaseTime = (timestamp: FirebaseTimestamp | null) => {
     if (!timestamp) return '--:--';
-    return new Date(timestamp.seconds * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    return format(new Date(timestamp.seconds * 1000), 'HH:mm');
   };
   
   const getStatusInfo = (status: StopStatus) => {
@@ -385,6 +457,8 @@ const RunAccordionItem = ({ run, onViewRoute }: { run: Run, onViewRoute: () => v
       default: return { icon: Clock, color: 'text-gray-500', label: 'Pendente' };
     }
   };
+
+  let lastDepartureTime = run.startTime;
 
   return (
     <AccordionItem value={run.id} className="bg-card border rounded-lg shadow-sm">
@@ -410,27 +484,43 @@ const RunAccordionItem = ({ run, onViewRoute }: { run: Run, onViewRoute: () => v
         </div>
       </AccordionTrigger>
       <AccordionContent className="p-4 pt-0">
-        <div className="space-y-2 mt-4">
+        <div className="space-y-4 mt-4">
           <div className="flex justify-between items-center mb-2">
-            <h4 className="font-semibold">Pontos da Rota</h4>
+            <h4 className="font-semibold">Detalhes da Rota</h4>
              <Button variant="outline" size="sm" onClick={onViewRoute}>
-                <Route className="mr-2 h-4 w-4"/> Ver Trajeto
+                <Route className="mr-2 h-4 w-4"/> Ver Trajeto Detalhado
             </Button>
           </div>
           {run.stops.map((stop, index) => {
             const { icon: Icon, color, label } = getStatusInfo(stop.status);
             const isCompleted = stop.status === 'COMPLETED';
+            
+            const arrivalTime = stop.arrivalTime ? new Date(stop.arrivalTime.seconds * 1000) : null;
+            const departureTime = stop.departureTime ? new Date(stop.departureTime.seconds * 1000) : null;
+            const prevDepartureTime = new Date(lastDepartureTime.seconds * 1000);
+            
+            const travelTime = arrivalTime ? formatTimeDiff(prevDepartureTime, arrivalTime) : null;
+            const stopTime = arrivalTime && departureTime ? formatTimeDiff(arrivalTime, departureTime) : null;
+
+            if (departureTime) {
+                lastDepartureTime = stop.departureTime!;
+            }
+
             return (
-              <div key={index} className={`flex items-center gap-4 p-3 rounded-md ${isCompleted ? 'bg-green-50 dark:bg-green-900/20' : 'bg-gray-50 dark:bg-gray-800/20'}`}>
-                 <Icon className={`h-5 w-5 flex-shrink-0 ${color}`} />
+              <div key={index} className={`flex flex-col sm:flex-row items-start sm:items-center gap-4 p-3 rounded-md ${isCompleted ? 'bg-green-50 dark:bg-green-900/20' : 'bg-gray-50 dark:bg-gray-800/20'}`}>
+                 <Icon className={`h-6 w-6 flex-shrink-0 mt-1 sm:mt-0 ${color}`} />
                  <div className="flex-1">
-                   <p className="font-medium">{stop.name}</p>
+                   <p className="font-medium">{index + 1}. {stop.name}</p>
                    <p className={`text-xs ${isCompleted ? 'text-muted-foreground' : color}`}>{label}</p>
+                 </div>
+                 <div className="w-full sm:w-auto flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                    {travelTime && <span className='flex items-center gap-1'><Route className="h-3 w-3 text-gray-400"/> Viagem: <strong>{travelTime}</strong></span>}
+                    {stopTime && <span className='flex items-center gap-1'><Timer className="h-3 w-3 text-gray-400"/> Parada: <strong>{stopTime}</strong></span>}
                  </div>
                  {isCompleted && (
                    <div className="text-right text-sm text-muted-foreground">
-                      <p>Chegada: {formatTime(stop.arrivalTime)}</p>
-                      <p>Saída: {formatTime(stop.departureTime)}</p>
+                      <p>Chegada: {formatFirebaseTime(stop.arrivalTime)}</p>
+                      <p>Saída: {formatFirebaseTime(stop.departureTime)}</p>
                    </div>
                  )}
               </div>
