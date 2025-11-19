@@ -49,14 +49,25 @@ const TruckSVG = ({
         className="fill-blue-300 dark:fill-blue-800 opacity-70"
       />
 
-      {/* Cargo Area (Segments) */}
+      {/* Cargo Area (Segments) - desenhado da esquerda para a direita (de 0 a 9) */}
       <g transform="translate(15, 73)">
         {segments.map((segment) => {
-          // Logic: 10% is segment 1 (right), 100% is segment 10 (left)
+          // segment vai de 1 a 10.
+          // Visualmente, o primeiro espaço (perto da cabine) é o mais à direita.
+          // O último espaço (perto da porta) é o mais à esquerda.
+          // Ocupação 10% deve preencher o espaço da direita.
+          // Ocupação 100% deve preencher todos os espaços.
+          
+          // `segment` 1 é a porta traseira (esquerda)
+          // `segment` 10 é a cabine (direita)
           const isFilled = segment * 10 <= occupancy;
+          
           return (
             <rect
               key={segment}
+              // A posição X vai de 0 (esquerda) a 9 * (width+spacing) (direita)
+              // `segment` 1 -> x = 0
+              // `segment` 10 -> x = 9 * (width+spacing)
               x={(segment - 1) * (segmentWidth + spacing)}
               y="0"
               width={segmentWidth}
@@ -69,7 +80,7 @@ const TruckSVG = ({
                 !disabled &&
                   'cursor-pointer hover:fill-primary/80 dark:hover:fill-primary/50'
               )}
-              // The segment value is passed directly on click
+              // Ao clicar, passamos o valor do segmento (1 a 10)
               onClick={() => !disabled && onSegmentClick(segment)}
             />
           );
@@ -91,6 +102,7 @@ export const OccupancySelector = ({
   }, [initialValue]);
 
   const handleSegmentClick = (segment: number) => {
+    // O valor do segmento (1 a 10) vira a porcentagem (10 a 100)
     const newOccupancy = segment * 10;
     setOccupancy(newOccupancy);
     onValueChange(newOccupancy);
@@ -108,6 +120,11 @@ export const OccupancySelector = ({
           disabled && 'opacity-50'
         )}
       >
+        {/*
+          Como o SVG está invertido com -scale-x-100, a cabine fica à direita e a porta à esquerda.
+          A lógica de desenho e clique dentro do SVG pode ser 'normal' (esquerda para direita),
+          e a transformação visual cuida da apresentação correta.
+        */}
         <TruckSVG
           occupancy={occupancy}
           onSegmentClick={handleSegmentClick}
