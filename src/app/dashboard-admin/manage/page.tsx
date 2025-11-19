@@ -10,8 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Loader2, User, Truck, ArrowLeft } from 'lucide-react';
+import { Loader2, User, Truck } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -149,66 +148,72 @@ const AdminManagementPage = () => {
   }
 
   return (
-    <div className="container mx-auto p-4 sm:p-6 lg:p-8">
-        <div className="flex items-center gap-4 mb-6">
-            <Button variant="outline" size="icon" onClick={() => router.push('/dashboard-admin')}>
-                <ArrowLeft />
-            </Button>
-            <div>
-                <h1 className="text-3xl font-bold">Gerenciamento</h1>
-                <p className="text-muted-foreground">Gerencie os usuários e caminhões do sistema.</p>
-            </div>
-        </div>
+    <div className="flex-1 space-y-4">
+      <div className="flex items-center justify-between space-y-2">
+        <h2 className="text-3xl font-bold tracking-tight">Gerenciamento</h2>
+      </div>
 
-        <Tabs defaultValue="users">
-            <TabsList className="grid w-full grid-cols-2 max-w-md mx-auto mb-6">
-                <TabsTrigger value="users"><User className="mr-2"/> Usuários</TabsTrigger>
-                <TabsTrigger value="trucks"><Truck className="mr-2"/> Caminhões</TabsTrigger>
-            </TabsList>
-            <TabsContent value="users">
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Gerenciar Usuários</CardTitle>
-                        <CardDescription>Edite ou remova usuários existentes.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        {isLoading ? (
-                            <div className="flex justify-center items-center h-40"><Loader2 className="h-8 w-8 animate-spin"/></div>
-                        ) : (
-                            <UserManagement 
-                                users={users} 
-                                onDelete={handleDelete}
-                                onUpdate={fetchData}
-                                session={session}
-                            />
-                        )}
-                    </CardContent>
-                </Card>
-            </TabsContent>
-            <TabsContent value="trucks">
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Gerenciar Caminhões</CardTitle>
-                        <CardDescription>Edite, remova ou gerencie a manutenção dos caminhões.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                         {isLoading ? (
-                            <div className="flex justify-center items-center h-40"><Loader2 className="h-8 w-8 animate-spin"/></div>
-                        ) : (
-                            <VehicleManagement
-                                vehicles={vehicles}
-                                activeRuns={activeRuns}
-                                onDelete={handleDelete}
-                                onUpdate={fetchData} // onUpdate can be used to refresh all data if needed, but snapshots handle it
-                                session={session}
-                             />
-                        )}
-                    </CardContent>
-                </Card>
-            </TabsContent>
-        </Tabs>
+      <Tabs defaultValue="users" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="users">
+            <User className="mr-2 h-4 w-4" />
+            Gerenciar Usuários
+          </TabsTrigger>
+          <TabsTrigger value="trucks">
+            <Truck className="mr-2 h-4 w-4" />
+            Gerenciar Caminhões
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="users" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Usuários</CardTitle>
+              <CardDescription>Edite ou remova usuários existentes.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="flex justify-center items-center h-40">
+                  <Loader2 className="h-8 w-8 animate-spin" />
+                </div>
+              ) : (
+                <UserManagement
+                  users={users}
+                  onDelete={handleDelete}
+                  onUpdate={fetchData}
+                  session={session}
+                />
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="trucks" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Caminhões</CardTitle>
+              <CardDescription>Edite, remova ou gerencie a manutenção dos caminhões.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="flex justify-center items-center h-40">
+                  <Loader2 className="h-8 w-8 animate-spin" />
+                </div>
+              ) : (
+                <VehicleManagement
+                  vehicles={vehicles}
+                  activeRuns={activeRuns}
+                  onDelete={handleDelete}
+                  onUpdate={fetchData}
+                  session={session}
+                />
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };
 
 export default AdminManagementPage;
+
+    
