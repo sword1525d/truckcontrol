@@ -21,12 +21,58 @@ const routeLayerStyle: LineLayer = {
   paint: {
     'line-color': '#2563eb', // Um azul forte
     'line-width': 5,
+    'line-opacity': 0.8,
   },
 };
 
 interface RealTimeMapProps {
   locationHistory: LocationPoint[];
 }
+
+// Função para calcular a distância entre dois pontos (em km)
+const haversineDistance = (coords1: [number, number], coords2: [number, number]): number => {
+    const [lon1, lat1] = coords1;
+    const [lon2, lat2] = coords2;
+
+    const toRad = (x: number) => (x * Math.PI) / 180;
+    const R = 6371; // Raio da Terra em km
+
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return R * c;
+};
+
+// Função para simplificar o trajeto
+const simplifyRoute = (points: LocationPoint[], minDistanceKm = 0.02): [number, number][] => {
+    if (points.length < 2) {
+        return points.map(p => [p.longitude, p.latitude]);
+    }
+    
+    const simplified: [number, number][] = [[points[0].longitude, points[0].latitude]];
+    let lastPoint = simplified[0];
+
+    for (let i = 1; i < points.length; i++) {
+        const currentPoint: [number, number] = [points[i].longitude, points[i].latitude];
+        if (haversineDistance(lastPoint, currentPoint) > minDistanceKm) {
+            simplified.push(currentPoint);
+            lastPoint = currentPoint;
+        }
+    }
+    
+    // Garante que o último ponto seja sempre incluído
+    const lastOriginalPoint: [number, number] = [points[points.length-1].longitude, points[points.length-1].latitude];
+    if(simplified[simplified.length -1] !== lastOriginalPoint){
+        simplified.push(lastOriginalPoint);
+    }
+
+    return simplified;
+};
+
 
 const RealTimeMap = ({ locationHistory }: RealTimeMapProps) => {
   const mapRef = useRef<MapRef>(null);
@@ -48,6 +94,8 @@ const RealTimeMap = ({ locationHistory }: RealTimeMapProps) => {
       </div>
     );
   }
+  
+  const simplifiedCoordinates = simplifyRoute(locationHistory);
 
   // Transforma o histórico de localização em um formato GeoJSON para a linha
   const routeGeoJSON = {
@@ -55,7 +103,7 @@ const RealTimeMap = ({ locationHistory }: RealTimeMapProps) => {
     properties: {},
     geometry: {
       type: 'LineString' as const,
-      coordinates: locationHistory.map(p => [p.longitude, p.latitude]),
+      coordinates: simplifiedCoordinates,
     },
   };
 
@@ -63,7 +111,7 @@ const RealTimeMap = ({ locationHistory }: RealTimeMapProps) => {
 
   // Efeito para ajustar a visualização do mapa quando o histórico de localização muda
   useEffect(() => {
-    if (mapRef.current && locationHistory.length > 1) {
+    if (mapRef.current && simplifiedCoordinates.length > 1) {
       const coordinates = routeGeoJSON.geometry.coordinates as [number, number][];
       const bounds = new LngLatBounds(
         coordinates[0],
