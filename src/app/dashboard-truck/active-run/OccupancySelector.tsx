@@ -20,6 +20,7 @@ const TruckSVG = ({
   const segments = Array.from({ length: 10 }, (_, i) => i + 1); // 1 to 10
   const segmentWidth = 18;
   const spacing = 2;
+  const cargoAreaWidth = segments.length * (segmentWidth + spacing) - spacing;
 
   return (
     <svg
@@ -51,11 +52,13 @@ const TruckSVG = ({
       {/* Cargo Area (Segments) */}
       <g transform="translate(15, 73)">
         {segments.map((segment) => {
-          const isFilled = segment * 10 <= occupancy;
+          // Invert the logic: 100% is segment 1, 10% is segment 10
+          const isFilled = (11 - segment) * 10 <= occupancy;
           return (
             <rect
               key={segment}
-              x={(segment - 1) * (segmentWidth + spacing)}
+              // Invert the drawing order for x
+              x={cargoAreaWidth - (segment * (segmentWidth + spacing)) + spacing}
               y="0"
               width={segmentWidth}
               height="15"
@@ -67,7 +70,8 @@ const TruckSVG = ({
                 !disabled &&
                   'cursor-pointer hover:fill-primary/80 dark:hover:fill-primary/50'
               )}
-              onClick={() => !disabled && onSegmentClick(segment)}
+               // Invert the segment value on click
+              onClick={() => !disabled && onSegmentClick(11 - segment)}
             />
           );
         })}
