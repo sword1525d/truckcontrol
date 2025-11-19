@@ -186,15 +186,20 @@ export default function LoginPage() {
   };
   
  return (
-    <div className="flex h-screen w-full flex-col items-center justify-center bg-gray-50 p-4 dark:bg-zinc-950">
+    <div className="flex h-screen w-full flex-col items-center justify-center bg-gray-50 p-4 dark:bg-zinc-950 relative overflow-hidden">
+        <div className="absolute -top-20 -left-20 w-48 h-48 bg-white rounded-full flex items-center justify-center">
+          <span className="font-bold text-3xl text-primary mt-16 ml-16">LSL</span>
+        </div>
         <div className="w-full max-w-sm">
             <div className="grid gap-2 text-center mb-8">
                 <div className="flex items-center justify-center gap-2">
-                    <Truck className="h-8 w-8 text-primary" />
-                    <h1 className="text-4xl font-bold font-headline text-primary">
-                        Frotacontrol
-                    </h1>
+                    <div className="relative flex items-center justify-center w-16 h-16 bg-white rounded-full border-4 border-gray-100 shadow-sm">
+                       <Truck className="h-8 w-8 text-primary" />
+                    </div>
                 </div>
+                 <h1 className="text-4xl font-bold font-headline text-primary">
+                    Frotacontrol
+                </h1>
                 <p className="text-balance text-muted-foreground">
                     A sua frota, no seu controle, na sua mão
                 </p>
