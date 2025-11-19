@@ -1,3 +1,4 @@
+
 {
   "entities": {
     "Company": {
@@ -118,6 +119,15 @@
         "isTruck": {
           "type": "boolean",
           "description": "Indicates if the vehicle is a truck."
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "PARADO",
+            "EM_CORRIDA",
+            "EM_MANUTENCAO"
+          ],
+          "description": "The current status of the vehicle."
         }
       },
       "required": [
@@ -241,6 +251,29 @@
         "status",
         "stops"
       ]
+    },
+    "MaintenanceRecord": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Maintenance Record",
+      "type": "object",
+      "description": "Represents a maintenance record for a vehicle.",
+      "properties": {
+        "startTime": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The timestamp when the maintenance started."
+        },
+        "endTime": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The timestamp when the maintenance ended."
+        },
+        "notes": {
+          "type": "string",
+          "description": "Optional notes about the maintenance."
+        }
+      },
+      "required": ["startTime"]
     }
   },
   "auth": {
@@ -300,8 +333,18 @@
           },
           "description": "Stores truck run data within a company and sector."
         }
+      },
+      {
+        "path": "/companies/{companyId}/sectors/{sectorId}/vehicles/{vehicleId}/maintenance/{maintenanceId}",
+        "definition": {
+          "entityName": "MaintenanceRecord",
+          "schema": {
+            "$ref": "#/backend/entities/MaintenanceRecord"
+          },
+          "description": "Stores the maintenance history for a specific vehicle."
+        }
       }
     ],
-    "reasoning": "This Firestore structure prioritizes authorization independence and efficient data retrieval for the Frotacontrol application. It leverages path-based ownership for user data within companies and sectors, eliminating the need for `get()` calls in security rules. The structure enforces homogeneous security postures within collections and subcollections.\n\n*   `/companies/{companyId}`: Stores company information.\n*   `/companies/{companyId}/sectors/{sectorId}`: Stores sector information within each company.\n*   `/companies/{companyId}/sectors/{sectorId}/users/{userId}`: Stores user information, keyed by their unique identifier (`matricula`). This structure allows for direct access to user data based on company, sector, and ID, crucial for authentication and authorization. This design uses the appropriate Hierarchical Paths for User-Owned Data.\n\nThis design facilitates simple, robust security rules:\n\n*   Rules can directly verify `request.auth.uid` against the `userId` path segment, ensuring that users can only access their own data within a specific company and sector.\n*   `list` operations are secured because each subcollection contains only documents with the same security requirements (users belonging to a specific sector within a specific company).\n\nDenormalization Strategy:\n\nWhile the current design focuses on user authentication, future features might require denormalization for collaborative data access. If sectors or companies need shared data (e.g., shared vehicle logs), a membership map (`members: {uid1: 'role', uid2: 'role'}`) should be added to relevant documents and denormalized to child documents to maintain authorization independence. However, for the core login functionality, this is unnecessary."
+    "reasoning": "This Firestore structure prioritizes authorization independence and efficient data retrieval for the Frotacontrol application. It leverages path-based ownership for user data within companies and sectors, eliminating the need for `get()` calls in security rules. The structure enforces homogeneous security postures within collections and subcollections.\n\n*   `/companies/{companyId}`: Stores company information.\n*   `/companies/{companyId}/sectors/{sectorId}`: Stores sector information within each company.\n*   `/companies/{companyId}/sectors/{sectorId}/users/{userId}`: Stores user information, keyed by their unique identifier (`matricula`). This structure allows for direct access to user data based on company, sector, and ID, crucial for authentication and authorization. This design uses the appropriate Hierarchical Paths for User-Owned Data.\n*  `/companies/{companyId}/sectors/{sectorId}/vehicles/{vehicleId}/maintenance/{maintenanceId}`: Stores a history of maintenance records for each vehicle, allowing for easy retrieval of a vehicle's maintenance history.\n\nThis design facilitates simple, robust security rules:\n\n*   Rules can directly verify `request.auth.uid` against the `userId` path segment, ensuring that users can only access their own data within a specific company and sector.\n*   `list` operations are secured because each subcollection contains only documents with the same security requirements (users belonging to a specific sector within a specific company).\n\nDenormalization Strategy:\n\nThe vehicle `status` field is denormalized on the vehicle document for efficient querying of vehicle availability without needing to inspect sub-collections. The canonical state for maintenance is the `maintenance` subcollection, which serves as a ledger."
   }
 }

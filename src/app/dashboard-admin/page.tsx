@@ -26,7 +26,7 @@ import {
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, PlayCircle, CheckCircle, Clock, MapPin, Truck, User, LineChart, Calendar as CalendarIcon, Route, Settings, Timer, X } from 'lucide-react';
+import { Loader2, PlayCircle, CheckCircle, Clock, MapPin, Truck, User, LineChart, Calendar as CalendarIcon, Route, Settings, Timer, X, Wrench } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -44,6 +44,8 @@ import Link from 'next/link';
 // --- Tipos ---
 type StopStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELED';
 type RunStatus = 'IN_PROGRESS' | 'COMPLETED';
+type VehicleStatusEnum = 'PARADO' | 'EM_CORRIDA' | 'EM_MANUTENCAO';
+
 
 type FirebaseTimestamp = {
   seconds: number;
@@ -95,10 +97,10 @@ export type Vehicle = {
   id: string;
   model: string;
   isTruck: boolean;
+  status: VehicleStatusEnum;
 };
 
-type VehicleStatus = Vehicle & {
-  status: 'EM CORRIDA' | 'PARADO';
+type VehicleWithDriver = Vehicle & {
   driverName?: string;
 }
 
@@ -179,7 +181,7 @@ const AdminDashboardPage = () => {
   
   const [user, setUser] = useState<UserData | null>(null);
   const [activeRuns, setActiveRuns] = useState<Run[]>([]);
-  const [vehicleStatuses, setVehicleStatuses] = useState<VehicleStatus[]>([]);
+  const [vehicleStatuses, setVehicleStatuses] = useState<VehicleWithDriver[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedRunForMap, setSelectedRunForMap] = useState<Run | null>(null);
 
@@ -209,48 +211,53 @@ const AdminDashboardPage = () => {
 
     setIsLoading(true);
     
-    // 1. Fetch all trucks once
-    const fetchAllTrucks = async () => {
-        try {
-            const vehiclesCol = collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/vehicles`);
-            const vehiclesQuery = query(vehiclesCol, where('isTruck', '==', true));
-            const vehiclesSnapshot = await getDocs(vehiclesQuery);
-            return vehiclesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Vehicle));
-        } catch (error) {
-            console.error("Error fetching vehicles: ", error);
-            toast({ variant: 'destructive', title: 'Erro ao buscar veículos', description: 'Não foi possível carregar os dados da frota.' });
-            return [];
-        }
-    };
+    // 1. Setup real-time listener for trucks
+    const vehiclesCol = collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/vehicles`);
+    const vehiclesQuery = query(vehiclesCol, where('isTruck', '==', true));
+    
+    const unsubscribeVehicles = onSnapshot(vehiclesQuery, (vehiclesSnapshot) => {
+        const allTrucks = vehiclesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Vehicle));
 
-    // 2. Setup real-time listener for active runs
-    const runsCol = collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/runs`);
-    const activeRunsQuery = query(runsCol, where('status', '==', 'IN_PROGRESS'));
+        // 2. Setup real-time listener for active runs (nested to use truck data)
+        const runsCol = collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/runs`);
+        const activeRunsQuery = query(runsCol, where('status', '==', 'IN_PROGRESS'));
 
-    const unsubscribe = onSnapshot(activeRunsQuery, async (querySnapshot) => {
-        const runs: Run[] = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Run));
-        const sortedRuns = runs.sort((a, b) => a.startTime.seconds - b.startTime.seconds);
-        setActiveRuns(sortedRuns);
+        const unsubscribeRuns = onSnapshot(activeRunsQuery, (runsSnapshot) => {
+            const runs: Run[] = runsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Run));
+            const sortedRuns = runs.sort((a, b) => a.startTime.seconds - b.startTime.seconds);
+            setActiveRuns(sortedRuns);
 
-        // 3. Update vehicle statuses based on active runs
-        const allTrucks = await fetchAllTrucks();
-        const activeRunsMap = new Map(runs.map(run => [run.vehicleId, run.driverName]));
+            // 3. Combine data to determine final vehicle statuses
+            const activeRunsMap = new Map(runs.map(run => [run.vehicleId, run.driverName]));
 
-        const statuses = allTrucks.map(truck => ({
-            ...truck,
-            status: activeRunsMap.has(truck.id) ? 'EM CORRIDA' : 'PARADO',
-            driverName: activeRunsMap.get(truck.id)
-        } as VehicleStatus));
+            const statuses: VehicleWithDriver[] = allTrucks.map(truck => {
+                const driverName = activeRunsMap.get(truck.id);
+                const vehicleStatus = truck.status || 'PARADO'; // Default to PARADO if status is not set
+                
+                return {
+                    ...truck,
+                    // If a driver is found, it's 'EM CORRIDA', otherwise respect its own status
+                    status: driverName ? 'EM_CORRIDA' : vehicleStatus,
+                    driverName: driverName
+                };
+            });
 
-        setVehicleStatuses(statuses);
-        setIsLoading(false);
+            setVehicleStatuses(statuses);
+            setIsLoading(false);
+        }, (error) => {
+            console.error("Error fetching active runs: ", error);
+            toast({ variant: 'destructive', title: 'Erro ao buscar corridas', description: 'Não foi possível carregar os acompanhamentos ativos.' });
+            setIsLoading(false);
+        });
+        
+        return () => unsubscribeRuns(); // Cleanup runs listener
     }, (error) => {
-      console.error("Error fetching active runs: ", error);
-      toast({ variant: 'destructive', title: 'Erro ao buscar dados', description: 'Não foi possível carregar os acompanhamentos ativos.' });
-      setIsLoading(false);
+        console.error("Error fetching vehicles: ", error);
+        toast({ variant: 'destructive', title: 'Erro ao buscar veículos', description: 'Não foi possível carregar os dados da frota.' });
+        setIsLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => unsubscribeVehicles(); // Cleanup vehicles listener
   }, [firestore, user, toast]);
 
     const fetchCompletedRuns = useCallback(async (): Promise<Run[]> => {
@@ -382,7 +389,7 @@ const Header = () => {
     );
 };
 
-const FleetStatusDashboard = ({ vehicleStatuses, isLoading }: { vehicleStatuses: VehicleStatus[], isLoading: boolean }) => {
+const FleetStatusDashboard = ({ vehicleStatuses, isLoading }: { vehicleStatuses: VehicleWithDriver[], isLoading: boolean }) => {
   return (
     <Card>
       <CardHeader>
@@ -406,16 +413,29 @@ const FleetStatusDashboard = ({ vehicleStatuses, isLoading }: { vehicleStatuses:
   )
 }
 
-const VehicleStatusCard = ({ vehicle }: { vehicle: VehicleStatus }) => {
-  const isRunning = vehicle.status === 'EM CORRIDA';
+const VehicleStatusCard = ({ vehicle }: { vehicle: VehicleWithDriver }) => {
+  const getStatusDetails = (status: VehicleStatusEnum | undefined) => {
+    switch (status) {
+      case 'EM_CORRIDA':
+        return { text: 'EM CORRIDA', badgeClass: 'bg-blue-600', cardClass: 'bg-blue-50 dark:bg-blue-900/30' };
+      case 'EM_MANUTENCAO':
+        return { text: 'MANUTENÇÃO', badgeClass: 'bg-yellow-500', cardClass: 'bg-yellow-50 dark:bg-yellow-900/30' };
+      case 'PARADO':
+      default:
+        return { text: 'PARADO', badgeClass: 'bg-green-600', cardClass: 'bg-green-50 dark:bg-green-800/30' };
+    }
+  };
+
+  const { text, badgeClass, cardClass } = getStatusDetails(vehicle.status);
+
   return (
-    <Card className={`flex flex-col items-center justify-center p-4 text-center ${isRunning ? 'bg-blue-50 dark:bg-blue-900/30' : 'bg-gray-50 dark:bg-gray-800/30'}`}>
+    <Card className={`flex flex-col items-center justify-center p-4 text-center ${cardClass}`}>
         <p className="font-bold text-lg">{vehicle.id}</p>
         <p className="text-xs text-muted-foreground -mt-1 mb-2">{vehicle.model}</p>
-        <Badge variant={isRunning ? 'default' : 'secondary'} className={isRunning ? 'bg-blue-600' : ''}>
-            {vehicle.status}
+        <Badge variant={'default'} className={`${badgeClass}`}>
+            {text}
         </Badge>
-        {isRunning && vehicle.driverName && (
+        {vehicle.status === 'EM_CORRIDA' && vehicle.driverName && (
             <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
                 <User className="h-3 w-3"/>{vehicle.driverName}
             </p>

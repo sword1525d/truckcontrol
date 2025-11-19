@@ -2,7 +2,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { useFirebase } from '@/firebase';
-import { collection, getDocs, doc, deleteDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, deleteDoc, onSnapshot, query, where, Timestamp } from 'firebase/firestore';
 import {
   Card,
   CardContent,
@@ -26,11 +26,21 @@ export type FirestoreUser = {
   matricula: string;
 };
 
+export type VehicleStatusEnum = 'PARADO' | 'EM_CORRIDA' | 'EM_MANUTENCAO';
+
 export type FirestoreVehicle = {
   id: string;
   model: string;
   isTruck: boolean;
+  status: VehicleStatusEnum;
 };
+
+export type MaintenanceRecord = {
+    id: string;
+    startTime: Timestamp;
+    endTime: Timestamp | null;
+    notes?: string;
+}
 
 type SessionData = {
   companyId: string;
@@ -45,6 +55,7 @@ const AdminManagementPage = () => {
   const [session, setSession] = useState<SessionData | null>(null);
   const [users, setUsers] = useState<FirestoreUser[]>([]);
   const [vehicles, setVehicles] = useState<FirestoreVehicle[]>([]);
+  const [activeRuns, setActiveRuns] = useState<{ [key: string]: boolean }>({});
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -68,25 +79,16 @@ const AdminManagementPage = () => {
         const usersSnapshot = await getDocs(usersCol);
         const userList = usersSnapshot.docs.map(doc => {
             const data = doc.data();
-            // Assuming email is matricula@frotacontrol.com and we want to get the matricula back
-            const userDocInAuth = doc.id; // In our setup, user UID from Auth is the doc ID
-            // We need to fetch matricula from somewhere else if it's not in the user doc itself.
-            // For now, let's assume we can't easily get it back from the email. We'll use the UID or a placeholder.
-            // A better solution would be to store matricula in the user document. Let's assume it's NOT there for now.
              return {
                 id: doc.id,
                 name: data.name,
                 truck: data.truck,
                 isAdmin: data.isAdmin,
-                matricula: 'N/A' // Placeholder
+                matricula: 'N/A' // Placeholder - Ideally this is stored in the doc
             } as FirestoreUser
         });
         setUsers(userList);
 
-        const vehiclesCol = collection(firestore, `companies/${session.companyId}/sectors/${session.sectorId}/vehicles`);
-        const vehiclesSnapshot = await getDocs(vehiclesCol);
-        const vehicleList = vehiclesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FirestoreVehicle));
-        setVehicles(vehicleList.filter(v => v.isTruck));
     } catch (error) {
         console.error("Error fetching data: ", error);
         toast({ variant: 'destructive', title: 'Erro ao carregar dados', description: 'Não foi possível buscar as informações.' });
@@ -98,20 +100,44 @@ const AdminManagementPage = () => {
   useEffect(() => {
     if(session) {
       fetchData();
+
+      // Listener for vehicles
+      const vehiclesCol = collection(firestore, `companies/${session.companyId}/sectors/${session.sectorId}/vehicles`);
+      const unsubscribeVehicles = onSnapshot(vehiclesCol, (snapshot) => {
+          const vehicleList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FirestoreVehicle)).filter(v => v.isTruck);
+          setVehicles(vehicleList);
+      });
+
+      // Listener for active runs
+      const runsCol = collection(firestore, `companies/${session.companyId}/sectors/${session.sectorId}/runs`);
+      const activeRunsQuery = query(runsCol, where('status', '==', 'IN_PROGRESS'));
+      const unsubscribeRuns = onSnapshot(activeRunsQuery, (snapshot) => {
+          const runsMap: { [key: string]: boolean } = {};
+          snapshot.forEach(doc => {
+              runsMap[doc.data().vehicleId] = true;
+          });
+          setActiveRuns(runsMap);
+      });
+      
+      return () => {
+          unsubscribeVehicles();
+          unsubscribeRuns();
+      }
     }
-  }, [session, fetchData]);
+  }, [session, firestore, fetchData]);
 
 
   const handleDelete = async (type: 'user' | 'vehicle', id: string) => {
     if (!firestore || !session) return;
     
+    // TODO: Add logic to prevent deleting a user or vehicle that is in an active run.
     const collectionName = type === 'user' ? 'users' : 'vehicles';
     const docRef = doc(firestore, `companies/${session.companyId}/sectors/${session.sectorId}/${collectionName}`, id);
 
     try {
       await deleteDoc(docRef);
       toast({ title: 'Sucesso', description: `${type === 'user' ? 'Usuário' : 'Veículo'} deletado com sucesso.` });
-      fetchData(); // Refresh data
+      // Data will refresh via onSnapshot listeners
     } catch (error) {
       console.error(`Error deleting ${type}:`, error);
       toast({ variant: 'destructive', title: 'Erro', description: `Não foi possível deletar o ${type}.` });
@@ -163,7 +189,7 @@ const AdminManagementPage = () => {
                 <Card>
                     <CardHeader>
                         <CardTitle>Gerenciar Caminhões</CardTitle>
-                        <CardDescription>Edite ou remova caminhões da frota.</CardDescription>
+                        <CardDescription>Edite, remova ou gerencie a manutenção dos caminhões.</CardDescription>
                     </CardHeader>
                     <CardContent>
                          {isLoading ? (
@@ -171,8 +197,9 @@ const AdminManagementPage = () => {
                         ) : (
                             <VehicleManagement
                                 vehicles={vehicles}
+                                activeRuns={activeRuns}
                                 onDelete={handleDelete}
-                                onUpdate={fetchData}
+                                onUpdate={fetchData} // onUpdate can be used to refresh all data if needed, but snapshots handle it
                                 session={session}
                              />
                         )}
