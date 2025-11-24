@@ -274,12 +274,9 @@ const HistoryPage = () => {
             const allStops = runs.flatMap(r => r.stops).filter(s => s.status === 'COMPLETED').sort((a,b) => (a.arrivalTime?.seconds || 0) - (b.arrivalTime?.seconds || 0));
             const allLocations = runs.flatMap(r => r.locationHistory || []).sort((a, b) => a.timestamp.seconds - b.timestamp.seconds);
             
-            const totalDistance = runs.reduce((acc, r) => {
-                if (r.endMileage && r.startMileage) {
-                    return acc + (r.endMileage - r.startMileage);
-                }
-                return acc;
-            }, 0);
+            const startMileage = firstRun.startMileage;
+            const endMileage = lastRun.endMileage;
+            const totalDistance = (endMileage && startMileage) ? endMileage - startMileage : 0;
 
             const totalDuration = lastRun.endTime ? lastRun.endTime.seconds - firstRun.startTime.seconds : 0;
 
