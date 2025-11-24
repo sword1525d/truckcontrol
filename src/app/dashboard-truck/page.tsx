@@ -202,11 +202,11 @@ export default function DashboardTruckPage() {
 
         <section className="space-y-4">
             <Button className="w-full h-16 text-lg" onClick={handleStartOrContinueRun}>
-                <PlayCircle className="mr-3"/>
+                <PlayCircle className="mr-3 h-6 w-6"/>
                 {activeRunId ? 'Continuar Trajeto' : 'Iniciar Trajeto'}
             </Button>
             <Button className="w-full h-16 text-lg" variant="outline" onClick={() => router.push('/dashboard-truck/refuel')}>
-                <Fuel className="mr-3"/>
+                <Fuel className="mr-3 h-6 w-6"/>
                 Registrar Abastecimento
             </Button>
         </section>
