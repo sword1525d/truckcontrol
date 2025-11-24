@@ -1,6 +1,6 @@
 
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useFirebase } from '@/firebase';
 import { collection, query, where, onSnapshot, Timestamp } from 'firebase/firestore';
 import {
@@ -149,7 +149,7 @@ const TrackingPage = () => {
   const [user, setUser] = useState<UserData | null>(null);
   const [activeRuns, setActiveRuns] = useState<Run[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedRunForMap, setSelectedRunForMap] = useState<Run | null>(null);
+  const [selectedRunIdForMap, setSelectedRunIdForMap] = useState<string | null>(null);
 
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
@@ -186,13 +186,20 @@ const TrackingPage = () => {
     return () => unsubscribeRuns();
   }, [firestore, user, toast]);
 
-  const handleViewRoute = (run: Run) => {
-      if (!run.locationHistory || run.locationHistory.length < 1) {
+  const handleViewRoute = (runId: string) => {
+      const run = activeRuns.find(r => r.id === runId);
+      if (!run || !run.locationHistory || run.locationHistory.length < 1) {
           toast({ variant: 'destructive', title: 'Sem dados', description: 'Não há dados de localização suficientes para exibir o trajeto.' });
           return;
       }
-      setSelectedRunForMap(run);
+      setSelectedRunIdForMap(runId);
   };
+
+  const selectedRunForMap = useMemo(() => {
+    if (!selectedRunIdForMap) return null;
+    return activeRuns.find(run => run.id === selectedRunIdForMap) || null;
+  }, [selectedRunIdForMap, activeRuns]);
+
 
   if (isLoading) {
      return <div className="flex justify-center items-center h-full"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
@@ -216,23 +223,29 @@ const TrackingPage = () => {
             </Card>
         ) : (
           <Accordion type="single" collapsible className="w-full space-y-4" defaultValue={activeRuns[0]?.id}>
-            {activeRuns.map(run => <RunAccordionItem key={run.id} run={run} onViewRoute={() => handleViewRoute(run)} />)}
+            {activeRuns.map(run => <RunAccordionItem key={run.id} run={run} onViewRoute={() => handleViewRoute(run.id)} />)}
           </Accordion>
         )}
       
-      <Dialog open={selectedRunForMap !== null} onOpenChange={(isOpen) => !isOpen && setSelectedRunForMap(null)}>
+      <Dialog open={selectedRunForMap !== null} onOpenChange={(isOpen) => !isOpen && setSelectedRunIdForMap(null)}>
         <DialogContent className="max-w-4xl h-[80vh]">
-          <DialogHeader>
-            <DialogTitle>Trajeto da Corrida - {selectedRunForMap?.driverName} ({selectedRunForMap?.vehicleId})</DialogTitle>
-            <DialogDescription>
-              Visualização do trajeto completo da corrida, segmentado por paradas.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="h-[calc(80vh-100px)] bg-muted rounded-md">
-            {selectedRunForMap && (
-              <RealTimeMap segments={mapSegments} fullLocationHistory={fullLocationHistory} />
-            )}
-          </div>
+          {selectedRunForMap && (
+             <>
+              <DialogHeader>
+                <DialogTitle>Trajeto da Corrida - {selectedRunForMap.driverName} ({selectedRunForMap.vehicleId})</DialogTitle>
+                <DialogDescription>
+                  Visualização do trajeto completo da corrida, segmentado por paradas.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="h-[calc(80vh-100px)] bg-muted rounded-md">
+                  <RealTimeMap 
+                      segments={mapSegments} 
+                      fullLocationHistory={fullLocationHistory} 
+                      vehicleId={selectedRunForMap.vehicleId}
+                  />
+              </div>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </div>
@@ -337,5 +350,3 @@ const RunAccordionItem = ({ run, onViewRoute }: { run: Run, onViewRoute: () => v
 }
 
 export default TrackingPage;
-
-    
