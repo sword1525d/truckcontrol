@@ -114,7 +114,7 @@ const ChecklistHistoryPage = () => {
             // Client-side filtering for company/sector and sorting
             const companyPath = `companies/${user.companyId}/sectors/${user.sectorId}/`;
             const filteredAndSorted = checklists
-                .filter(c => c.id.includes(companyPath))
+                .filter(c => doc.ref.path.startsWith(companyPath))
                 .sort((a,b) => b.timestamp.seconds - a.timestamp.seconds);
             
             setAllChecklists(filteredAndSorted);
@@ -322,5 +322,3 @@ const ChecklistDetailsDialog = ({ checklist, isOpen, onClose }: { checklist: Che
 
 
 export default ChecklistHistoryPage;
-
-    
