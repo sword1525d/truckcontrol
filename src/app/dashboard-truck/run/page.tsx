@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useFirebase } from '@/firebase';
-import { collection, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, addDoc, serverTimestamp, query, where, Timestamp } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -17,6 +17,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
+import { startOfDay, endOfDay } from 'date-fns';
 
 type UserData = {
   id: string;
@@ -98,6 +99,30 @@ export default function TruckRunPage() {
     }
     setIsSubmitting(true);
     try {
+      // Check for daily checklist
+      const todayStart = startOfDay(new Date());
+      const todayEnd = endOfDay(new Date());
+
+      const checklistCol = collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/vehicles/${selectedVehicle}/checklists`);
+      const q = query(checklistCol, 
+        where('timestamp', '>=', todayStart), 
+        where('timestamp', '<=', todayEnd)
+      );
+
+      const checklistSnapshot = await getDocs(q);
+
+      if (checklistSnapshot.empty) {
+        toast({
+          variant: 'destructive',
+          title: 'Checklist Requerido',
+          description: `Você deve preencher o checklist diário para o veículo ${selectedVehicle} antes de iniciar um trajeto.`,
+          duration: 5000,
+        });
+        setIsSubmitting(false);
+        return;
+      }
+
+
       const runsCol = collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/runs`);
       const newRun = {
         driverId: user.id,
