@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -27,6 +28,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
+import { Textarea } from '@/components/ui/textarea';
 
 type ChecklistItem = {
   id: string;
@@ -34,9 +36,10 @@ type ChecklistItem = {
   title: string;
   description: string;
   status: 'conforme' | 'nao_conforme' | 'na';
+  observation?: string;
 };
 
-const CHECKLIST_ITEMS: Omit<ChecklistItem, 'status'>[] = [
+const CHECKLIST_ITEMS: Omit<ChecklistItem, 'status' | 'observation'>[] = [
     { id: '1', location: 'D', title: 'Teto das carrocerias', description: 'Verificar se não possuem vazamentos.' },
     { id: '2', location: 'C', title: 'Piso do baú (Assoalho)', description: 'Deve estar sem depreciações, sem furos ou afundamentos ou algo que gere dificuldade da movimentação de carrinhos.' },
     { id: '3', location: 'B', title: 'Escada de acesso a cabine. Escada caminhão químico', description: 'Checar se estão em condição segura de acesso.' },
@@ -78,7 +81,7 @@ export default function ChecklistPage() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [selectedVehicle, setSelectedVehicle] = useState('');
   const [checklist, setChecklist] = useState<ChecklistItem[]>(
-    CHECKLIST_ITEMS.map(item => ({ ...item, status: 'na' }))
+    CHECKLIST_ITEMS.map(item => ({ ...item, status: 'na', observation: '' }))
   );
   
   const [isLoading, setIsLoading] = useState(true);
@@ -127,6 +130,12 @@ export default function ChecklistPage() {
     );
   };
   
+  const handleObservationChange = (itemId: string, observation: string) => {
+    setChecklist(prev =>
+      prev.map(item => (item.id === itemId ? { ...item, observation } : item))
+    );
+  };
+
   const handleSaveChecklist = async () => {
       if (!selectedVehicle) {
           toast({ variant: 'destructive', title: 'Erro', description: 'Por favor, selecione um veículo.' });
@@ -218,7 +227,7 @@ export default function ChecklistPage() {
         <div className="space-y-4">
           {checklist.map(item => (
             <Card key={item.id} className="shadow-sm">
-              <CardContent className="p-4">
+              <CardContent className="p-4 flex flex-col gap-4">
                 <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
                   <div className="flex-1">
                     <p className="font-semibold text-base">
@@ -229,7 +238,8 @@ export default function ChecklistPage() {
                     <p className="text-sm text-muted-foreground ml-8">{item.description}</p>
                   </div>
                   <RadioGroup
-                    defaultValue="na"
+                    defaultValue={item.status}
+                    value={item.status}
                     onValueChange={(value: 'conforme' | 'nao_conforme' | 'na') => handleStatusChange(item.id, value)}
                     className="flex gap-4"
                   >
@@ -243,6 +253,18 @@ export default function ChecklistPage() {
                     </div>
                   </RadioGroup>
                 </div>
+                {item.status === 'nao_conforme' && (
+                  <div className="ml-8">
+                    <Label htmlFor={`obs-${item.id}`} className="text-xs text-muted-foreground">Observação da Não Conformidade:</Label>
+                    <Textarea
+                      id={`obs-${item.id}`}
+                      placeholder="Descreva o problema encontrado..."
+                      value={item.observation}
+                      onChange={(e) => handleObservationChange(item.id, e.target.value)}
+                      className="mt-1"
+                    />
+                  </div>
+                )}
               </CardContent>
             </Card>
           ))}
@@ -264,3 +286,5 @@ export default function ChecklistPage() {
     </div>
   );
 }
+
+    

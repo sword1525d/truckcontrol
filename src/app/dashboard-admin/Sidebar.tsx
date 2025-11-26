@@ -18,6 +18,7 @@ import {
   History,
   Users,
   Fuel,
+  ClipboardCheck,
 } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useFirebase } from '@/firebase';
@@ -41,6 +42,7 @@ export function AdminSidebar() {
     { href: '/dashboard-admin/tracking', label: 'Acompanhamento', icon: Map },
     { href: '/dashboard-admin/history', label: 'Histórico e Análise', icon: History },
     { href: '/dashboard-admin/refueling', label: 'Abastecimentos', icon: Fuel },
+    { href: '/dashboard-admin/checklists', label: 'Checklists', icon: ClipboardCheck },
     { href: '/dashboard-admin/manage', label: 'Gerenciamento', icon: Users },
   ];
 
@@ -91,3 +93,5 @@ export function AdminSidebar() {
     </>
   );
 }
+
+    
