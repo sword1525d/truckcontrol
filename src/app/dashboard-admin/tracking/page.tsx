@@ -508,12 +508,13 @@ const RunAccordionItem = ({ run, onViewRoute }: { run: AggregatedRun, onViewRout
                   
                   const arrivalTime = stop.arrivalTime ? new Date(stop.arrivalTime.seconds * 1000) : null;
                   const departureTime = stop.departureTime ? new Date(stop.departureTime.seconds * 1000) : null;
-                  const prevDepartureTime = new Date(lastDepartureTime.seconds * 1000);
                   
-                  const travelTime = arrivalTime ? formatDistanceStrict(prevDepartureTime, arrivalTime, { locale: ptBR, unit: 'minute'}) : null;
+                  const travelStartTime = lastDepartureTime; // This is correct from the loop logic
+                  
+                  const travelTime = arrivalTime ? formatDistanceStrict(new Date(travelStartTime.seconds * 1000), arrivalTime, { locale: ptBR, unit: 'minute'}) : null;
                   const stopTime = arrivalTime && departureTime ? formatDistanceStrict(arrivalTime, departureTime, { locale: ptBR, unit: 'minute'}) : null;
 
-                  if (departureTime) {
+                  if (stop.departureTime) {
                       lastDepartureTime = stop.departureTime!;
                   }
 
@@ -530,8 +531,8 @@ const RunAccordionItem = ({ run, onViewRoute }: { run: AggregatedRun, onViewRout
                       </div>
                       {isCompletedStop && (
                         <div className="text-right text-sm text-muted-foreground">
-                            <p>Início no Trajeto: {formatFirebaseTime(lastDepartureTime)}</p>
-                            <p>Encerramento: {formatFirebaseTime(stop.departureTime)}</p>
+                            <p>Início no trajeto: {formatFirebaseTime(travelStartTime)}</p>
+                            <p>Encerramento: {formatFirebaseTime(stop.arrivalTime)}</p>
                         </div>
                       )}
                     </div>
