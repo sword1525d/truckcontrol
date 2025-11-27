@@ -1,4 +1,3 @@
-
 'use client';
 import { useState, useEffect, useMemo } from 'react';
 import { useFirebase } from '@/firebase';
@@ -505,7 +504,7 @@ const RunAccordionItem = ({ run, onViewRoute }: { run: AggregatedRun, onViewRout
                     <Hourglass className="h-6 w-6 flex-shrink-0 text-amber-500" />
                     <div className="flex-1">
                       <p className="font-medium">Tempo Parado</p>
-                      <p className="text-xs text-muted-foreground">O veículo ficou ocioso entre as corridas.</p>
+                      <p className="text-xs text-muted-foreground">O veículo ficou parado entre as corridas.</p>
                     </div>
                     <div className="text-right text-sm text-muted-foreground">
                       <p>Duração: <strong>{idleTime}</strong></p>
