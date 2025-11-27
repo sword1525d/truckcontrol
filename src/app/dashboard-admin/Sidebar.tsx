@@ -19,6 +19,7 @@ import {
   Users,
   Fuel,
   ClipboardCheck,
+  Settings,
 } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useFirebase } from '@/firebase';
@@ -44,6 +45,7 @@ export function AdminSidebar() {
     { href: '/dashboard-admin/refueling', label: 'Abastecimentos', icon: Fuel },
     { href: '/dashboard-admin/checklists', label: 'Checklists', icon: ClipboardCheck },
     { href: '/dashboard-admin/manage', label: 'Gerenciamento', icon: Users },
+    { href: '/dashboard-admin/settings', label: 'Configurações', icon: Settings },
   ];
 
   return (

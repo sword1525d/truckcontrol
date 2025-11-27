@@ -1,3 +1,4 @@
+
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import Map, { Marker, Source, Layer, MapRef, Popup } from 'react-map-gl';
@@ -6,8 +7,11 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 import { type Segment } from './page';
 import { Truck, Timer, Route, Milestone } from 'lucide-react';
 import type { LineLayer } from 'react-map-gl';
+import { useFirebase } from '@/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+const DEFAULT_ZOOM = 12;
 
 interface RealTimeMapProps {
   segments?: Segment[];
@@ -18,6 +22,26 @@ interface RealTimeMapProps {
 const RealTimeMap = ({ segments, fullLocationHistory, vehicleId }: RealTimeMapProps) => {
   const mapRef = useRef<MapRef>(null);
   const [showPopup, setShowPopup] = useState<Segment | null>(null);
+  const { firestore } = useFirebase();
+  const [initialZoom, setInitialZoom] = useState<number>(DEFAULT_ZOOM);
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      if (!firestore) return;
+      const companyId = localStorage.getItem('companyId');
+      const sectorId = localStorage.getItem('sectorId');
+      if (companyId && sectorId) {
+        const settingsRef = doc(firestore, `companies/${companyId}/sectors/${sectorId}/settings`, 'app');
+        const settingsSnap = await getDoc(settingsRef);
+        if (settingsSnap.exists()) {
+          const data = settingsSnap.data();
+          setInitialZoom(data.map?.defaultZoom ?? DEFAULT_ZOOM);
+        }
+      }
+    };
+    fetchSettings();
+  }, [firestore]);
+
 
   useEffect(() => {
     if (mapRef.current && fullLocationHistory.length > 0) {
@@ -41,14 +65,14 @@ const RealTimeMap = ({ segments, fullLocationHistory, vehicleId }: RealTimeMapPr
         if (lastPosition) {
            mapRef.current.flyTo({
             center: [lastPosition.longitude, lastPosition.latitude],
-            zoom: 15,
+            zoom: initialZoom,
             duration: 1000,
           });
         }
       }
     }
   // The dependency array ensures this effect runs when the view type (segments vs. no segments) changes.
-  }, [segments, fullLocationHistory]);
+  }, [segments, fullLocationHistory, initialZoom]);
 
 
   if (!MAPBOX_TOKEN) {
@@ -77,7 +101,7 @@ const RealTimeMap = ({ segments, fullLocationHistory, vehicleId }: RealTimeMapPr
       initialViewState={{
         longitude: lastPosition?.longitude || -46.6333,
         latitude: lastPosition?.latitude || -23.5505,
-        zoom: 12,
+        zoom: initialZoom,
       }}
       style={{ width: '100%', height: '100%', borderRadius: '0.5rem' }}
       mapStyle="mapbox://styles/mapbox/streets-v12"
