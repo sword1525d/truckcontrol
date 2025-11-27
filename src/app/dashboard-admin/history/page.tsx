@@ -26,7 +26,7 @@ import {
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { Loader2, Calendar as CalendarIcon, Route, Truck, User, Clock, Car, Package, Warehouse, Milestone, Hourglass, Map } from 'lucide-react';
+import { Loader2, Calendar as CalendarIcon, Route, Truck, User, Clock, Car, Package, Warehouse, Milestone, Hourglass, Map as MapIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -636,7 +636,7 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
                                                             {stop.name}
                                                         </CardTitle>
                                                         <Button variant="outline" size="sm" onClick={() => handleViewIndividualRoute(originalRun)}>
-                                                          <Map className="h-4 w-4 mr-2" />
+                                                          <MapIcon className="h-4 w-4 mr-2" />
                                                           Ver Trajeto
                                                         </Button>
                                                     </CardHeader>
