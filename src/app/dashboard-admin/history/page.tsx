@@ -25,7 +25,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Loader2, Calendar as CalendarIcon, Route, Truck, User, Clock, Car, Package, Warehouse, Milestone, Hourglass, MapIcon, Eye, EyeOff } from 'lucide-react';
+import { Loader2, Calendar as CalendarIcon, Route, Truck, User, Clock, Car, Package, Warehouse, Milestone, Hourglass, MapIcon, EyeOff, Maximize, Minimize } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -68,6 +68,7 @@ type Stop = {
   collectedEmptyCars: number | null;
   mileageAtStop: number | null;
   occupancy: number | null;
+  observation?: string;
 };
 
 export type LocationPoint = {
@@ -546,6 +547,7 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
     const [mapRun, setMapRun] = useState<AggregatedRun | Run | null>(null);
     const [isAggregatedMap, setIsAggregatedMap] = useState<boolean>(true);
     const [highlightedSegmentId, setHighlightedSegmentId] = useState<string | null>(null);
+    const [isMapFullscreen, setIsMapFullscreen] = useState(false);
 
 
     useEffect(() => {
@@ -556,6 +558,7 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
             setMapRun(null);
         }
         setHighlightedSegmentId(null);
+        setIsMapFullscreen(false);
     }, [run]);
     
     useEffect(() => {
@@ -565,6 +568,7 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
                 setIsAggregatedMap(true);
             }
             setHighlightedSegmentId(null);
+            setIsMapFullscreen(false);
         }
     }, [isOpen, run]);
 
@@ -596,15 +600,21 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
             <DialogContent className="max-w-[90vw] lg:max-w-7xl w-full h-[90vh] flex flex-col p-0">
-                <DialogHeader className="p-6 pb-0">
-                    <DialogTitle>Detalhes da Rota - {run.driverName} ({run.vehicleId})</DialogTitle>
-                    <DialogDescription>
-                        Visualização detalhada da rota e paradas da corrida de {run.date} ({run.shift}).
-                    </DialogDescription>
+                <DialogHeader className="p-6 pb-2 flex-row items-start justify-between">
+                    <div>
+                        <DialogTitle>Detalhes da Rota - {run.driverName} ({run.vehicleId})</DialogTitle>
+                        <DialogDescription>
+                            Visualização detalhada da rota e paradas da corrida de {run.date} ({run.shift}).
+                        </DialogDescription>
+                    </div>
+                     <Button variant="ghost" size="icon" onClick={() => setIsMapFullscreen(prev => !prev)}>
+                        {isMapFullscreen ? <Minimize className="h-5 w-5" /> : <Maximize className="h-5 w-5" />}
+                        <span className="sr-only">{isMapFullscreen ? 'Restaurar' : 'Tela Cheia'}</span>
+                    </Button>
                 </DialogHeader>
                 
-                <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 p-6 pt-2 min-h-0">
-                    <div className="lg:col-span-2 bg-muted rounded-md min-h-[300px] lg:min-h-0">
+                <div className={cn("flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 p-6 pt-0 min-h-0", isMapFullscreen && "lg:grid-cols-1")}>
+                    <div className={cn("lg:col-span-2 bg-muted rounded-md min-h-[300px] lg:min-h-0", isMapFullscreen && "lg:col-span-1")}>
                         {isClient && (
                             <RealTimeMap 
                                 segments={displayedSegments} 
@@ -614,7 +624,7 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
                         )}
                     </div>
                     
-                    <div className="lg:col-span-1 flex flex-col min-h-0">
+                    <div className={cn("lg:col-span-1 flex flex-col min-h-0", isMapFullscreen && "hidden")}>
                          <div className="flex items-center justify-between mb-2">
                              <h4 className="font-semibold">Detalhes da Rota</h4>
                              <div className="flex items-center gap-2">
@@ -662,7 +672,7 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
                                                 const segmentStartTime = previousStop?.departureTime ?? originalRun.startTime;
                                                 
                                                 const startMileage = previousStop?.mileageAtStop ?? run.startMileage;
-                                                const segmentDistance = stop.mileageAtStop ? stop.mileageAtStop - startMileage : null;
+                                                const segmentDistance = (stop.mileageAtStop && startMileage) ? stop.mileageAtStop - startMileage : null;
                                                 
                                                 const segmentId = `segment-${globalStopIndex}`;
 
@@ -710,6 +720,11 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
                                                                     <Warehouse className="h-3 w-3 text-muted-foreground" />
                                                                     <span>Lotação: {stop.occupancy ?? 'N/A'}%</span>
                                                                 </div>
+                                                                {stop.observation && (
+                                                                    <div className="col-span-full border-t mt-2 pt-2">
+                                                                        <p className="text-xs text-muted-foreground"><strong>Obs:</strong> {stop.observation}</p>
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                         </CardContent>
                                                     </Card>
@@ -728,3 +743,5 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
 }
 
 export default HistoryPage;
+
+    

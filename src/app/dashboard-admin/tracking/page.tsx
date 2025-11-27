@@ -26,7 +26,7 @@ import {
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, PlayCircle, CheckCircle, Clock, MapPin, Truck, User, Route, Timer, X, Hourglass, EyeOff, Milestone } from 'lucide-react';
+import { Loader2, PlayCircle, CheckCircle, Clock, MapPin, Truck, User, Route, Timer, X, Hourglass, EyeOff, Milestone, Maximize, Minimize } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { format, formatDistanceStrict, isToday } from 'date-fns';
@@ -50,6 +50,7 @@ type Stop = {
   collectedEmptyCars?: number | null;
   mileageAtStop?: number | null;
   occupancy?: number | null;
+  observation?: string;
 };
 
 export type LocationPoint = {
@@ -190,6 +191,29 @@ const processRunSegments = (run: AggregatedRun): Segment[] => {
         }
     }
 
+    // Add final segment to current location if run is in progress
+    if (run.status === 'IN_PROGRESS' && sortedLocations.length > 0) {
+        const lastStop = sortedStops[sortedStops.length - 1];
+        if (lastStop && lastStop.departureTime) {
+            const lastDepartureTime = lastStop.departureTime;
+            const finalSegmentPath = sortedLocations
+                .filter(loc => loc.timestamp.seconds >= lastDepartureTime.seconds)
+                .map(loc => [loc.longitude, loc.latitude] as [number, number]);
+
+            if (finalSegmentPath.length > 0) {
+                 segments.push({
+                    id: `segment-current`,
+                    label: `Posição Atual`,
+                    path: finalSegmentPath,
+                    color: '#71717a', // A neutral color
+                    travelTime: formatTimeDiff(new Date(lastDepartureTime.seconds * 1000), new Date()),
+                    stopTime: '',
+                });
+            }
+        }
+    }
+
+
     return segments;
 }
 
@@ -205,6 +229,7 @@ const TrackingPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedRunKeyForMap, setSelectedRunKeyForMap] = useState<string | null>(null);
   const [highlightedSegmentId, setHighlightedSegmentId] = useState<string | null>(null);
+  const [isMapFullscreen, setIsMapFullscreen] = useState(false);
   const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
@@ -365,6 +390,7 @@ const TrackingPage = () => {
   const handleCloseDialog = () => {
     setSelectedRunKeyForMap(null);
     setHighlightedSegmentId(null);
+    setIsMapFullscreen(false);
   }
 
   const selectedRunForMap = useMemo(() => {
@@ -411,21 +437,27 @@ const TrackingPage = () => {
         <DialogContent className="max-w-[90vw] lg:max-w-7xl w-full h-[90vh] flex flex-col p-0">
           {isClient && selectedRunForMap && (
             <>
-              <DialogHeader className="p-6 pb-0">
-                  <DialogTitle>Acompanhamento da Rota - {selectedRunForMap.driverName} ({selectedRunForMap.vehicleId})</DialogTitle>
-                  <DialogDescription>
-                      Acompanhe a localização em tempo real ou veja o trajeto detalhado da rota.
-                  </DialogDescription>
-              </DialogHeader>
-              <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 p-6 pt-2 min-h-0">
-                  <div className="lg:col-span-2 bg-muted rounded-md min-h-[300px] lg:min-h-0">
+              <DialogHeader className="p-6 pb-2 flex-row items-start justify-between">
+                    <div>
+                        <DialogTitle>Acompanhamento da Rota - {selectedRunForMap.driverName} ({selectedRunForMap.vehicleId})</DialogTitle>
+                        <DialogDescription>
+                            Acompanhe a localização em tempo real ou veja o trajeto detalhado da rota.
+                        </DialogDescription>
+                    </div>
+                     <Button variant="ghost" size="icon" onClick={() => setIsMapFullscreen(prev => !prev)}>
+                        {isMapFullscreen ? <Minimize className="h-5 w-5" /> : <Maximize className="h-5 w-5" />}
+                        <span className="sr-only">{isMapFullscreen ? 'Restaurar' : 'Tela Cheia'}</span>
+                    </Button>
+                </DialogHeader>
+              <div className={cn("flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 p-6 pt-0 min-h-0", isMapFullscreen && "lg:grid-cols-1")}>
+                  <div className={cn("lg:col-span-2 bg-muted rounded-md min-h-[300px] lg:min-h-0", isMapFullscreen && "lg:col-span-1")}>
                       <RealTimeMap
                           segments={displayedSegments}
                           fullLocationHistory={selectedRunForMap.locationHistory?.map(p => ({ latitude: p.latitude, longitude: p.longitude })) || []}
                           vehicleId={selectedRunForMap.vehicleId}
                       />
                   </div>
-                  <div className="lg:col-span-1 flex flex-col min-h-0">
+                  <div className={cn("lg:col-span-1 flex flex-col min-h-0", isMapFullscreen && "hidden")}>
                       <div className="flex items-center justify-between mb-2">
                          <h4 className="font-semibold">Detalhes da Rota</h4>
                          {highlightedSegmentId && (
@@ -586,7 +618,12 @@ const RunDetailsContent = ({ run, onSegmentClick, highlightedSegmentId }: { run:
                           {travelTime && <span className='flex items-center gap-1'><Route className="h-3 w-3 text-gray-400"/> Viagem: <strong>{travelTime}</strong></span>}
                           {stopTime && <span className='flex items-center gap-1'><Timer className="h-3 w-3 text-gray-400"/> Parada: <strong>{stopTime}</strong></span>}
                           {segmentDistance !== null && <span className='flex items-center gap-1'><Milestone className="h-3 w-3 text-gray-400"/> Distância: <strong>{segmentDistance.toFixed(1)} km</strong></span>}
-                      </div>
+                        </div>
+                         {stop.observation && (
+                            <div className="border-t mt-2 pt-2">
+                                <p className="text-xs text-muted-foreground"><strong>Obs:</strong> {stop.observation}</p>
+                            </div>
+                        )}
                       </div>
                     </div>
                   )
@@ -599,3 +636,5 @@ const RunDetailsContent = ({ run, onSegmentClick, highlightedSegmentId }: { run:
 }
 
 export default TrackingPage;
+
+    
