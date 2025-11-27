@@ -26,7 +26,7 @@ import {
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { Loader2, Calendar as CalendarIcon, Route, Truck, User, Clock, Car, Package, Warehouse, Milestone } from 'lucide-react';
+import { Loader2, Calendar as CalendarIcon, Route, Truck, User, Clock, Car, Package, Warehouse, Milestone, Hourglass } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -564,50 +564,81 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
                     </TabsList>
                     <TabsContent value="details" className="h-[calc(100%-40px)] overflow-y-auto">
                         <div className="space-y-4 p-1">
-                             {run.stops.filter(s => s.status === 'COMPLETED').map((stop, index) => {
-                                const previousStop = index > 0 ? run.stops[index - 1] : null;
-                                const segmentStartTime = previousStop ? previousStop.departureTime : run.startTime;
+                            {run.originalRuns.map((originalRun, runIndex) => {
+                                const previousRun = runIndex > 0 ? run.originalRuns[runIndex - 1] : null;
+                                let idleTime: string | null = null;
                                 
-                                const startMileage = previousStop?.mileageAtStop ?? run.startMileage;
-                                const segmentDistance = stop.mileageAtStop ? stop.mileageAtStop - startMileage : null;
+                                if (previousRun && previousRun.endTime) {
+                                    idleTime = formatDistanceStrict(
+                                        previousRun.endTime.toDate(),
+                                        originalRun.startTime.toDate(),
+                                        { locale: ptBR, unit: 'minute' }
+                                    );
+                                }
 
                                 return (
-                                    <Card key={index} className="bg-muted/50">
-                                        <CardHeader className="pb-3">
-                                            <CardTitle className="text-lg flex items-center gap-2">
-                                                <Milestone className="h-5 w-5 text-muted-foreground" />
-                                                {stop.name}
-                                            </CardTitle>
-                                        </CardHeader>
-                                        <CardContent>
-                                            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
-                                                <div className="flex items-center gap-2">
-                                                    <Clock className="h-4 w-4 text-muted-foreground" />
-                                                    <div>
-                                                        <p className="font-semibold">Início: {formatFirebaseTime(segmentStartTime)}</p>
-                                                        <p className="font-semibold">Fim: {formatFirebaseTime(stop.arrivalTime)}</p>
-                                                    </div>
+                                    <div key={originalRun.id}>
+                                        {idleTime && (
+                                            <div className="flex items-center gap-4 p-3 rounded-md bg-amber-50 dark:bg-amber-900/20 my-2">
+                                                <Hourglass className="h-6 w-6 flex-shrink-0 text-amber-500" />
+                                                <div className="flex-1">
+                                                    <p className="font-medium">Tempo Parado</p>
+                                                    <p className="text-xs text-muted-foreground">O veículo ficou parado entre as corridas.</p>
                                                 </div>
-                                                <div className="flex items-center gap-2">
-                                                    <Route className="h-4 w-4 text-muted-foreground" />
-                                                    <p className="font-semibold">KM: {segmentDistance !== null ? `${segmentDistance.toFixed(1)}` : 'N/A'}</p>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    <Car className="h-4 w-4 text-muted-foreground" />
-                                                    <p className="font-semibold">Ocupados: {stop.collectedOccupiedCars ?? 'N/A'}</p>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    <Package className="h-4 w-4 text-muted-foreground" />
-                                                    <p className="font-semibold">Vazios: {stop.collectedEmptyCars ?? 'N/A'}</p>
-                                                </div>
-                                                 <div className="flex items-center gap-2">
-                                                    <Warehouse className="h-4 w-4 text-muted-foreground" />
-                                                    <p className="font-semibold">Ocupação: {stop.occupancy ?? 'N/A'}%</p>
+                                                <div className="text-right text-sm text-muted-foreground">
+                                                    <p>Duração: <strong>{idleTime}</strong></p>
                                                 </div>
                                             </div>
-                                        </CardContent>
-                                    </Card>
-                                )
+                                        )}
+                                        {originalRun.stops.filter(s => s.status === 'COMPLETED').map((stop, stopIndex) => {
+                                            // Find the previous stop in the entire aggregated run to calculate travel time
+                                            const globalStopIndex = run.stops.findIndex(s => s.arrivalTime?.seconds === stop.arrivalTime?.seconds);
+                                            const previousStop = globalStopIndex > 0 ? run.stops[globalStopIndex - 1] : null;
+                                            const segmentStartTime = previousStop ? previousStop.departureTime : run.startTime;
+                                            
+                                            const startMileage = previousStop?.mileageAtStop ?? run.startMileage;
+                                            const segmentDistance = stop.mileageAtStop ? stop.mileageAtStop - startMileage : null;
+
+                                            return (
+                                                <Card key={`${originalRun.id}-${stopIndex}`} className="bg-muted/50">
+                                                    <CardHeader className="pb-3">
+                                                        <CardTitle className="text-lg flex items-center gap-2">
+                                                            <Milestone className="h-5 w-5 text-muted-foreground" />
+                                                            {stop.name}
+                                                        </CardTitle>
+                                                    </CardHeader>
+                                                    <CardContent>
+                                                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+                                                            <div className="flex items-center gap-2">
+                                                                <Clock className="h-4 w-4 text-muted-foreground" />
+                                                                <div>
+                                                                    <p className="font-semibold">Início: {formatFirebaseTime(segmentStartTime)}</p>
+                                                                    <p className="font-semibold">Fim: {formatFirebaseTime(stop.arrivalTime)}</p>
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex items-center gap-2">
+                                                                <Route className="h-4 w-4 text-muted-foreground" />
+                                                                <p className="font-semibold">KM: {segmentDistance !== null ? `${segmentDistance.toFixed(1)}` : 'N/A'}</p>
+                                                            </div>
+                                                            <div className="flex items-center gap-2">
+                                                                <Car className="h-4 w-4 text-muted-foreground" />
+                                                                <p className="font-semibold">Ocupados: {stop.collectedOccupiedCars ?? 'N/A'}</p>
+                                                            </div>
+                                                            <div className="flex items-center gap-2">
+                                                                <Package className="h-4 w-4 text-muted-foreground" />
+                                                                <p className="font-semibold">Vazios: {stop.collectedEmptyCars ?? 'N/A'}</p>
+                                                            </div>
+                                                            <div className="flex items-center gap-2">
+                                                                <Warehouse className="h-4 w-4 text-muted-foreground" />
+                                                                <p className="font-semibold">Ocupação: {stop.occupancy ?? 'N/A'}%</p>
+                                                            </div>
+                                                        </div>
+                                                    </CardContent>
+                                                </Card>
+                                            )
+                                        })}
+                                    </div>
+                                );
                             })}
                         </div>
                     </TabsContent>
@@ -627,3 +658,5 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
 }
 
 export default HistoryPage;
+
+    
