@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Suspense } from 'react';
@@ -31,6 +32,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { ArrowLeft, CheckCircle2, Loader2, Milestone } from 'lucide-react';
 import { OccupancySelector } from './OccupancySelector';
+import { Textarea } from '@/components/ui/textarea';
 
 
 type StopStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELED';
@@ -44,6 +46,7 @@ type Stop = {
   collectedEmptyCars: number | null;
   mileageAtStop: number | null;
   occupancy: number | null;
+  observation?: string;
 };
 
 type LocationPoint = {
@@ -142,6 +145,7 @@ function ActiveRunContent() {
 
   const [run, setRun] = useState<Run | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [observation, setObservation] = useState('');
   const [stopData, setStopData] = useState<{ occupied: string; empty: string; mileage: string, occupancy: number; }>({ occupied: '', empty: '', mileage: '', occupancy: 0 });
   
   const runId = searchParams.get('id');
@@ -175,6 +179,7 @@ function ActiveRunContent() {
             mileage: stop.mileageAtStop?.toString() || '',
             occupancy: stop.occupancy ?? 0
           });
+          setObservation(stop.observation || '');
         }
       } else {
         toast({ variant: 'destructive', title: 'Erro', description: 'Trajeto não encontrado.' });
@@ -208,6 +213,7 @@ function ActiveRunContent() {
       const updatedStops = [...run.stops];
       updatedStops[0].status = 'IN_PROGRESS';
       updatedStops[0].arrivalTime = arrivalTime;
+      updatedStops[0].observation = observation || '';
 
       await updateDoc(runRef, {
         stops: updatedStops,
@@ -216,7 +222,7 @@ function ActiveRunContent() {
       setRun(prevRun => {
           if (!prevRun) return null;
           const newStops = [...prevRun.stops];
-          newStops[0] = { ...newStops[0], status: 'IN_PROGRESS', arrivalTime };
+          newStops[0] = { ...newStops[0], status: 'IN_PROGRESS', arrivalTime, observation: observation || '' };
           return { ...prevRun, stops: newStops };
       });
       
@@ -362,42 +368,60 @@ function ActiveRunContent() {
                       </span>
                   </CardTitle>
               </CardHeader>
-
-              {isInProgress && (
-                  <CardContent className="space-y-6 pt-0">
-                     <OccupancySelector 
-                          initialValue={stopData.occupancy}
-                          onValueChange={(value) => handleStopDataChange('occupancy', value)}
-                      />
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                          <div className="space-y-1">
-                              <Label htmlFor={`occupied-${stopNameIdentifier}`} className="text-sm">Carros ocupados</Label>
-                              <Input id={`occupied-${stopNameIdentifier}`} type="number" placeholder="Qtd." 
-                                  value={stopData.occupied}
-                                  onChange={(e) => handleStopDataChange('occupied', e.target.value)}
-                              />
+              
+              {(isPending || isInProgress) && (
+                <CardContent className="space-y-6 pt-0">
+                    {isInProgress && (
+                      <>
+                        <OccupancySelector 
+                              initialValue={stopData.occupancy}
+                              onValueChange={(value) => handleStopDataChange('occupancy', value)}
+                          />
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                              <div className="space-y-1">
+                                  <Label htmlFor={`occupied-${stopNameIdentifier}`} className="text-sm">Carros ocupados</Label>
+                                  <Input id={`occupied-${stopNameIdentifier}`} type="number" placeholder="Qtd." 
+                                      value={stopData.occupied}
+                                      onChange={(e) => handleStopDataChange('occupied', e.target.value)}
+                                  />
+                              </div>
+                              <div className="space-y-1">
+                                  <Label htmlFor={`empty-${stopNameIdentifier}`} className="text-sm">Carros vazios</Label>
+                                  <Input id={`empty-${stopNameIdentifier}`} type="number" placeholder="Qtd." 
+                                      value={stopData.empty}
+                                      onChange={(e) => handleStopDataChange('empty', e.target.value)}
+                                  />
+                              </div>
+                              <div className="space-y-1">
+                                  <Label htmlFor={`mileage-${stopNameIdentifier}`} className="text-sm">Km atual</Label>
+                                  <Input id={`mileage-${stopNameIdentifier}`} type="number" placeholder="Quilometragem"
+                                      value={stopData.mileage}
+                                      onChange={(e) => handleStopDataChange('mileage', e.target.value)}
+                                  />
+                              </div>
                           </div>
-                          <div className="space-y-1">
-                              <Label htmlFor={`empty-${stopNameIdentifier}`} className="text-sm">Carros vazios</Label>
-                              <Input id={`empty-${stopNameIdentifier}`} type="number" placeholder="Qtd." 
-                                  value={stopData.empty}
-                                  onChange={(e) => handleStopDataChange('empty', e.target.value)}
-                              />
-                          </div>
-                          <div className="space-y-1">
-                              <Label htmlFor={`mileage-${stopNameIdentifier}`} className="text-sm">Km atual</Label>
-                              <Input id={`mileage-${stopNameIdentifier}`} type="number" placeholder="Quilometragem"
-                                  value={stopData.mileage}
-                                  onChange={(e) => handleStopDataChange('mileage', e.target.value)}
-                              />
-                          </div>
-                      </div>
-                  </CardContent>
+                      </>
+                    )}
+                     <div className="space-y-1">
+                        <Label htmlFor={`observation-${stopNameIdentifier}`} className="text-sm">Observação (Opcional)</Label>
+                        <Textarea id={`observation-${stopNameIdentifier}`} placeholder="Adicione uma observação sobre a parada..."
+                            value={observation}
+                            onChange={(e) => setObservation(e.target.value)}
+                            disabled={isCompleted}
+                         />
+                     </div>
+                </CardContent>
               )}
               
               {isCompleted && (
                  <CardContent className="space-y-4 pt-0 text-sm text-muted-foreground">
                       <OccupancySelector initialValue={stop.occupancy ?? 0} disabled />
+                       {stop.observation && (
+                          <div className="border-t pt-4">
+                              <p className="font-semibold text-card-foreground">Observação:</p>
+                              <p>{stop.observation}</p>
+                          </div>
+                      )}
                       <div className="grid grid-cols-3 gap-4 border-t pt-4">
                           <p>Ocupados: <strong>{stop.collectedOccupiedCars}</strong></p>
                           <p>Vazios: <strong>{stop.collectedEmptyCars}</strong></p>
