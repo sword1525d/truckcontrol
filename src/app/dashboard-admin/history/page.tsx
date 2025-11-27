@@ -215,7 +215,7 @@ const HistoryPage = () => {
       from: startOfDay(subDays(new Date(), 6)),
       to: endOfDay(new Date()),
     });
-    const [selectedRun, setSelectedRun] = useState<AggregatedRun | null>(null);
+    const [selectedRunForDialog, setSelectedRunForDialog] = useState<AggregatedRun | null>(null);
     const [isClient, setIsClient] = useState(false);
 
     useEffect(() => {
@@ -275,8 +275,8 @@ const HistoryPage = () => {
         }
     }, [user, fetchInitialData]);
 
-    const aggregatedRuns = useMemo(() => {
-        const filtered = allRuns.filter(run => {
+    const filteredRuns = useMemo(() => {
+        return allRuns.filter(run => {
             const runDate = run.endTime ? new Date(run.endTime.seconds * 1000) : null;
             if (!runDate) return false;
 
@@ -288,9 +288,11 @@ const HistoryPage = () => {
 
             return true;
         });
+    }, [allRuns, date, selectedShift, users]);
 
+    const aggregatedRunsMap = useMemo(() => {
         const groupedRuns = new Map<string, Run[]>();
-        filtered.forEach(run => {
+        filteredRuns.forEach(run => {
             const driver = users.get(run.driverId);
             const runDate = format(run.startTime.toDate(), 'yyyy-MM-dd');
             const key = `${run.vehicleId}-${driver?.shift || 'sem-turno'}-${runDate}`;
@@ -301,23 +303,20 @@ const HistoryPage = () => {
             groupedRuns.get(key)!.push(run);
         });
 
-        const aggregated: AggregatedRun[] = [];
+        const aggregatedMap = new Map<string, AggregatedRun>();
         groupedRuns.forEach((runs, key) => {
             runs.sort((a,b) => a.startTime.seconds - b.startTime.seconds);
             const firstRun = runs[0];
             const lastRun = runs[runs.length - 1];
             const driver = users.get(firstRun.driverId);
-
             const allStops = runs.flatMap(r => r.stops).filter(s => s.status === 'COMPLETED').sort((a,b) => (a.arrivalTime?.seconds || 0) - (b.arrivalTime?.seconds || 0));
             const allLocations = runs.flatMap(r => r.locationHistory || []).sort((a, b) => a.timestamp.seconds - b.timestamp.seconds);
-
             const startMileage = firstRun.startMileage;
             const endMileage = lastRun.endMileage;
             const totalDistance = (endMileage && startMileage) ? endMileage - startMileage : 0;
-
             const totalDuration = lastRun.endTime ? lastRun.endTime.seconds - firstRun.startTime.seconds : 0;
 
-            aggregated.push({
+            aggregatedMap.set(key, {
                 key,
                 driverId: firstRun.driverId,
                 driverName: firstRun.driverName,
@@ -326,27 +325,27 @@ const HistoryPage = () => {
                 date: format(firstRun.startTime.toDate(), 'dd/MM/yyyy'),
                 startTime: firstRun.startTime,
                 endTime: lastRun.endTime,
-                totalDistance: totalDistance,
-                totalDuration: totalDuration,
+                totalDistance,
+                totalDuration,
                 stops: allStops,
                 locationHistory: allLocations,
                 originalRuns: runs,
-                startMileage: startMileage
+                startMileage
             });
         });
 
-        return aggregated.sort((a, b) => b.startTime.seconds - a.startTime.seconds);
-    }, [allRuns, date, selectedShift, users]);
+        return aggregatedMap;
+    }, [filteredRuns, users]);
 
     const kpis = useMemo(() => {
-      const totalRuns = aggregatedRuns.length;
-      const totalDistance = aggregatedRuns.reduce((acc, run) => acc + run.totalDistance, 0);
-      const totalDurationSeconds = aggregatedRuns.reduce((acc, run) => acc + run.totalDuration, 0);
+      const totalRuns = filteredRuns.length;
+      const totalDistance = filteredRuns.reduce((acc, run) => acc + ((run.endMileage || run.startMileage) - run.startMileage), 0);
+      const totalDurationSeconds = filteredRuns.reduce((acc, run) => acc + (run.endTime ? run.endTime.seconds - run.startTime.seconds : 0), 0);
       const avgDurationMinutes = totalRuns > 0 ? (totalDurationSeconds / totalRuns / 60) : 0;
-      const totalStops = aggregatedRuns.reduce((acc, run) => acc + run.stops.length, 0);
+      const totalStops = filteredRuns.reduce((acc, run) => acc + run.stops.length, 0);
 
       return { totalRuns, totalDistance, avgDurationMinutes, totalStops };
-    }, [aggregatedRuns]);
+    }, [filteredRuns]);
 
     const runsByDayChartData = useMemo(() => {
         if (!date || !date.from) return [];
@@ -354,12 +353,11 @@ const HistoryPage = () => {
         const to = endOfDay(date.to || date.from);
 
         const dateMap = new Map<string, number>();
-
         for (let d = new Date(from); d <= to; d.setDate(d.getDate() + 1)) {
             dateMap.set(format(d, 'dd/MM'), 0);
         }
 
-        aggregatedRuns.forEach(run => {
+        filteredRuns.forEach(run => {
             const day = format(new Date(run.startTime.seconds * 1000), 'dd/MM');
             if(dateMap.has(day)){
                 dateMap.set(day, (dateMap.get(day) || 0) + 1);
@@ -367,34 +365,39 @@ const HistoryPage = () => {
         });
 
         return Array.from(dateMap, ([name, total]) => ({ name, total }));
-    }, [aggregatedRuns, date]);
+    }, [filteredRuns, date]);
 
     const distanceByVehicleChartData = useMemo(() => {
         const distanceMap = new Map<string, number>();
-
-        aggregatedRuns.forEach(run => {
-            distanceMap.set(run.vehicleId, (distanceMap.get(run.vehicleId) || 0) + run.totalDistance);
+        filteredRuns.forEach(run => {
+            const distance = (run.endMileage || run.startMileage) - run.startMileage;
+            distanceMap.set(run.vehicleId, (distanceMap.get(run.vehicleId) || 0) + distance);
         });
 
         return Array.from(distanceMap, ([vehicleId, distance]) => ({ name: vehicleId, total: Math.round(distance) }));
-    }, [aggregatedRuns]);
+    }, [filteredRuns]);
 
-    const handleViewDetails = (run: AggregatedRun) => {
-        setSelectedRun(run);
+    const handleViewDetails = (run: Run) => {
+        const driver = users.get(run.driverId);
+        const runDate = format(run.startTime.toDate(), 'yyyy-MM-dd');
+        const key = `${run.vehicleId}-${driver?.shift || 'sem-turno'}-${runDate}`;
+        const aggregatedRun = aggregatedRunsMap.get(key);
+        if (aggregatedRun) {
+            setSelectedRunForDialog(aggregatedRun);
+        }
     };
 
-    const handleDelete = async (runToDelete: AggregatedRun) => {
+    const handleDelete = async (runToDelete: Run) => {
         if (!firestore || !user || !isSuperAdmin) return;
         try {
-            for (const originalRun of runToDelete.originalRuns) {
-                const runRef = doc(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/runs`, originalRun.id);
-                await deleteDoc(runRef);
-            }
-            toast({ title: 'Sucesso', description: 'Rota e todas as suas corridas foram deletadas.' });
+            const runRef = doc(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/runs`, runToDelete.id);
+            await deleteDoc(runRef);
+
+            toast({ title: 'Sucesso', description: 'A corrida foi deletada.' });
             fetchInitialData(); // Refresh list
         } catch (error) {
             console.error("Error deleting run:", error);
-            toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível deletar a rota.' });
+            toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível deletar a corrida.' });
         }
     };
 
@@ -413,17 +416,17 @@ const HistoryPage = () => {
             </div>
 
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                <KpiCard title="Rotas Concluídas" value={kpis.totalRuns.toString()} />
+                <KpiCard title="Corridas Concluídas" value={kpis.totalRuns.toString()} />
                 <KpiCard title="Paradas Totais" value={kpis.totalStops.toString()} />
                 <KpiCard title="Distância Total" value={`${kpis.totalDistance.toFixed(1)} km`} />
-                <KpiCard title="Duração Média da Rota" value={`${kpis.avgDurationMinutes.toFixed(0)} min`} />
+                <KpiCard title="Duração Média" value={`${kpis.avgDurationMinutes.toFixed(0)} min`} />
             </div>
 
             <div className="grid gap-6 lg:grid-cols-2">
                 <Card>
                     <CardHeader>
-                        <CardTitle>Rotas por Dia</CardTitle>
-                        <CardDescription>Total de rotas concluídas por dia no período e turno selecionados.</CardDescription>
+                        <CardTitle>Corridas por Dia</CardTitle>
+                        <CardDescription>Total de corridas concluídas por dia no período e turno selecionados.</CardDescription>
                     </CardHeader>
                     <CardContent>
                         {isLoading ? <div className="flex justify-center items-center h-[300px]"><Loader2 className="w-8 h-8 animate-spin"/></div> :
@@ -461,8 +464,8 @@ const HistoryPage = () => {
 
             <Card>
                 <CardHeader>
-                    <CardTitle>Histórico de Rotas</CardTitle>
-                    <CardDescription>Lista de rotas concluídas no período e turno selecionados.</CardDescription>
+                    <CardTitle>Histórico de Corridas</CardTitle>
+                    <CardDescription>Lista de corridas concluídas no período e turno selecionados.</CardDescription>
                 </CardHeader>
                 <CardContent>
                 {isLoading ? <div className="flex justify-center items-center h-[300px]"><Loader2 className="w-8 h-8 animate-spin"/></div> :
@@ -473,21 +476,21 @@ const HistoryPage = () => {
                                     <TableHead>Motorista</TableHead>
                                     <TableHead>Veículo</TableHead>
                                     <TableHead>Turno</TableHead>
-                                    <TableHead>Paradas</TableHead>
+                                    <TableHead>Destino</TableHead>
                                     <TableHead>Distância</TableHead>
                                     <TableHead>Data</TableHead>
                                     <TableHead className="text-right">Ação</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {aggregatedRuns.length > 0 ? aggregatedRuns.map(run => <HistoryTableRow key={run.key} run={run} onViewDetails={() => handleViewDetails(run)} isSuperAdmin={isSuperAdmin} onDelete={() => handleDelete(run)} />) : <TableRow><TableCell colSpan={7} className="text-center h-24">Nenhuma rota encontrada</TableCell></TableRow>}
+                                {filteredRuns.length > 0 ? filteredRuns.map(run => <HistoryTableRow key={run.id} run={run} users={users} onViewDetails={() => handleViewDetails(run)} isSuperAdmin={isSuperAdmin} onDelete={() => handleDelete(run)} />) : <TableRow><TableCell colSpan={7} className="text-center h-24">Nenhuma corrida encontrada</TableCell></TableRow>}
                             </TableBody>
                         </Table>
                     </div>}
                 </CardContent>
             </Card>
 
-             <RunDetailsDialog run={selectedRun} isOpen={selectedRun !== null} onClose={() => setSelectedRun(null)} isClient={isClient} />
+             <RunDetailsDialog run={selectedRunForDialog} isOpen={selectedRunForDialog !== null} onClose={() => setSelectedRunForDialog(null)} isClient={isClient} />
         </div>
     );
 };
@@ -503,17 +506,19 @@ const KpiCard = ({ title, value }: { title: string, value: string }) => (
     </Card>
 );
 
-const HistoryTableRow = ({ run, onViewDetails, isSuperAdmin, onDelete }: { run: AggregatedRun, onViewDetails: () => void, isSuperAdmin: boolean, onDelete: () => void }) => {
+const HistoryTableRow = ({ run, users, onViewDetails, isSuperAdmin, onDelete }: { run: Run, users: Map<string, FirestoreUser>, onViewDetails: () => void, isSuperAdmin: boolean, onDelete: () => void }) => {
+    const driver = users.get(run.driverId);
+    const distance = run.endMileage ? run.endMileage - run.startMileage : 0;
     return (
         <TableRow>
             <TableCell>
                 <div className="font-medium flex items-center gap-2"><User className="h-4 w-4 text-muted-foreground" /> {run.driverName}</div>
             </TableCell>
             <TableCell><div className="flex items-center gap-2"><Truck className="h-4 w-4 text-muted-foreground"/>{run.vehicleId}</div></TableCell>
-            <TableCell>{run.shift}</TableCell>
-            <TableCell>{run.stops.length}</TableCell>
-            <TableCell>{run.totalDistance.toFixed(1)} km</TableCell>
-            <TableCell>{run.date}</TableCell>
+            <TableCell>{driver?.shift || 'N/A'}</TableCell>
+            <TableCell>{run.stops.map(s => s.name).join(', ')}</TableCell>
+            <TableCell>{distance.toFixed(1)} km</TableCell>
+            <TableCell>{format(run.startTime.toDate(), 'dd/MM/yyyy')}</TableCell>
             <TableCell className="text-right space-x-2">
                 <Button variant="outline" size="sm" onClick={onViewDetails}>
                     <Route className="h-4 w-4 mr-2" />
@@ -530,7 +535,7 @@ const HistoryTableRow = ({ run, onViewDetails, isSuperAdmin, onDelete }: { run: 
                            <AlertDialogHeader>
                                <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
                                <AlertDialogDescription>
-                                   Esta ação não pode ser desfeita. Isto irá apagar permanentemente a rota do motorista {run.driverName} no dia {run.date}.
+                                   Esta ação não pode ser desfeita. Isto irá apagar permanentemente a corrida do motorista {run.driverName} para {run.stops.map(s => s.name).join(', ')}.
                                </AlertDialogDescription>
                            </AlertDialogHeader>
                            <AlertDialogFooter>
@@ -626,8 +631,10 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
         }
     }, [isOpen, run]);
 
-
     const mapSegments = useMemo(() => processRunSegments(mapRun, isAggregatedMap), [mapRun, isAggregatedMap]);
+    
+    // This must be after all hook calls
+    if (!run) return null;
 
     const displayedSegments = useMemo(() => {
         if (!highlightedSegmentId) return mapSegments.map(s => ({ ...s, opacity: 0.9 }));
@@ -637,9 +644,6 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
             opacity: s.id === highlightedSegmentId ? 1.0 : 0.3,
         }));
     }, [mapSegments, highlightedSegmentId]);
-
-    // Moved the early return to after all hook calls
-    if (!run) return null;
 
     const fullLocationHistory = mapRun?.locationHistory?.map(p => ({ latitude: p.latitude, longitude: p.longitude })) || [];
 
@@ -800,5 +804,3 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
 }
 
 export default HistoryPage;
-
-    
