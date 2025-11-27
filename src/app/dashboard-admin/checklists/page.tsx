@@ -58,6 +58,7 @@ type ChecklistItem = {
 
 type ChecklistRecord = {
     id: string;
+    path: string; // Adicionado para filtragem
     vehicleId: string;
     driverId: string;
     driverName: string;
@@ -109,12 +110,16 @@ const ChecklistHistoryPage = () => {
                 // We'll sort on the client-side.
             );
             const querySnapshot = await getDocs(checklistsQuery);
-            const checklists = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ChecklistRecord));
+            const checklists = querySnapshot.docs.map(doc => ({ 
+                id: doc.id, 
+                path: doc.ref.path, 
+                ...(doc.data() as Omit<ChecklistRecord, 'id' | 'path'>) 
+            }));
             
             // Client-side filtering for company/sector and sorting
             const companyPath = `companies/${user.companyId}/sectors/${user.sectorId}/`;
             const filteredAndSorted = checklists
-                .filter(c => doc.ref.path.startsWith(companyPath))
+                .filter(c => c.path.startsWith(companyPath))
                 .sort((a,b) => b.timestamp.seconds - a.timestamp.seconds);
             
             setAllChecklists(filteredAndSorted);
