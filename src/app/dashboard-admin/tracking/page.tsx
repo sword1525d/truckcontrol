@@ -28,7 +28,7 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, PlayCircle, CheckCircle, Clock, MapPin, Truck, User, Route, Timer, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
-import { format, formatDistanceStrict } from 'date-fns';
+import { format, formatDistanceStrict, startOfDay, endOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import dynamic from 'next/dynamic';
 
@@ -55,18 +55,11 @@ export type Run = {
   driverName: string;
   vehicleId: string;
   startTime: FirebaseTimestamp;
-  status: 'IN_PROGRESS';
+  endTime?: FirebaseTimestamp | null;
+  status: 'IN_PROGRESS' | 'COMPLETED';
   stops: Stop[];
   locationHistory?: LocationPoint[];
 };
-
-export type Segment = {
-    label: string;
-    path: [number, number][];
-    color: string;
-    travelTime: string;
-    stopTime: string;
-}
 
 type UserData = {
   name: string;
@@ -80,15 +73,6 @@ const RealTimeMap = dynamic(() => import('../RealTimeMap'), {
   loading: () => <div className="flex justify-center items-center h-full"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
 });
 
-const SEGMENT_COLORS = [
-    '#3b82f6', '#ef4444', '#10b981', '#f97316', '#8b5cf6', '#ec4899', 
-    '#6366f1', '#f59e0b', '#14b8a6', '#d946ef'
-];
-
-const formatTimeDiff = (start: Date, end: Date) => {
-    if (!start || !end) return 'N/A';
-    return formatDistanceStrict(end, start, { locale: ptBR, unit: 'minute' });
-}
 
 const TrackingPage = () => {
   const { firestore } = useFirebase();
@@ -96,7 +80,7 @@ const TrackingPage = () => {
   const router = useRouter();
   
   const [user, setUser] = useState<UserData | null>(null);
-  const [activeRuns, setActiveRuns] = useState<Run[]>([]);
+  const [allRuns, setAllRuns] = useState<Run[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedRunIdForMap, setSelectedRunIdForMap] = useState<string | null>(null);
   const [isClient, setIsClient] = useState(false);
@@ -124,24 +108,66 @@ const TrackingPage = () => {
     setIsLoading(true);
 
     const runsCol = collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/runs`);
+    
+    // Query for IN_PROGRESS runs
     const activeRunsQuery = query(runsCol, where('status', '==', 'IN_PROGRESS'));
+    
+    // Query for COMPLETED runs today
+    const todayStart = startOfDay(new Date());
+    const todayEnd = endOfDay(new Date());
+    const completedTodayQuery = query(runsCol, 
+        where('status', '==', 'COMPLETED'),
+        where('endTime', '>=', todayStart),
+        where('endTime', '<=', todayEnd)
+    );
 
-    const unsubscribeRuns = onSnapshot(activeRunsQuery, (runsSnapshot) => {
-        const runs: Run[] = runsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Run));
-        const sortedRuns = runs.sort((a, b) => a.startTime.seconds - b.startTime.seconds);
-        setActiveRuns(sortedRuns);
+    const handleSnapshot = (
+        newInProgressRuns: Run[],
+        newCompletedTodayRuns: Run[]
+    ) => {
+        const allRunsMap = new Map<string, Run>();
+
+        // Add completed runs first
+        newCompletedTodayRuns.forEach(run => allRunsMap.set(run.id, run));
+        // Add in-progress runs, overwriting if a run was just completed
+        newInProgressRuns.forEach(run => allRunsMap.set(run.id, run));
+
+        const combinedRuns = Array.from(allRunsMap.values());
+        const sortedRuns = combinedRuns.sort((a, b) => a.startTime.seconds - b.startTime.seconds);
+        
+        setAllRuns(sortedRuns);
         setIsLoading(false);
+    };
+
+    let inProgressRuns: Run[] = [];
+    let completedTodayRuns: Run[] = [];
+
+    const unsubscribeInProgress = onSnapshot(activeRunsQuery, (snapshot) => {
+        inProgressRuns = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Run));
+        handleSnapshot(inProgressRuns, completedTodayRuns);
     }, (error) => {
         console.error("Error fetching active runs: ", error);
-        toast({ variant: 'destructive', title: 'Erro ao buscar corridas', description: 'Não foi possível carregar os acompanhamentos ativos.' });
+        toast({ variant: 'destructive', title: 'Erro ao buscar corridas ativas' });
         setIsLoading(false);
     });
-    
-    return () => unsubscribeRuns();
+
+    const unsubscribeCompleted = onSnapshot(completedTodayQuery, (snapshot) => {
+        completedTodayRuns = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Run));
+        handleSnapshot(inProgressRuns, completedTodayRuns);
+    }, (error) => {
+        console.error("Error fetching completed runs: ", error);
+        toast({ variant: 'destructive', title: 'Erro ao buscar corridas concluídas' });
+        setIsLoading(false);
+    });
+
+    return () => {
+        unsubscribeInProgress();
+        unsubscribeCompleted();
+    };
   }, [firestore, user, toast]);
 
   const handleViewRoute = (runId: string) => {
-      const run = activeRuns.find(r => r.id === runId);
+      const run = allRuns.find(r => r.id === runId);
       if (!run || !run.locationHistory || run.locationHistory.length < 1) {
           toast({ variant: 'destructive', title: 'Sem dados', description: 'Não há dados de localização suficientes para exibir o trajeto.' });
           return;
@@ -151,8 +177,8 @@ const TrackingPage = () => {
 
   const selectedRunForMap = useMemo(() => {
     if (!selectedRunIdForMap) return null;
-    return activeRuns.find(run => run.id === selectedRunIdForMap) || null;
-  }, [selectedRunIdForMap, activeRuns]);
+    return allRuns.find(run => run.id === selectedRunIdForMap) || null;
+  }, [selectedRunIdForMap, allRuns]);
 
 
   if (isLoading) {
@@ -164,19 +190,19 @@ const TrackingPage = () => {
   return (
     <div className="flex-1 space-y-4">
         <div className="flex items-center justify-between space-y-2">
-            <h2 className="text-3xl font-bold tracking-tight">Acompanhamento em Tempo Real</h2>
+            <h2 className="text-3xl font-bold tracking-tight">Acompanhamento Diário</h2>
         </div>
         
-        {activeRuns.length === 0 ? (
+        {allRuns.length === 0 ? (
             <Card className="text-center p-8 mt-6 max-w-2xl mx-auto">
                 <CardHeader>
-                    <CardTitle>Nenhum acompanhamento ativo</CardTitle>
-                    <CardDescription>Não há motoristas em rota no momento.</CardDescription>
+                    <CardTitle>Nenhuma atividade hoje</CardTitle>
+                    <CardDescription>Não há motoristas em rota ou corridas finalizadas hoje.</CardDescription>
                 </CardHeader>
             </Card>
         ) : (
-          <Accordion type="single" collapsible className="w-full space-y-4" defaultValue={activeRuns[0]?.id}>
-            {activeRuns.map(run => <RunAccordionItem key={run.id} run={run} onViewRoute={() => handleViewRoute(run.id)} />)}
+          <Accordion type="single" collapsible className="w-full space-y-4" defaultValue={allRuns.find(r => r.status === 'IN_PROGRESS')?.id || allRuns[0]?.id}>
+            {allRuns.map(run => <RunAccordionItem key={run.id} run={run} onViewRoute={() => handleViewRoute(run.id)} />)}
           </Accordion>
         )}
       
@@ -205,12 +231,13 @@ const TrackingPage = () => {
 };
 
 const RunAccordionItem = ({ run, onViewRoute }: { run: Run, onViewRoute: () => void }) => {
+  const isCompletedRun = run.status === 'COMPLETED';
   const completedStops = run.stops.filter(s => s.status === 'COMPLETED').length;
   const totalStops = run.stops.filter(s => s.status !== 'CANCELED').length;
-  const progress = totalStops > 0 ? (completedStops / totalStops) * 100 : 0;
+  const progress = isCompletedRun ? 100 : (totalStops > 0 ? (completedStops / totalStops) * 100 : 0);
   const currentStop = run.stops.find(s => s.status === 'IN_PROGRESS');
 
-  const formatFirebaseTime = (timestamp: FirebaseTimestamp | null) => {
+  const formatFirebaseTime = (timestamp: FirebaseTimestamp | null | undefined) => {
     if (!timestamp) return '--:--';
     return format(new Date(timestamp.seconds * 1000), 'HH:mm');
   };
@@ -237,15 +264,15 @@ const RunAccordionItem = ({ run, onViewRoute }: { run: Run, onViewRoute: () => v
           </div>
           <div className="flex-1 w-full sm:w-auto">
               <div className="flex justify-between text-sm mb-1">
-                  <span className="font-medium">{completedStops} de {totalStops}</span>
+                  <span className="font-medium">{isCompletedRun ? 'Concluído' : `${completedStops} de ${totalStops}`}</span>
                   <span className="font-bold text-primary">{Math.round(progress)}%</span>
               </div>
               <Progress value={progress} className="h-2" />
           </div>
           <div className="flex-none">
-               <Badge variant={currentStop ? "default" : "secondary"} className="truncate">
+               <Badge variant={isCompletedRun ? 'default' : (currentStop ? "default" : "secondary")} className={`truncate ${isCompletedRun ? 'bg-green-600' : ''}`}>
                  <MapPin className="h-3 w-3 mr-1.5"/>
-                 {currentStop ? currentStop.name : (progress === 100 ? 'Finalizado' : 'Iniciando...')}
+                 {isCompletedRun ? `Finalizado às ${formatFirebaseTime(run.endTime)}` : (currentStop ? currentStop.name : 'Iniciando...')}
                </Badge>
           </div>
         </div>
@@ -262,31 +289,31 @@ const RunAccordionItem = ({ run, onViewRoute }: { run: Run, onViewRoute: () => v
             const { icon: Icon, color, label } = getStatusInfo(stop.status);
             if (stop.status === 'CANCELED') return null;
 
-            const isCompleted = stop.status === 'COMPLETED';
+            const isCompletedStop = stop.status === 'COMPLETED';
             
             const arrivalTime = stop.arrivalTime ? new Date(stop.arrivalTime.seconds * 1000) : null;
             const departureTime = stop.departureTime ? new Date(stop.departureTime.seconds * 1000) : null;
             const prevDepartureTime = new Date(lastDepartureTime.seconds * 1000);
             
-            const travelTime = arrivalTime ? formatTimeDiff(prevDepartureTime, arrivalTime) : null;
-            const stopTime = arrivalTime && departureTime ? formatTimeDiff(arrivalTime, departureTime) : null;
+            const travelTime = arrivalTime ? formatDistanceStrict(prevDepartureTime, arrivalTime, { locale: ptBR, unit: 'minute'}) : null;
+            const stopTime = arrivalTime && departureTime ? formatDistanceStrict(arrivalTime, departureTime, { locale: ptBR, unit: 'minute'}) : null;
 
             if (departureTime) {
                 lastDepartureTime = stop.departureTime!;
             }
 
             return (
-              <div key={index} className={`flex flex-col sm:flex-row items-start sm:items-center gap-4 p-3 rounded-md ${isCompleted ? 'bg-green-50 dark:bg-green-900/20' : 'bg-gray-50 dark:bg-gray-800/20'}`}>
+              <div key={index} className={`flex flex-col sm:flex-row items-start sm:items-center gap-4 p-3 rounded-md ${isCompletedStop ? 'bg-green-50 dark:bg-green-900/20' : 'bg-gray-50 dark:bg-gray-800/20'}`}>
                  <Icon className={`h-6 w-6 flex-shrink-0 mt-1 sm:mt-0 ${color}`} />
                  <div className="flex-1">
                    <p className="font-medium">{index + 1}. {stop.name}</p>
-                   <p className={`text-xs ${isCompleted ? 'text-muted-foreground' : color}`}>{label}</p>
+                   <p className={`text-xs ${isCompletedStop ? 'text-muted-foreground' : color}`}>{label}</p>
                  </div>
                  <div className="w-full sm:w-auto flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                     {travelTime && <span className='flex items-center gap-1'><Route className="h-3 w-3 text-gray-400"/> Viagem: <strong>{travelTime}</strong></span>}
                     {stopTime && <span className='flex items-center gap-1'><Timer className="h-3 w-3 text-gray-400"/> Parada: <strong>{stopTime}</strong></span>}
                  </div>
-                 {isCompleted && (
+                 {isCompletedStop && (
                    <div className="text-right text-sm text-muted-foreground">
                       <p>Chegada: {formatFirebaseTime(stop.arrivalTime)}</p>
                       <p>Saída: {formatFirebaseTime(stop.departureTime)}</p>
