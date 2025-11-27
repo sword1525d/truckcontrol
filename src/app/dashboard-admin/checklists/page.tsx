@@ -1,8 +1,7 @@
-
 'use client';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useFirebase } from '@/firebase';
-import { collectionGroup, query, getDocs, Timestamp } from 'firebase/firestore';
+import { collectionGroup, query, getDocs, Timestamp, doc, deleteDoc } from 'firebase/firestore';
 import {
   Card,
   CardContent,
@@ -32,8 +31,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { Button } from '@/components/ui/button';
-import { Loader2, Calendar as CalendarIcon, Truck, User, Search, FileText } from 'lucide-react';
+import { Loader2, Calendar as CalendarIcon, Truck, User, Search, FileText, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { format, subDays, startOfDay, endOfDay } from 'date-fns';
@@ -79,6 +89,7 @@ const ChecklistHistoryPage = () => {
     const router = useRouter();
 
     const [user, setUser] = useState<UserData | null>(null);
+    const [isSuperAdmin, setIsSuperAdmin] = useState(false);
     const [allChecklists, setAllChecklists] = useState<ChecklistRecord[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [date, setDate] = useState<DateRange | undefined>({
@@ -92,8 +103,13 @@ const ChecklistHistoryPage = () => {
         const storedUser = localStorage.getItem('user');
         const companyId = localStorage.getItem('companyId');
         const sectorId = localStorage.getItem('sectorId');
+        const matricula = localStorage.getItem('matricula');
+
         if (storedUser && companyId && sectorId) {
             setUser({ ...JSON.parse(storedUser), companyId, sectorId });
+             if (matricula === '801231') {
+                setIsSuperAdmin(true);
+            }
         } else {
             router.push('/login');
         }
@@ -110,18 +126,18 @@ const ChecklistHistoryPage = () => {
                 // We'll sort on the client-side.
             );
             const querySnapshot = await getDocs(checklistsQuery);
-            const checklists = querySnapshot.docs.map(doc => ({ 
-                id: doc.id, 
-                path: doc.ref.path, 
-                ...(doc.data() as Omit<ChecklistRecord, 'id' | 'path'>) 
+            const checklists = querySnapshot.docs.map(doc => ({
+                id: doc.id,
+                path: doc.ref.path,
+                ...(doc.data() as Omit<ChecklistRecord, 'id' | 'path'>)
             }));
-            
+
             // Client-side filtering for company/sector and sorting
             const companyPath = `companies/${user.companyId}/sectors/${user.sectorId}/`;
             const filteredAndSorted = checklists
                 .filter(c => c.path.startsWith(companyPath))
                 .sort((a,b) => b.timestamp.seconds - a.timestamp.seconds);
-            
+
             setAllChecklists(filteredAndSorted);
 
         } catch (error) {
@@ -138,6 +154,18 @@ const ChecklistHistoryPage = () => {
         }
     }, [user, fetchChecklistData]);
 
+    const handleDelete = async (checklistPath: string) => {
+        if (!firestore || !isSuperAdmin) return;
+        try {
+            await deleteDoc(doc(firestore, checklistPath));
+            toast({ title: 'Sucesso', description: 'Checklist deletado com sucesso.' });
+            fetchChecklistData(); // Refresh the list
+        } catch (error) {
+            console.error("Error deleting checklist:", error);
+            toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível deletar o checklist.' });
+        }
+    };
+
     const { filteredChecklists, vehicleList } = useMemo(() => {
         const vehicles = new Set<string>();
         allChecklists.forEach(c => vehicles.add(c.vehicleId));
@@ -146,7 +174,7 @@ const ChecklistHistoryPage = () => {
             const checklistDate = new Date(checklist.timestamp.seconds * 1000);
             const isWithinDateRange = date?.from && checklistDate >= startOfDay(date.from) && checklistDate <= endOfDay(date.to || date.from);
             if (!isWithinDateRange) return false;
-            
+
             if(selectedVehicle !== 'all' && checklist.vehicleId !== selectedVehicle) return false;
 
             return true;
@@ -171,7 +199,7 @@ const ChecklistHistoryPage = () => {
                     <DateFilter date={date} setDate={setDate} />
                 </div>
             </div>
-            
+
             <Card>
                 <CardHeader>
                     <CardTitle>Registros de Checklist</CardTitle>
@@ -191,7 +219,7 @@ const ChecklistHistoryPage = () => {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {filteredChecklists.length > 0 ? filteredChecklists.map(c => <ChecklistTableRow key={c.id} checklist={c} onViewDetails={() => setSelectedChecklist(c)} />) : <TableRow><TableCell colSpan={5} className="text-center h-24">Nenhum checklist encontrado no período</TableCell></TableRow>}
+                                {filteredChecklists.length > 0 ? filteredChecklists.map(c => <ChecklistTableRow key={c.id} checklist={c} onViewDetails={() => setSelectedChecklist(c)} isSuperAdmin={isSuperAdmin} onDelete={handleDelete} />) : <TableRow><TableCell colSpan={5} className="text-center h-24">Nenhum checklist encontrado no período</TableCell></TableRow>}
                             </TableBody>
                         </Table>
                     </div>}
@@ -207,7 +235,7 @@ const ChecklistHistoryPage = () => {
     );
 };
 
-const ChecklistTableRow = ({ checklist, onViewDetails }: { checklist: ChecklistRecord, onViewDetails: () => void }) => {
+const ChecklistTableRow = ({ checklist, onViewDetails, isSuperAdmin, onDelete }: { checklist: ChecklistRecord, onViewDetails: () => void, isSuperAdmin: boolean, onDelete: (path: string) => void }) => {
     const nonCompliantItems = checklist.items.filter(item => item.status === 'nao_conforme').length;
     return (
         <TableRow>
@@ -223,11 +251,34 @@ const ChecklistTableRow = ({ checklist, onViewDetails }: { checklist: ChecklistR
                     <Badge className="bg-green-600 hover:bg-green-700">Tudo conforme</Badge>
                 )}
             </TableCell>
-            <TableCell className="text-right font-medium">
+            <TableCell className="text-right font-medium space-x-2">
                 <Button variant="outline" size="sm" onClick={onViewDetails}>
                     <FileText className="h-4 w-4 mr-2" />
                     Ver Detalhes
                 </Button>
+                {isSuperAdmin && (
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                          <Button variant="destructive" size="sm">
+                              <Trash2 className="h-4 w-4 mr-1" /> Deletar
+                          </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                          <AlertDialogHeader>
+                              <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                  Esta ação não pode ser desfeita. Isto irá apagar permanentemente o checklist do veículo {checklist.vehicleId} de {format(new Date(checklist.timestamp.seconds * 1000), 'dd/MM/yy')}.
+                              </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => onDelete(checklist.path)}>
+                                  Confirmar
+                              </AlertDialogAction>
+                          </AlertDialogFooter>
+                      </AlertDialogContent>
+                  </AlertDialog>
+                )}
             </TableCell>
         </TableRow>
     );
@@ -327,3 +378,5 @@ const ChecklistDetailsDialog = ({ checklist, isOpen, onClose }: { checklist: Che
 
 
 export default ChecklistHistoryPage;
+
+    

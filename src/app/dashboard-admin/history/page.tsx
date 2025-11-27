@@ -2,7 +2,7 @@
 'use client';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useFirebase } from '@/firebase';
-import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, Timestamp, doc, deleteDoc } from 'firebase/firestore';
 import {
   Card,
   CardContent,
@@ -24,8 +24,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { Button } from '@/components/ui/button';
-import { Loader2, Calendar as CalendarIcon, Route, Truck, User, Clock, Car, Package, Warehouse, Milestone, Hourglass, MapIcon, EyeOff, Maximize, Minimize } from 'lucide-react';
+import { Loader2, Calendar as CalendarIcon, Route, Truck, User, Clock, Car, Package, Warehouse, Milestone, Hourglass, MapIcon, EyeOff, Maximize, Minimize, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -50,7 +61,7 @@ const TURNOS = {
 };
 
 const SEGMENT_COLORS = [
-    '#3b82f6', '#ef4444', '#10b981', '#f97316', '#8b5cf6', '#ec4899', 
+    '#3b82f6', '#ef4444', '#10b981', '#f97316', '#8b5cf6', '#ec4899',
     '#6366f1', '#f59e0b', '#14b8a6', '#d946ef'
 ];
 
@@ -143,7 +154,7 @@ const formatTimeDiff = (start: Date, end: Date) => {
 
 const processRunSegments = (run: AggregatedRun | Run | null, isAggregated: boolean): Segment[] => {
     if (!run || !run.locationHistory || run.locationHistory.length === 0) return [];
-    
+
     const sortedLocations = [...run.locationHistory].sort((a,b) => a.timestamp.seconds - b.timestamp.seconds);
     const sortedStops = [...run.stops].filter(s => s.status === 'COMPLETED').sort((a, b) => (a.arrivalTime?.seconds || 0) - (b.arrivalTime?.seconds || 0));
 
@@ -158,7 +169,7 @@ const processRunSegments = (run: AggregatedRun | Run | null, isAggregated: boole
 
         const stopArrivalTime = new Date(stop.arrivalTime.seconds * 1000);
         const stopDepartureTime = stop.departureTime ? new Date(stop.departureTime.seconds * 1000) : null;
-        
+
         const segmentDistance = (stop.mileageAtStop && lastMileage) ? stop.mileageAtStop - lastMileage : null;
 
         const segmentPath = sortedLocations
@@ -167,7 +178,7 @@ const processRunSegments = (run: AggregatedRun | Run | null, isAggregated: boole
                 return locTime >= lastDepartureTime.seconds && locTime <= stop.arrivalTime!.seconds;
             })
             .map(loc => [loc.longitude, loc.latitude] as [number, number]);
-        
+
         segments.push({
             id: `segment-${i}`,
             label: `Trajeto para ${stop.name}`,
@@ -177,7 +188,7 @@ const processRunSegments = (run: AggregatedRun | Run | null, isAggregated: boole
             stopTime: stopDepartureTime ? formatTimeDiff(stopArrivalTime, stopDepartureTime) : 'Em andamento',
             distance: segmentDistance !== null ? `${segmentDistance.toFixed(1)} km` : 'N/A'
         });
-        
+
         if (stop.departureTime) {
             lastDepartureTime = stop.departureTime;
         }
@@ -195,6 +206,7 @@ const HistoryPage = () => {
     const router = useRouter();
 
     const [user, setUser] = useState<UserData | null>(null);
+    const [isSuperAdmin, setIsSuperAdmin] = useState(false);
     const [allRuns, setAllRuns] = useState<Run[]>([]);
     const [users, setUsers] = useState<Map<string, FirestoreUser>>(new Map());
     const [isLoading, setIsLoading] = useState(true);
@@ -214,8 +226,13 @@ const HistoryPage = () => {
         const storedUser = localStorage.getItem('user');
         const companyId = localStorage.getItem('companyId');
         const sectorId = localStorage.getItem('sectorId');
+        const matricula = localStorage.getItem('matricula');
+
         if (storedUser && companyId && sectorId) {
             setUser({ ...JSON.parse(storedUser), companyId, sectorId });
+            if (matricula === '801231') {
+                setIsSuperAdmin(true);
+            }
         } else {
             router.push('/login');
         }
@@ -265,7 +282,7 @@ const HistoryPage = () => {
 
             const isWithinDateRange = date?.from && runDate >= startOfDay(date.from) && runDate <= endOfDay(date.to || date.from);
             if (!isWithinDateRange) return false;
-            
+
             const driver = users.get(run.driverId);
             if (selectedShift !== TURNOS.TODOS && driver?.shift !== selectedShift) return false;
 
@@ -277,7 +294,7 @@ const HistoryPage = () => {
             const driver = users.get(run.driverId);
             const runDate = format(run.startTime.toDate(), 'yyyy-MM-dd');
             const key = `${run.vehicleId}-${driver?.shift || 'sem-turno'}-${runDate}`;
-            
+
             if (!groupedRuns.has(key)) {
                 groupedRuns.set(key, []);
             }
@@ -293,7 +310,7 @@ const HistoryPage = () => {
 
             const allStops = runs.flatMap(r => r.stops).filter(s => s.status === 'COMPLETED').sort((a,b) => (a.arrivalTime?.seconds || 0) - (b.arrivalTime?.seconds || 0));
             const allLocations = runs.flatMap(r => r.locationHistory || []).sort((a, b) => a.timestamp.seconds - b.timestamp.seconds);
-            
+
             const startMileage = firstRun.startMileage;
             const endMileage = lastRun.endMileage;
             const totalDistance = (endMileage && startMileage) ? endMileage - startMileage : 0;
@@ -317,7 +334,7 @@ const HistoryPage = () => {
                 startMileage: startMileage
             });
         });
-        
+
         return aggregated.sort((a, b) => b.startTime.seconds - a.startTime.seconds);
     }, [allRuns, date, selectedShift, users]);
 
@@ -327,15 +344,15 @@ const HistoryPage = () => {
       const totalDurationSeconds = aggregatedRuns.reduce((acc, run) => acc + run.totalDuration, 0);
       const avgDurationMinutes = totalRuns > 0 ? (totalDurationSeconds / totalRuns / 60) : 0;
       const totalStops = aggregatedRuns.reduce((acc, run) => acc + run.stops.length, 0);
-      
+
       return { totalRuns, totalDistance, avgDurationMinutes, totalStops };
     }, [aggregatedRuns]);
-    
+
     const runsByDayChartData = useMemo(() => {
         if (!date || !date.from) return [];
         const from = startOfDay(date.from);
         const to = endOfDay(date.to || date.from);
-        
+
         const dateMap = new Map<string, number>();
 
         for (let d = new Date(from); d <= to; d.setDate(d.getDate() + 1)) {
@@ -358,12 +375,27 @@ const HistoryPage = () => {
         aggregatedRuns.forEach(run => {
             distanceMap.set(run.vehicleId, (distanceMap.get(run.vehicleId) || 0) + run.totalDistance);
         });
-        
+
         return Array.from(distanceMap, ([vehicleId, distance]) => ({ name: vehicleId, total: Math.round(distance) }));
     }, [aggregatedRuns]);
 
     const handleViewDetails = (run: AggregatedRun) => {
         setSelectedRun(run);
+    };
+
+    const handleDelete = async (runToDelete: AggregatedRun) => {
+        if (!firestore || !user || !isSuperAdmin) return;
+        try {
+            for (const originalRun of runToDelete.originalRuns) {
+                const runRef = doc(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/runs`, originalRun.id);
+                await deleteDoc(runRef);
+            }
+            toast({ title: 'Sucesso', description: 'Rota e todas as suas corridas foram deletadas.' });
+            fetchInitialData(); // Refresh list
+        } catch (error) {
+            console.error("Error deleting run:", error);
+            toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível deletar a rota.' });
+        }
     };
 
     if (isLoading || !user) {
@@ -379,14 +411,14 @@ const HistoryPage = () => {
                     <DateFilter date={date} setDate={setDate} />
                 </div>
             </div>
-            
+
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <KpiCard title="Rotas Concluídas" value={kpis.totalRuns.toString()} />
                 <KpiCard title="Paradas Totais" value={kpis.totalStops.toString()} />
                 <KpiCard title="Distância Total" value={`${kpis.totalDistance.toFixed(1)} km`} />
                 <KpiCard title="Duração Média da Rota" value={`${kpis.avgDurationMinutes.toFixed(0)} min`} />
             </div>
-            
+
             <div className="grid gap-6 lg:grid-cols-2">
                 <Card>
                     <CardHeader>
@@ -426,7 +458,7 @@ const HistoryPage = () => {
                     </CardContent>
                 </Card>
             </div>
-            
+
             <Card>
                 <CardHeader>
                     <CardTitle>Histórico de Rotas</CardTitle>
@@ -448,7 +480,7 @@ const HistoryPage = () => {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {aggregatedRuns.length > 0 ? aggregatedRuns.map(run => <HistoryTableRow key={run.key} run={run} onViewDetails={() => handleViewDetails(run)} />) : <TableRow><TableCell colSpan={7} className="text-center h-24">Nenhuma rota encontrada</TableCell></TableRow>}
+                                {aggregatedRuns.length > 0 ? aggregatedRuns.map(run => <HistoryTableRow key={run.key} run={run} onViewDetails={() => handleViewDetails(run)} isSuperAdmin={isSuperAdmin} onDelete={() => handleDelete(run)} />) : <TableRow><TableCell colSpan={7} className="text-center h-24">Nenhuma rota encontrada</TableCell></TableRow>}
                             </TableBody>
                         </Table>
                     </div>}
@@ -471,7 +503,7 @@ const KpiCard = ({ title, value }: { title: string, value: string }) => (
     </Card>
 );
 
-const HistoryTableRow = ({ run, onViewDetails }: { run: AggregatedRun, onViewDetails: () => void }) => {
+const HistoryTableRow = ({ run, onViewDetails, isSuperAdmin, onDelete }: { run: AggregatedRun, onViewDetails: () => void, isSuperAdmin: boolean, onDelete: () => void }) => {
     return (
         <TableRow>
             <TableCell>
@@ -482,11 +514,32 @@ const HistoryTableRow = ({ run, onViewDetails }: { run: AggregatedRun, onViewDet
             <TableCell>{run.stops.length}</TableCell>
             <TableCell>{run.totalDistance.toFixed(1)} km</TableCell>
             <TableCell>{run.date}</TableCell>
-            <TableCell className="text-right">
+            <TableCell className="text-right space-x-2">
                 <Button variant="outline" size="sm" onClick={onViewDetails}>
                     <Route className="h-4 w-4 mr-2" />
                     Ver Detalhes
                 </Button>
+                {isSuperAdmin && (
+                    <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                           <Button variant="destructive" size="sm">
+                               <Trash2 className="h-4 w-4 mr-1" /> Deletar
+                           </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                           <AlertDialogHeader>
+                               <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
+                               <AlertDialogDescription>
+                                   Esta ação não pode ser desfeita. Isto irá apagar permanentemente a rota do motorista {run.driverName} no dia {run.date}.
+                               </AlertDialogDescription>
+                           </AlertDialogHeader>
+                           <AlertDialogFooter>
+                               <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                               <AlertDialogAction onClick={onDelete}>Confirmar</AlertDialogAction>
+                           </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+                )}
             </TableCell>
         </TableRow>
     );
@@ -549,7 +602,6 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
     const [highlightedSegmentId, setHighlightedSegmentId] = useState<string | null>(null);
     const [isMapFullscreen, setIsMapFullscreen] = useState(false);
 
-
     useEffect(() => {
         if (run) {
             setMapRun(run);
@@ -557,13 +609,15 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
         } else {
             setMapRun(null);
         }
+        // Reset state on new run or when closing
         setHighlightedSegmentId(null);
         setIsMapFullscreen(false);
     }, [run]);
-    
+
+    // Added separate effect to handle closing, ensuring state resets properly
     useEffect(() => {
         if (!isOpen) {
-             if(run) {
+             if(run) { // Keep the run context for the next open
                 setMapRun(run);
                 setIsAggregatedMap(true);
             }
@@ -572,17 +626,19 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
         }
     }, [isOpen, run]);
 
-    const mapSegments = processRunSegments(mapRun, isAggregatedMap);
-    
+
+    const mapSegments = useMemo(() => processRunSegments(mapRun, isAggregatedMap), [mapRun, isAggregatedMap]);
+
     const displayedSegments = useMemo(() => {
         if (!highlightedSegmentId) return mapSegments.map(s => ({ ...s, opacity: 0.9 }));
-        
+
         return mapSegments.map(s => ({
             ...s,
             opacity: s.id === highlightedSegmentId ? 1.0 : 0.3,
         }));
     }, [mapSegments, highlightedSegmentId]);
-    
+
+    // Moved the early return to after all hook calls
     if (!run) return null;
 
     const fullLocationHistory = mapRun?.locationHistory?.map(p => ({ latitude: p.latitude, longitude: p.longitude })) || [];
@@ -591,13 +647,13 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
         if (!timestamp) return '--:--';
         return format(new Date(timestamp.seconds * 1000), 'HH:mm');
     };
-    
+
     const handleViewIndividualRoute = (individualRun: Run) => {
         setMapRun(individualRun);
         setIsAggregatedMap(false);
         setHighlightedSegmentId(null);
     }
-    
+
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
             <DialogContent className="max-w-[90vw] lg:max-w-7xl w-full h-[90vh] flex flex-col p-0">
@@ -613,18 +669,18 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
                         <span className="sr-only">{isMapFullscreen ? 'Restaurar' : 'Tela Cheia'}</span>
                     </Button>
                 </DialogHeader>
-                
+
                 <div className={cn("flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 p-6 pt-0 min-h-0", isMapFullscreen && "lg:grid-cols-1")}>
                     <div className={cn("lg:col-span-2 bg-muted rounded-md min-h-[300px] lg:min-h-0", isMapFullscreen && "lg:col-span-1")}>
                         {isClient && (
-                            <RealTimeMap 
-                                segments={displayedSegments} 
-                                fullLocationHistory={fullLocationHistory} 
+                            <RealTimeMap
+                                segments={displayedSegments}
+                                fullLocationHistory={fullLocationHistory}
                                 vehicleId={run.vehicleId}
                             />
                         )}
                     </div>
-                    
+
                     <div className={cn("lg:col-span-1 flex flex-col min-h-0", isMapFullscreen && "hidden")}>
                          <div className="flex items-center justify-between mb-2">
                              <h4 className="font-semibold">Detalhes da Rota</h4>
@@ -644,7 +700,7 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
                                 {run.originalRuns.map((originalRun, runIndex) => {
                                     const previousRun = runIndex > 0 ? run.originalRuns[runIndex - 1] : null;
                                     let idleTime: string | null = null;
-                                    
+
                                     if (previousRun && previousRun.endTime) {
                                        idleTime = formatDistanceStrict(
                                            previousRun.endTime.toDate(),
@@ -671,15 +727,15 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
                                                 const globalStopIndex = run.stops.findIndex(s => s.arrivalTime?.seconds === stop.arrivalTime?.seconds);
                                                 const previousStop = globalStopIndex > 0 ? run.stops[globalStopIndex - 1] : null;
                                                 const segmentStartTime = previousStop?.departureTime ?? originalRun.startTime;
-                                                
+
                                                 const startMileage = previousStop?.mileageAtStop ?? run.startMileage;
                                                 const segmentDistance = (stop.mileageAtStop && startMileage) ? stop.mileageAtStop - startMileage : null;
-                                                
+
                                                 const segmentId = `segment-${globalStopIndex}`;
 
                                                 return (
-                                                    <Card 
-                                                        key={`${originalRun.id}-${stopIndex}`} 
+                                                    <Card
+                                                        key={`${originalRun.id}-${stopIndex}`}
                                                         className={cn(
                                                             "bg-muted/50 mb-2 cursor-pointer transition-all hover:bg-muted",
                                                             highlightedSegmentId === segmentId && "ring-2 ring-primary bg-muted"
@@ -744,3 +800,5 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
 }
 
 export default HistoryPage;
+
+    
