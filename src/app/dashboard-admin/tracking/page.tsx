@@ -509,7 +509,7 @@ const RunAccordionItem = ({ run, onViewRoute }: { run: AggregatedRun, onViewRout
                   const arrivalTime = stop.arrivalTime ? new Date(stop.arrivalTime.seconds * 1000) : null;
                   const departureTime = stop.departureTime ? new Date(stop.departureTime.seconds * 1000) : null;
                   
-                  const travelStartTime = lastDepartureTime; // This is correct from the loop logic
+                  const travelStartTime = lastDepartureTime; 
                   
                   const travelTime = arrivalTime ? formatDistanceStrict(new Date(travelStartTime.seconds * 1000), arrivalTime, { locale: ptBR, unit: 'minute'}) : null;
                   const stopTime = arrivalTime && departureTime ? formatDistanceStrict(arrivalTime, departureTime, { locale: ptBR, unit: 'minute'}) : null;
