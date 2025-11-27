@@ -28,7 +28,7 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, PlayCircle, CheckCircle, Clock, MapPin, Truck, User, Route, Timer, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
-import { format, formatDistanceStrict, startOfDay, endOfDay } from 'date-fns';
+import { format, formatDistanceStrict, isToday, startOfDay, endOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import dynamic from 'next/dynamic';
 
@@ -109,28 +109,18 @@ const TrackingPage = () => {
 
     const runsCol = collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/runs`);
     
-    // Query for IN_PROGRESS runs
     const activeRunsQuery = query(runsCol, where('status', '==', 'IN_PROGRESS'));
-    
-    // Query for COMPLETED runs today
-    const todayStart = startOfDay(new Date());
-    const todayEnd = endOfDay(new Date());
-    const completedTodayQuery = query(runsCol, 
-        where('status', '==', 'COMPLETED'),
-        where('endTime', '>=', todayStart),
-        where('endTime', '<=', todayEnd)
-    );
+    const completedRunsQuery = query(runsCol, where('status', '==', 'COMPLETED'));
 
-    const handleSnapshot = (
-        newInProgressRuns: Run[],
-        newCompletedTodayRuns: Run[]
-    ) => {
+    const handleSnapshots = (inProgressRuns: Run[], completedRuns: Run[]) => {
+        const completedToday = completedRuns.filter(run => run.endTime && isToday(run.endTime.toDate()));
+        
         const allRunsMap = new Map<string, Run>();
 
-        // Add completed runs first
-        newCompletedTodayRuns.forEach(run => allRunsMap.set(run.id, run));
-        // Add in-progress runs, overwriting if a run was just completed
-        newInProgressRuns.forEach(run => allRunsMap.set(run.id, run));
+        // Add completed runs first, then in-progress to ensure the latest status
+        [...completedToday, ...inProgressRuns].forEach(run => {
+            allRunsMap.set(run.id, run);
+        });
 
         const combinedRuns = Array.from(allRunsMap.values());
         const sortedRuns = combinedRuns.sort((a, b) => a.startTime.seconds - b.startTime.seconds);
@@ -140,20 +130,20 @@ const TrackingPage = () => {
     };
 
     let inProgressRuns: Run[] = [];
-    let completedTodayRuns: Run[] = [];
+    let completedRuns: Run[] = [];
 
     const unsubscribeInProgress = onSnapshot(activeRunsQuery, (snapshot) => {
         inProgressRuns = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Run));
-        handleSnapshot(inProgressRuns, completedTodayRuns);
+        handleSnapshots(inProgressRuns, completedRuns);
     }, (error) => {
         console.error("Error fetching active runs: ", error);
         toast({ variant: 'destructive', title: 'Erro ao buscar corridas ativas' });
         setIsLoading(false);
     });
 
-    const unsubscribeCompleted = onSnapshot(completedTodayQuery, (snapshot) => {
-        completedTodayRuns = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Run));
-        handleSnapshot(inProgressRuns, completedTodayRuns);
+    const unsubscribeCompleted = onSnapshot(completedRunsQuery, (snapshot) => {
+        completedRuns = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Run));
+        handleSnapshots(inProgressRuns, completedRuns);
     }, (error) => {
         console.error("Error fetching completed runs: ", error);
         toast({ variant: 'destructive', title: 'Erro ao buscar corridas concluídas' });
