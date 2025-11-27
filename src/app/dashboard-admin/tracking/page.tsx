@@ -1,4 +1,3 @@
-
 'use client';
 import { useState, useEffect, useMemo } from 'react';
 import { useFirebase } from '@/firebase';
@@ -27,7 +26,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, PlayCircle, CheckCircle, Clock, MapPin, Truck, User, Route, Timer, X } from 'lucide-react';
+import { Loader2, PlayCircle, CheckCircle, Clock, MapPin, Truck, User, Route, Timer, X, Hourglass } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { format, formatDistanceStrict, isToday } from 'date-fns';
@@ -309,7 +308,7 @@ const TrackingPage = () => {
         });
 
         const aggregated: AggregatedRun[] = [];
-        groupedRuns.forEach((runs) => {
+        groupedRuns.forEach((runs, key) => {
             runs.sort((a,b) => a.startTime.seconds - b.startTime.seconds);
             const firstRun = runs[0];
             const lastRun = runs[runs.length - 1];
@@ -326,7 +325,7 @@ const TrackingPage = () => {
 
 
             aggregated.push({
-                key: firstRun.id, // Use first run id as the key for the accordion item
+                key, // Using the group key for the accordion item
                 driverId: firstRun.driverId,
                 driverName: firstRun.driverName,
                 vehicleId: firstRun.vehicleId,
@@ -447,8 +446,6 @@ const RunAccordionItem = ({ run, onViewRoute }: { run: AggregatedRun, onViewRout
     }
   };
 
-  let lastDepartureTime = run.startTime;
-
   return (
     <AccordionItem value={run.key} className="bg-card border rounded-lg shadow-sm">
       <AccordionTrigger className="p-4 hover:no-underline">
@@ -480,40 +477,65 @@ const RunAccordionItem = ({ run, onViewRoute }: { run: AggregatedRun, onViewRout
                 <Route className="mr-2 h-4 w-4"/> Ver Acompanhamento
             </Button>
           </div>
-          {run.stops.map((stop, index) => {
-            const { icon: Icon, color, label } = getStatusInfo(stop.status);
-            if (stop.status === 'CANCELED') return null;
-
-            const isCompletedStop = stop.status === 'COMPLETED';
+          {run.originalRuns.map((originalRun, runIndex) => {
+            const previousRun = runIndex > 0 ? run.originalRuns[runIndex - 1] : null;
+            const idleTime = previousRun && previousRun.endTime
+              ? formatDistanceStrict(previousRun.endTime.toDate(), originalRun.startTime.toDate(), { locale: ptBR, unit: 'minute' })
+              : null;
             
-            const arrivalTime = stop.arrivalTime ? new Date(stop.arrivalTime.seconds * 1000) : null;
-            const departureTime = stop.departureTime ? new Date(stop.departureTime.seconds * 1000) : null;
-            const prevDepartureTime = new Date(lastDepartureTime.seconds * 1000);
-            
-            const travelTime = arrivalTime ? formatDistanceStrict(prevDepartureTime, arrivalTime, { locale: ptBR, unit: 'minute'}) : null;
-            const stopTime = arrivalTime && departureTime ? formatDistanceStrict(arrivalTime, departureTime, { locale: ptBR, unit: 'minute'}) : null;
-
-            if (departureTime) {
-                lastDepartureTime = stop.departureTime!;
-            }
+            let lastDepartureTime = originalRun.startTime;
 
             return (
-              <div key={index} className={`flex flex-col sm:flex-row items-start sm:items-center gap-4 p-3 rounded-md ${isCompletedStop ? 'bg-green-50 dark:bg-green-900/20' : 'bg-gray-50 dark:bg-gray-800/20'}`}>
-                 <Icon className={`h-6 w-6 flex-shrink-0 mt-1 sm:mt-0 ${color}`} />
-                 <div className="flex-1">
-                   <p className="font-medium">{index + 1}. {stop.name}</p>
-                   <p className={`text-xs ${isCompletedStop ? 'text-muted-foreground' : color}`}>{label}</p>
-                 </div>
-                 <div className="w-full sm:w-auto flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                    {travelTime && <span className='flex items-center gap-1'><Route className="h-3 w-3 text-gray-400"/> Viagem: <strong>{travelTime}</strong></span>}
-                    {stopTime && <span className='flex items-center gap-1'><Timer className="h-3 w-3 text-gray-400"/> Parada: <strong>{stopTime}</strong></span>}
-                 </div>
-                 {isCompletedStop && (
-                   <div className="text-right text-sm text-muted-foreground">
-                      <p>Chegada: {formatFirebaseTime(stop.arrivalTime)}</p>
-                      <p>Saída: {formatFirebaseTime(stop.departureTime)}</p>
-                   </div>
-                 )}
+              <div key={originalRun.id}>
+                {idleTime && (
+                  <div className="flex items-center gap-4 p-3 rounded-md bg-amber-50 dark:bg-amber-900/20 my-2">
+                    <Hourglass className="h-6 w-6 flex-shrink-0 text-amber-500" />
+                    <div className="flex-1">
+                      <p className="font-medium">Tempo Parado</p>
+                      <p className="text-xs text-muted-foreground">O veículo ficou ocioso entre as corridas.</p>
+                    </div>
+                    <div className="text-right text-sm text-muted-foreground">
+                      <p>Duração: <strong>{idleTime}</strong></p>
+                    </div>
+                  </div>
+                )}
+                {originalRun.stops.map((stop, stopIndex) => {
+                  const { icon: Icon, color, label } = getStatusInfo(stop.status);
+                  if (stop.status === 'CANCELED') return null;
+
+                  const isCompletedStop = stop.status === 'COMPLETED';
+                  
+                  const arrivalTime = stop.arrivalTime ? new Date(stop.arrivalTime.seconds * 1000) : null;
+                  const departureTime = stop.departureTime ? new Date(stop.departureTime.seconds * 1000) : null;
+                  const prevDepartureTime = new Date(lastDepartureTime.seconds * 1000);
+                  
+                  const travelTime = arrivalTime ? formatDistanceStrict(prevDepartureTime, arrivalTime, { locale: ptBR, unit: 'minute'}) : null;
+                  const stopTime = arrivalTime && departureTime ? formatDistanceStrict(arrivalTime, departureTime, { locale: ptBR, unit: 'minute'}) : null;
+
+                  if (departureTime) {
+                      lastDepartureTime = stop.departureTime!;
+                  }
+
+                  return (
+                    <div key={stopIndex} className={`flex flex-col sm:flex-row items-start sm:items-center gap-4 p-3 rounded-md ${isCompletedStop ? 'bg-green-50 dark:bg-green-900/20' : 'bg-gray-50 dark:bg-gray-800/20'}`}>
+                      <Icon className={`h-6 w-6 flex-shrink-0 mt-1 sm:mt-0 ${color}`} />
+                      <div className="flex-1">
+                        <p className="font-medium">{stop.name}</p>
+                        <p className={`text-xs ${isCompletedStop ? 'text-muted-foreground' : color}`}>{label}</p>
+                      </div>
+                      <div className="w-full sm:w-auto flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                          {travelTime && <span className='flex items-center gap-1'><Route className="h-3 w-3 text-gray-400"/> Viagem: <strong>{travelTime}</strong></span>}
+                          {stopTime && <span className='flex items-center gap-1'><Timer className="h-3 w-3 text-gray-400"/> Parada: <strong>{stopTime}</strong></span>}
+                      </div>
+                      {isCompletedStop && (
+                        <div className="text-right text-sm text-muted-foreground">
+                            <p>Chegada: {formatFirebaseTime(stop.arrivalTime)}</p>
+                            <p>Saída: {formatFirebaseTime(stop.departureTime)}</p>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             )
           })}
