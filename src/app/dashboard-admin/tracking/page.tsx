@@ -1,7 +1,8 @@
+
 'use client';
 import { useState, useEffect, useMemo } from 'react';
 import { useFirebase } from '@/firebase';
-import { collection, query, where, onSnapshot, Timestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, Timestamp, getDocs } from 'firebase/firestore';
 import {
   Card,
   CardContent,
@@ -28,7 +29,7 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, PlayCircle, CheckCircle, Clock, MapPin, Truck, User, Route, Timer, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
-import { format, formatDistanceStrict, isToday, startOfDay, endOfDay } from 'date-fns';
+import { format, formatDistanceStrict, isToday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import dynamic from 'next/dynamic';
 
@@ -42,6 +43,10 @@ type Stop = {
   status: StopStatus;
   arrivalTime: FirebaseTimestamp | null;
   departureTime: FirebaseTimestamp | null;
+  collectedOccupiedCars?: number | null;
+  collectedEmptyCars?: number | null;
+  mileageAtStop?: number | null;
+  occupancy?: number | null;
 };
 
 export type LocationPoint = {
@@ -52,14 +57,41 @@ export type LocationPoint = {
 
 export type Run = {
   id: string;
+  driverId: string;
   driverName: string;
   vehicleId: string;
   startTime: FirebaseTimestamp;
+  startMileage: number;
   endTime?: FirebaseTimestamp | null;
+  endMileage?: number | null;
   status: 'IN_PROGRESS' | 'COMPLETED';
   stops: Stop[];
   locationHistory?: LocationPoint[];
 };
+
+export type AggregatedRun = {
+    key: string;
+    driverId: string;
+    driverName: string;
+    vehicleId: string;
+    shift: string;
+    date: string;
+    startTime: FirebaseTimestamp;
+    endTime: FirebaseTimestamp | null;
+    totalDistance: number;
+    stops: Stop[];
+    locationHistory: LocationPoint[];
+    originalRuns: Run[];
+    startMileage: number;
+    status: 'IN_PROGRESS' | 'COMPLETED';
+};
+
+
+export type FirestoreUser = {
+  id: string;
+  name:string;
+  shift?: string;
+}
 
 export type Segment = {
     label: string;
@@ -92,14 +124,15 @@ const formatTimeDiff = (start: Date, end: Date) => {
     return formatDistanceStrict(end, start, { locale: ptBR, unit: 'minute' });
 }
 
-const processRunSegments = (run: Run): Segment[] => {
+const processRunSegments = (run: AggregatedRun): Segment[] => {
     if (!run.locationHistory || run.locationHistory.length === 0) return [];
     
     const sortedLocations = [...run.locationHistory].sort((a,b) => a.timestamp.seconds - b.timestamp.seconds);
-    const sortedStops = [...run.stops].filter(s => s.status !== 'CANCELED').sort((a, b) => (a.arrivalTime?.seconds || 0) - (b.arrivalTime?.seconds || 0));
+    const sortedStops = [...run.stops].filter(s => s.status === 'COMPLETED' || s.status === 'IN_PROGRESS').sort((a, b) => (a.arrivalTime?.seconds || Infinity) - (b.arrivalTime?.seconds || Infinity));
 
     const segments: Segment[] = [];
     let lastDepartureTime = run.startTime;
+    let lastMileage = run.startMileage;
 
     for(let i = 0; i < sortedStops.length; i++) {
         const stop = sortedStops[i];
@@ -107,6 +140,8 @@ const processRunSegments = (run: Run): Segment[] => {
 
         const stopArrivalTime = new Date(stop.arrivalTime.seconds * 1000);
         const stopDepartureTime = stop.departureTime ? new Date(stop.departureTime.seconds * 1000) : null;
+        
+        const segmentDistance = (stop.mileageAtStop && lastMileage) ? stop.mileageAtStop - lastMileage : null;
 
         const segmentPath = sortedLocations
             .filter(loc => {
@@ -115,14 +150,15 @@ const processRunSegments = (run: Run): Segment[] => {
             })
             .map(loc => [loc.longitude, loc.latitude] as [number, number]);
         
+        // Add the start point of the segment
         if (i > 0) {
             const prevStop = sortedStops[i-1];
             if (prevStop.departureTime) {
-                const prevDepartureTimeInSeconds = prevStop.departureTime.seconds;
-                const lastPointOfPrevSegment = sortedLocations.find(l => l.timestamp.seconds <= prevDepartureTimeInSeconds);
-                if (lastPointOfPrevSegment) {
+                 const prevDepartureTimeInSeconds = prevStop.departureTime.seconds;
+                 const lastPointOfPrevSegment = sortedLocations.reverse().find(l => l.timestamp.seconds <= prevDepartureTimeInSeconds);
+                 if(lastPointOfPrevSegment) {
                      segmentPath.unshift([lastPointOfPrevSegment.longitude, lastPointOfPrevSegment.latitude]);
-                }
+                 }
             }
         } else {
              const firstPoint = sortedLocations.find(l => l.timestamp.seconds >= run.startTime.seconds);
@@ -137,10 +173,14 @@ const processRunSegments = (run: Run): Segment[] => {
             color: SEGMENT_COLORS[i % SEGMENT_COLORS.length],
             travelTime: formatTimeDiff(new Date(lastDepartureTime.seconds * 1000), stopArrivalTime),
             stopTime: stopDepartureTime ? formatTimeDiff(stopArrivalTime, stopDepartureTime) : 'Em andamento',
+            distance: segmentDistance !== null ? `${segmentDistance.toFixed(1)} km` : undefined
         });
         
         if (stop.departureTime) {
-            lastDepartureTime = stop.departureTime!;
+            lastDepartureTime = stop.departureTime;
+        }
+        if (stop.mileageAtStop) {
+            lastMileage = stop.mileageAtStop;
         }
     }
 
@@ -155,6 +195,7 @@ const TrackingPage = () => {
   
   const [user, setUser] = useState<UserData | null>(null);
   const [allRuns, setAllRuns] = useState<Run[]>([]);
+  const [users, setUsers] = useState<Map<string, FirestoreUser>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
   const [selectedRunIdForMap, setSelectedRunIdForMap] = useState<string | null>(null);
   const [isClient, setIsClient] = useState(false);
@@ -181,25 +222,35 @@ const TrackingPage = () => {
 
     setIsLoading(true);
 
+    // Fetch Users first
+    const usersCol = collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/users`);
+    getDocs(usersCol).then(usersSnapshot => {
+        const usersMap = new Map<string, FirestoreUser>();
+        usersSnapshot.forEach(doc => {
+            usersMap.set(doc.id, { id: doc.id, ...doc.data() } as FirestoreUser);
+        });
+        setUsers(usersMap);
+    });
+
     const runsCol = collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/runs`);
     
     const activeRunsQuery = query(runsCol, where('status', '==', 'IN_PROGRESS'));
+    // This query might require an index. We handle the error by falling back to a client-side filter.
     const completedRunsQuery = query(runsCol, where('status', '==', 'COMPLETED'));
 
     const handleSnapshots = (inProgressRuns: Run[], completedRuns: Run[]) => {
         const completedToday = completedRuns.filter(run => run.endTime && isToday(run.endTime.toDate()));
         
+        // Use a map to ensure in-progress runs overwrite completed ones if IDs conflict (shouldn't happen with good data)
         const allRunsMap = new Map<string, Run>();
 
-        // Add completed runs first, then in-progress to ensure the latest status
         [...completedToday, ...inProgressRuns].forEach(run => {
             allRunsMap.set(run.id, run);
         });
 
         const combinedRuns = Array.from(allRunsMap.values());
-        const sortedRuns = combinedRuns.sort((a, b) => a.startTime.seconds - b.startTime.seconds);
         
-        setAllRuns(sortedRuns);
+        setAllRuns(combinedRuns);
         setIsLoading(false);
     };
 
@@ -219,18 +270,17 @@ const TrackingPage = () => {
         completedRuns = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Run));
         handleSnapshots(inProgressRuns, completedRuns);
     }, (error) => {
-        console.error("Error fetching completed runs: ", error);
-        // This query can fail if the index is not created. We'll filter on the client.
+        // This query can fail if the index is not created. We'll fall back to client-side filtering.
         if (error.code === 'failed-precondition') {
           console.warn("Firestore index for completed runs query is not created. Filtering on the client.");
-          const allRunsQuery = query(runsCol);
+          const allRunsQuery = query(runsCol); // Fetch all runs for the sector
           const unsubscribeAll = onSnapshot(allRunsQuery, (allDocsSnapshot) => {
             const allDocs = allDocsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as Run}));
             inProgressRuns = allDocs.filter(r => r.status === 'IN_PROGRESS');
             completedRuns = allDocs.filter(r => r.status === 'COMPLETED');
             handleSnapshots(inProgressRuns, completedRuns);
           });
-          return () => unsubscribeAll();
+          return unsubscribeAll;
         } else {
           toast({ variant: 'destructive', title: 'Erro ao buscar corridas concluídas' });
         }
@@ -243,19 +293,72 @@ const TrackingPage = () => {
     };
   }, [firestore, user, toast]);
 
-  const handleViewRoute = (runId: string) => {
-      const run = allRuns.find(r => r.id === runId);
+ const aggregatedRuns = useMemo(() => {
+        const groupedRuns = new Map<string, Run[]>();
+        allRuns.forEach(run => {
+            const driver = users.get(run.driverId);
+            const runDate = format(run.startTime.toDate(), 'yyyy-MM-dd');
+            // Group by vehicle, shift, and date
+            const key = `${run.vehicleId}-${driver?.shift || 'sem-turno'}-${runDate}`;
+            
+            if (!groupedRuns.has(key)) {
+                groupedRuns.set(key, []);
+            }
+            groupedRuns.get(key)!.push(run);
+        });
+
+        const aggregated: AggregatedRun[] = [];
+        groupedRuns.forEach((runs) => {
+            runs.sort((a,b) => a.startTime.seconds - b.startTime.seconds);
+            const firstRun = runs[0];
+            const lastRun = runs[runs.length - 1];
+            const driver = users.get(firstRun.driverId);
+
+            const allStops = runs.flatMap(r => r.stops).sort((a,b) => (a.arrivalTime?.seconds || 0) - (b.arrivalTime?.seconds || 0));
+            const allLocations = runs.flatMap(r => r.locationHistory || []).sort((a, b) => a.timestamp.seconds - b.timestamp.seconds);
+            
+            const startMileage = firstRun.startMileage;
+            // Use last run's endMileage if it exists, otherwise use last stop's mileage
+            const endMileage = lastRun.endMileage ?? allStops.filter(s => s.mileageAtStop).slice(-1)[0]?.mileageAtStop ?? null;
+            const totalDistance = (endMileage && startMileage) ? endMileage - startMileage : 0;
+            const status = runs.some(r => r.status === 'IN_PROGRESS') ? 'IN_PROGRESS' : 'COMPLETED';
+
+
+            aggregated.push({
+                key: firstRun.id, // Use first run id as the key for the accordion item
+                driverId: firstRun.driverId,
+                driverName: firstRun.driverName,
+                vehicleId: firstRun.vehicleId,
+                shift: driver?.shift || 'N/A',
+                date: format(firstRun.startTime.toDate(), 'dd/MM/yyyy'),
+                startTime: firstRun.startTime,
+                endTime: lastRun.endTime,
+                totalDistance: totalDistance,
+                stops: allStops,
+                locationHistory: allLocations,
+                originalRuns: runs,
+                startMileage: startMileage,
+                status: status,
+            });
+        });
+        
+        return aggregated.sort((a, b) => b.startTime.seconds - a.startTime.seconds);
+    }, [allRuns, users]);
+
+
+  const handleViewRoute = (runKey: string) => {
+      const run = aggregatedRuns.find(r => r.key === runKey);
       if (!run || !run.locationHistory || run.locationHistory.length < 1) {
           toast({ variant: 'destructive', title: 'Sem dados', description: 'Não há dados de localização suficientes para exibir o trajeto.' });
           return;
       }
-      setSelectedRunIdForMap(runId);
+      setSelectedRunIdForMap(runKey);
   };
 
   const selectedRunForMap = useMemo(() => {
     if (!selectedRunIdForMap) return null;
-    return allRuns.find(run => run.id === selectedRunIdForMap) || null;
-  }, [selectedRunIdForMap, allRuns]);
+    return aggregatedRuns.find(run => run.key === selectedRunIdForMap) || null;
+  }, [selectedRunIdForMap, aggregatedRuns]);
 
 
   if (isLoading) {
@@ -271,7 +374,7 @@ const TrackingPage = () => {
             <h2 className="text-3xl font-bold tracking-tight">Acompanhamento Diário</h2>
         </div>
         
-        {allRuns.length === 0 ? (
+        {aggregatedRuns.length === 0 ? (
             <Card className="text-center p-8 mt-6 max-w-2xl mx-auto">
                 <CardHeader>
                     <CardTitle>Nenhuma atividade hoje</CardTitle>
@@ -279,8 +382,8 @@ const TrackingPage = () => {
                 </CardHeader>
             </Card>
         ) : (
-          <Accordion type="single" collapsible className="w-full space-y-4" defaultValue={allRuns.find(r => r.status === 'IN_PROGRESS')?.id || allRuns[0]?.id}>
-            {allRuns.map(run => <RunAccordionItem key={run.id} run={run} onViewRoute={() => handleViewRoute(run.id)} />)}
+          <Accordion type="single" collapsible className="w-full space-y-4" defaultValue={aggregatedRuns.find(r => r.status === 'IN_PROGRESS')?.key || aggregatedRuns[0]?.key}>
+            {aggregatedRuns.map(run => <RunAccordionItem key={run.key} run={run} onViewRoute={() => handleViewRoute(run.key)} />)}
           </Accordion>
         )}
       
@@ -291,7 +394,7 @@ const TrackingPage = () => {
               <DialogHeader>
                 <DialogTitle>Trajeto - {selectedRunForMap.driverName} ({selectedRunForMap.vehicleId})</DialogTitle>
                 <DialogDescription>
-                  Visualização do trajeto da corrida, segmentado por paradas.
+                  Visualização do trajeto da rota, segmentado por paradas.
                 </DialogDescription>
               </DialogHeader>
               <div className="h-[calc(80vh-100px)] bg-muted rounded-md">
@@ -309,7 +412,7 @@ const TrackingPage = () => {
   );
 };
 
-const RunAccordionItem = ({ run, onViewRoute }: { run: Run, onViewRoute: () => void }) => {
+const RunAccordionItem = ({ run, onViewRoute }: { run: AggregatedRun, onViewRoute: () => void }) => {
   const isCompletedRun = run.status === 'COMPLETED';
   const completedStops = run.stops.filter(s => s.status === 'COMPLETED').length;
   const totalStops = run.stops.filter(s => s.status !== 'CANCELED').length;
@@ -334,12 +437,12 @@ const RunAccordionItem = ({ run, onViewRoute }: { run: Run, onViewRoute: () => v
   let lastDepartureTime = run.startTime;
 
   return (
-    <AccordionItem value={run.id} className="bg-card border rounded-lg shadow-sm">
+    <AccordionItem value={run.key} className="bg-card border rounded-lg shadow-sm">
       <AccordionTrigger className="p-4 hover:no-underline">
         <div className="w-full flex flex-col sm:flex-row justify-between items-start sm:items-center text-left gap-4 sm:gap-2">
           <div className="flex-1 min-w-0">
               <p className="font-bold text-lg text-primary truncate flex items-center gap-2"><User className="h-5 w-5" />{run.driverName}</p>
-              <p className="text-sm text-muted-foreground flex items-center gap-2"><Truck className="h-4 w-4" />{run.vehicleId}</p>
+              <p className="text-sm text-muted-foreground flex items-center gap-2"><Truck className="h-4 w-4" />{run.vehicleId} ({run.shift})</p>
           </div>
           <div className="flex-1 w-full sm:w-auto">
               <div className="flex justify-between text-sm mb-1">

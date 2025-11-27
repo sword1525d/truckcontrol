@@ -26,7 +26,7 @@ import {
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { Loader2, Calendar as CalendarIcon, Route, Truck, User, Clock, CheckCircle, Car, Package, Warehouse, Milestone } from 'lucide-react';
+import { Loader2, Calendar as CalendarIcon, Route, Truck, User, Clock, Car, Package, Warehouse, Milestone } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -198,6 +198,11 @@ const HistoryPage = () => {
       to: endOfDay(new Date()),
     });
     const [selectedRun, setSelectedRun] = useState<AggregatedRun | null>(null);
+    const [isClient, setIsClient] = useState(false);
+
+    useEffect(() => {
+        setIsClient(true);
+    }, []);
 
     useEffect(() => {
         const storedUser = localStorage.getItem('user');
@@ -444,7 +449,7 @@ const HistoryPage = () => {
                 </CardContent>
             </Card>
 
-             <RunDetailsDialog run={selectedRun} isOpen={selectedRun !== null} onClose={() => setSelectedRun(null)} />
+             <RunDetailsDialog run={selectedRun} isOpen={selectedRun !== null} onClose={() => setSelectedRun(null)} isClient={isClient} />
         </div>
     );
 };
@@ -532,7 +537,7 @@ const ShiftFilter = ({ selectedShift, onShiftChange }: { selectedShift: string, 
 );
 
 
-const RunDetailsDialog = ({ run, isOpen, onClose }: { run: AggregatedRun | null, isOpen: boolean, onClose: () => void }) => {
+const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedRun | null, isOpen: boolean, onClose: () => void, isClient: boolean }) => {
     if (!run) return null;
 
     const formatFirebaseTime = (timestamp: FirebaseTimestamp | null) => {
@@ -607,11 +612,13 @@ const RunDetailsDialog = ({ run, isOpen, onClose }: { run: AggregatedRun | null,
                         </div>
                     </TabsContent>
                     <TabsContent value="map" className="h-[calc(100%-40px)] bg-muted rounded-md">
-                        <RealTimeMap 
-                            segments={mapSegments} 
-                            fullLocationHistory={fullLocationHistory} 
-                            vehicleId={run.vehicleId}
-                        />
+                        {isClient && (
+                            <RealTimeMap 
+                                segments={mapSegments} 
+                                fullLocationHistory={fullLocationHistory} 
+                                vehicleId={run.vehicleId}
+                            />
+                        )}
                     </TabsContent>
                 </Tabs>
             </DialogContent>
