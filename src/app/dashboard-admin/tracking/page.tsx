@@ -26,7 +26,7 @@ import {
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, PlayCircle, CheckCircle, Clock, MapPin, Truck, User, Route, Timer, X, Hourglass, EyeOff, Milestone, Maximize, Minimize } from 'lucide-react';
+import { Loader2, PlayCircle, CheckCircle, Clock, MapPin, Truck, User, Route, Timer, X, Hourglass, EyeOff, Milestone, Maximize, Minimize, Car, Package } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { format, formatDistanceStrict, isToday } from 'date-fns';
@@ -622,6 +622,8 @@ const RunDetailsContent = ({ run, onSegmentClick, highlightedSegmentId }: { run:
                           {stop.arrivalTime && <span className='flex items-center gap-1'><Route className="h-3 w-3 text-gray-400"/> Viagem: <strong>{formatFirebaseTime(travelStartTime)} - {formatFirebaseTime(stop.arrivalTime)}</strong></span>}
                           {stopTime && <span className='flex items-center gap-1'><Timer className="h-3 w-3 text-gray-400"/> Parada: <strong>{stopTime}</strong></span>}
                           {segmentDistance !== null && <span className='flex items-center gap-1'><Milestone className="h-3 w-3 text-gray-400"/> Distância: <strong>{segmentDistance.toFixed(1)} km</strong></span>}
+                          {stop.collectedOccupiedCars !== null && <span className='flex items-center gap-1'><Car className="h-3 w-3 text-gray-400"/> Ocupados: <strong>{stop.collectedOccupiedCars}</strong></span>}
+                          {stop.collectedEmptyCars !== null && <span className='flex items-center gap-1'><Package className="h-3 w-3 text-gray-400"/> Vazios: <strong>{stop.collectedEmptyCars}</strong></span>}
                         </div>
                          {stop.observation && (
                             <div className="border-t mt-2 pt-2">
