@@ -572,7 +572,20 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
         }
     }, [isOpen, run]);
 
+    const mapSegments = processRunSegments(mapRun, isAggregatedMap);
+    
+    const displayedSegments = useMemo(() => {
+        if (!highlightedSegmentId) return mapSegments.map(s => ({ ...s, opacity: 0.9 }));
+        
+        return mapSegments.map(s => ({
+            ...s,
+            opacity: s.id === highlightedSegmentId ? 1.0 : 0.3,
+        }));
+    }, [mapSegments, highlightedSegmentId]);
+    
     if (!run) return null;
+
+    const fullLocationHistory = mapRun?.locationHistory?.map(p => ({ latitude: p.latitude, longitude: p.longitude })) || [];
 
     const formatFirebaseTime = (timestamp: FirebaseTimestamp | null) => {
         if (!timestamp) return '--:--';
@@ -584,18 +597,6 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
         setIsAggregatedMap(false);
         setHighlightedSegmentId(null);
     }
-    
-    const mapSegments = processRunSegments(mapRun, isAggregatedMap);
-    const fullLocationHistory = mapRun?.locationHistory?.map(p => ({ latitude: p.latitude, longitude: p.longitude })) || [];
-    
-    const displayedSegments = useMemo(() => {
-        if (!highlightedSegmentId) return mapSegments.map(s => ({ ...s, opacity: 0.9 }));
-        
-        return mapSegments.map(s => ({
-            ...s,
-            opacity: s.id === highlightedSegmentId ? 1.0 : 0.3,
-        }));
-    }, [mapSegments, highlightedSegmentId]);
     
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
@@ -743,5 +744,3 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
 }
 
 export default HistoryPage;
-
-    
