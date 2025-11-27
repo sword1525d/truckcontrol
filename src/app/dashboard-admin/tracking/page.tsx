@@ -1,3 +1,4 @@
+
 'use client';
 import { useState, useEffect, useMemo } from 'react';
 import { useFirebase } from '@/firebase';
@@ -22,7 +23,6 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -32,6 +32,8 @@ import { useRouter } from 'next/navigation';
 import { format, formatDistanceStrict, isToday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import dynamic from 'next/dynamic';
+import { ScrollArea } from '@/components/ui/scroll-area';
+
 
 // --- Tipos ---
 type StopStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELED';
@@ -197,7 +199,7 @@ const TrackingPage = () => {
   const [allRuns, setAllRuns] = useState<Run[]>([]);
   const [users, setUsers] = useState<Map<string, FirestoreUser>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedRunIdForMap, setSelectedRunIdForMap] = useState<string | null>(null);
+  const [selectedRunKeyForMap, setSelectedRunKeyForMap] = useState<string | null>(null);
   const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
@@ -352,22 +354,19 @@ const TrackingPage = () => {
           toast({ variant: 'destructive', title: 'Sem dados', description: 'Não há dados de localização suficientes para exibir o trajeto.' });
           return;
       }
-      setSelectedRunIdForMap(runKey);
+      setSelectedRunKeyForMap(runKey);
   };
 
   const selectedRunForMap = useMemo(() => {
-    if (!selectedRunIdForMap) return null;
-    return aggregatedRuns.find(run => run.key === selectedRunIdForMap) || null;
-  }, [selectedRunIdForMap, aggregatedRuns]);
+    if (!selectedRunKeyForMap) return null;
+    return aggregatedRuns.find(run => run.key === selectedRunKeyForMap) || null;
+  }, [selectedRunKeyForMap, aggregatedRuns]);
 
 
   if (isLoading) {
      return <div className="flex justify-center items-center h-full"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   }
   
-  const mapSegments = selectedRunForMap ? processRunSegments(selectedRunForMap) : [];
-  const fullLocationHistory = selectedRunForMap?.locationHistory?.map(p => ({ latitude: p.latitude, longitude: p.longitude })) || [];
-
   return (
     <div className="flex-1 space-y-4">
         <div className="flex items-center justify-between space-y-2">
@@ -387,35 +386,31 @@ const TrackingPage = () => {
           </Accordion>
         )}
       
-      <Dialog open={selectedRunForMap !== null} onOpenChange={(isOpen) => !isOpen && setSelectedRunIdForMap(null)}>
-        <DialogContent className="max-w-[90vw] w-full h-[90vh]">
+      <Dialog open={selectedRunForMap !== null} onOpenChange={(isOpen) => !isOpen && setSelectedRunKeyForMap(null)}>
+        <DialogContent className="max-w-[90vw] w-full h-[90vh] flex flex-col">
           {isClient && selectedRunForMap && (
             <>
-                <DialogHeader>
-                    <DialogTitle>Acompanhamento da Rota - {selectedRunForMap.driverName} ({selectedRunForMap.vehicleId})</DialogTitle>
-                    <DialogDescription>
-                        Acompanhe a localização em tempo real ou veja o trajeto detalhado da rota.
-                    </DialogDescription>
-                </DialogHeader>
-                <Tabs defaultValue="location" className="h-full flex flex-col">
-                    <TabsList className="grid w-full grid-cols-2">
-                        <TabsTrigger value="location">Localização Atual</TabsTrigger>
-                        <TabsTrigger value="route">Trajeto Detalhado</TabsTrigger>
-                    </TabsList>
-                    <TabsContent value="location" className="flex-1 bg-muted rounded-md mt-2">
-                        <RealTimeMap
-                            fullLocationHistory={fullLocationHistory}
-                            vehicleId={selectedRunForMap.vehicleId}
-                        />
-                    </TabsContent>
-                    <TabsContent value="route" className="flex-1 bg-muted rounded-md mt-2">
-                        <RealTimeMap
-                            segments={mapSegments}
-                            fullLocationHistory={fullLocationHistory}
-                            vehicleId={selectedRunForMap.vehicleId}
-                        />
-                    </TabsContent>
-                </Tabs>
+              <DialogHeader>
+                  <DialogTitle>Acompanhamento da Rota - {selectedRunForMap.driverName} ({selectedRunForMap.vehicleId})</DialogTitle>
+                  <DialogDescription>
+                      Acompanhe a localização em tempo real ou veja o trajeto detalhado da rota.
+                  </DialogDescription>
+              </DialogHeader>
+              <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4 min-h-0">
+                  <div className="md:col-span-2 bg-muted rounded-md min-h-[300px] md:min-h-0">
+                      <RealTimeMap
+                          segments={processRunSegments(selectedRunForMap)}
+                          fullLocationHistory={selectedRunForMap.locationHistory?.map(p => ({ latitude: p.latitude, longitude: p.longitude })) || []}
+                          vehicleId={selectedRunForMap.vehicleId}
+                      />
+                  </div>
+                  <div className="md:col-span-1 flex flex-col">
+                      <h4 className="font-semibold mb-2">Detalhes da Rota</h4>
+                      <ScrollArea className="flex-1 pr-3">
+                        <RunDetailsContent run={selectedRunForMap} />
+                      </ScrollArea>
+                  </div>
+              </div>
             </>
           )}
         </DialogContent>
@@ -434,16 +429,6 @@ const RunAccordionItem = ({ run, onViewRoute }: { run: AggregatedRun, onViewRout
   const formatFirebaseTime = (timestamp: FirebaseTimestamp | null | undefined) => {
     if (!timestamp) return '--:--';
     return format(new Date(timestamp.seconds * 1000), 'HH:mm');
-  };
-  
-  const getStatusInfo = (status: StopStatus) => {
-    switch (status) {
-      case 'COMPLETED': return { icon: CheckCircle, color: 'text-green-500', label: 'Concluído' };
-      case 'IN_PROGRESS': return { icon: PlayCircle, color: 'text-blue-500', label: 'Em Andamento' };
-      case 'PENDING': return { icon: Clock, color: 'text-gray-500', label: 'Pendente' };
-      case 'CANCELED': return { icon: X, color: 'text-red-500', label: 'Cancelado' };
-      default: return { icon: Clock, color: 'text-gray-500', label: 'Pendente' };
-    }
   };
 
   return (
@@ -477,6 +462,26 @@ const RunAccordionItem = ({ run, onViewRoute }: { run: AggregatedRun, onViewRout
                 <Route className="mr-2 h-4 w-4"/> Ver Acompanhamento
             </Button>
           </div>
+          <RunDetailsContent run={run} />
+        </div>
+      </AccordionContent>
+    </AccordionItem>
+  );
+}
+
+const RunDetailsContent = ({ run }: { run: AggregatedRun }) => {
+    const getStatusInfo = (status: StopStatus) => {
+        switch (status) {
+        case 'COMPLETED': return { icon: CheckCircle, color: 'text-green-500', label: 'Concluído' };
+        case 'IN_PROGRESS': return { icon: PlayCircle, color: 'text-blue-500', label: 'Em Andamento' };
+        case 'PENDING': return { icon: Clock, color: 'text-gray-500', label: 'Pendente' };
+        case 'CANCELED': return { icon: X, color: 'text-red-500', label: 'Cancelado' };
+        default: return { icon: Clock, color: 'text-gray-500', label: 'Pendente' };
+        }
+    };
+    
+    return (
+        <div className="space-y-2">
           {run.originalRuns.map((originalRun, runIndex) => {
             const previousRun = runIndex > 0 ? run.originalRuns[runIndex - 1] : null;
             let idleTime: string | null = null;
@@ -507,7 +512,7 @@ const RunAccordionItem = ({ run, onViewRoute }: { run: AggregatedRun, onViewRout
                       <p className="text-xs text-muted-foreground">O veículo ficou parado entre as corridas.</p>
                     </div>
                     <div className="text-right text-sm text-muted-foreground">
-                      <p>Duração: <strong>{idleTime}</strong></p>
+                      <p><strong>{idleTime}</strong></p>
                     </div>
                   </div>
                 )}
@@ -530,22 +535,16 @@ const RunAccordionItem = ({ run, onViewRoute }: { run: AggregatedRun, onViewRout
                   }
 
                   return (
-                    <div key={stopIndex} className={`flex flex-col sm:flex-row items-start sm:items-center gap-4 p-3 rounded-md ${isCompletedStop ? 'bg-green-50 dark:bg-green-900/20' : 'bg-gray-50 dark:bg-gray-800/20'}`}>
-                      <Icon className={`h-6 w-6 flex-shrink-0 mt-1 sm:mt-0 ${color}`} />
+                    <div key={stopIndex} className={`flex items-start gap-4 p-3 rounded-md ${isCompletedStop ? 'bg-green-50 dark:bg-green-900/20' : 'bg-gray-50 dark:bg-gray-800/20'}`}>
+                      <Icon className={`h-5 w-5 flex-shrink-0 mt-1 ${color}`} />
                       <div className="flex-1">
                         <p className="font-medium">{stop.name}</p>
                         <p className={`text-xs ${isCompletedStop ? 'text-muted-foreground' : color}`}>{label}</p>
-                      </div>
-                      <div className="w-full sm:w-auto flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                         <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground mt-1">
                           {travelTime && <span className='flex items-center gap-1'><Route className="h-3 w-3 text-gray-400"/> Viagem: <strong>{travelTime}</strong></span>}
                           {stopTime && <span className='flex items-center gap-1'><Timer className="h-3 w-3 text-gray-400"/> Parada: <strong>{stopTime}</strong></span>}
                       </div>
-                      {isCompletedStop && (
-                        <div className="text-right text-sm text-muted-foreground">
-                            <p>Início do Trajeto: {formatFirebaseTime(travelStartTime)}</p>
-                            <p>Encerramento: {formatFirebaseTime(stop.arrivalTime)}</p>
-                        </div>
-                      )}
+                      </div>
                     </div>
                   )
                 })}
@@ -553,9 +552,7 @@ const RunAccordionItem = ({ run, onViewRoute }: { run: AggregatedRun, onViewRout
             )
           })}
         </div>
-      </AccordionContent>
-    </AccordionItem>
-  );
+    )
 }
 
 export default TrackingPage;
