@@ -387,26 +387,26 @@ const TrackingPage = () => {
         )}
       
       <Dialog open={selectedRunForMap !== null} onOpenChange={(isOpen) => !isOpen && setSelectedRunKeyForMap(null)}>
-        <DialogContent className="max-w-[90vw] w-full h-[90vh] flex flex-col">
+        <DialogContent className="max-w-[90vw] lg:max-w-[80vw] w-full h-[90vh] flex flex-col p-0">
           {isClient && selectedRunForMap && (
             <>
-              <DialogHeader>
+              <DialogHeader className="p-6 pb-0">
                   <DialogTitle>Acompanhamento da Rota - {selectedRunForMap.driverName} ({selectedRunForMap.vehicleId})</DialogTitle>
                   <DialogDescription>
                       Acompanhe a localização em tempo real ou veja o trajeto detalhado da rota.
                   </DialogDescription>
               </DialogHeader>
-              <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4 min-h-0">
-                  <div className="md:col-span-2 bg-muted rounded-md min-h-[300px] md:min-h-0">
+              <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-4 p-6 pt-2 min-h-0">
+                  <div className="lg:col-span-2 bg-muted rounded-md min-h-[300px] lg:min-h-0 order-last lg:order-first">
                       <RealTimeMap
                           segments={processRunSegments(selectedRunForMap)}
                           fullLocationHistory={selectedRunForMap.locationHistory?.map(p => ({ latitude: p.latitude, longitude: p.longitude })) || []}
                           vehicleId={selectedRunForMap.vehicleId}
                       />
                   </div>
-                  <div className="md:col-span-1 flex flex-col">
+                  <div className="lg:col-span-1 flex flex-col min-h-[250px] lg:min-h-0">
                       <h4 className="font-semibold mb-2">Detalhes da Rota</h4>
-                      <ScrollArea className="flex-1 pr-3">
+                      <ScrollArea className="flex-1 -mr-6 pr-6">
                         <RunDetailsContent run={selectedRunForMap} />
                       </ScrollArea>
                   </div>

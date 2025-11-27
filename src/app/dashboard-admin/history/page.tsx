@@ -578,16 +578,16 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
     
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
-            <DialogContent className="max-w-[90vw] w-full h-[90vh] flex flex-col">
-                <DialogHeader>
+            <DialogContent className="max-w-[90vw] lg:max-w-[80vw] w-full h-[90vh] flex flex-col p-0">
+                <DialogHeader className="p-6 pb-0">
                     <DialogTitle>Detalhes da Rota - {run.driverName} ({run.vehicleId})</DialogTitle>
                     <DialogDescription>
                         Visualização detalhada da rota e paradas da corrida de {run.date} ({run.shift}).
                     </DialogDescription>
                 </DialogHeader>
                 
-                <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4 min-h-0">
-                    <div className="md:col-span-2 bg-muted rounded-md min-h-[300px] md:min-h-0">
+                <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-4 p-6 pt-2 min-h-0">
+                    <div className="lg:col-span-2 bg-muted rounded-md min-h-[300px] lg:min-h-0 order-last lg:order-first">
                         {isClient && (
                             <RealTimeMap 
                                 segments={mapSegments} 
@@ -597,21 +597,21 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
                         )}
                     </div>
                     
-                    <div className="md:col-span-1 flex flex-col">
+                    <div className="lg:col-span-1 flex flex-col min-h-[250px] lg:min-h-0">
                          <div className="flex items-center justify-between mb-2">
                              <h4 className="font-semibold">Detalhes da Rota</h4>
                              <Button variant="outline" size="sm" onClick={() => { setMapRun(run); setIsAggregatedMap(true); }}>
                                 <Route className="mr-2 h-4 w-4"/> Ver Rota Completa
                             </Button>
                          </div>
-                        <ScrollArea className="flex-1 pr-3">
+                        <ScrollArea className="flex-1 -mr-6 pr-6">
                             <div className="space-y-4 p-1">
                                 {run.originalRuns.map((originalRun, runIndex) => {
                                     const previousRun = runIndex > 0 ? run.originalRuns[runIndex - 1] : null;
                                     let idleTime: string | null = null;
                                     
                                     if (previousRun && previousRun.endTime) {
-                                        const lastStopOfPreviousRun = previousRun.stops
+                                       const lastStopOfPreviousRun = previousRun.stops
                                             .filter(s => s.status === 'COMPLETED' && s.arrivalTime)
                                             .sort((a,b) => b.arrivalTime!.seconds - a.arrivalTime!.seconds)[0];
 
