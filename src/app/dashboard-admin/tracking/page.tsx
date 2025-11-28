@@ -125,15 +125,49 @@ const SEGMENT_COLORS = [
     '#6366f1', '#f59e0b', '#14b8a6', '#d946ef'
 ];
 
+const MAX_DISTANCE_BETWEEN_POINTS_KM = 5; // Max distance in km to be considered a valid point
+
 const formatTimeDiff = (start: Date, end: Date) => {
     if (!start || !end) return 'N/A';
     return formatDistanceStrict(end, start, { locale: ptBR, unit: 'minute' });
 }
 
+// Haversine distance function
+const getHaversineDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371; // Radius of the Earth in km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+};
+
+
+const filterLocationOutliers = (locations: LocationPoint[]): LocationPoint[] => {
+    if (locations.length < 2) return locations;
+    const filtered: LocationPoint[] = [locations[0]];
+    for (let i = 1; i < locations.length; i++) {
+        const prev = filtered[filtered.length - 1];
+        const curr = locations[i];
+        const distance = getHaversineDistance(prev.latitude, prev.longitude, curr.latitude, curr.longitude);
+        if (distance <= MAX_DISTANCE_BETWEEN_POINTS_KM) {
+            filtered.push(curr);
+        } else {
+            console.warn(`Outlier detected and removed. Distance: ${distance.toFixed(2)} km`);
+        }
+    }
+    return filtered;
+}
+
 const processRunSegments = (run: AggregatedRun): Segment[] => {
     if (!run.locationHistory || run.locationHistory.length === 0) return [];
     
-    const sortedLocations = [...run.locationHistory].sort((a,b) => a.timestamp.seconds - b.timestamp.seconds);
+    const sortedAndFilteredLocations = filterLocationOutliers(
+        [...run.locationHistory].sort((a,b) => a.timestamp.seconds - b.timestamp.seconds)
+    );
     const sortedStops = [...run.stops].filter(s => s.status === 'COMPLETED' || s.status === 'IN_PROGRESS').sort((a, b) => (a.arrivalTime?.seconds || Infinity) - (b.arrivalTime?.seconds || Infinity));
 
     const segments: Segment[] = [];
@@ -149,7 +183,7 @@ const processRunSegments = (run: AggregatedRun): Segment[] => {
         
         const segmentDistance = (stop.mileageAtStop && lastMileage) ? stop.mileageAtStop - lastMileage : null;
 
-        const segmentPath = sortedLocations
+        const segmentPath = sortedAndFilteredLocations
             .filter(loc => {
                 const locTime = loc.timestamp.seconds;
                 return locTime >= lastDepartureTime.seconds && locTime <= stop.arrivalTime!.seconds;
@@ -161,13 +195,13 @@ const processRunSegments = (run: AggregatedRun): Segment[] => {
             const prevStop = sortedStops[i-1];
             if (prevStop.departureTime) {
                  const prevDepartureTimeInSeconds = prevStop.departureTime.seconds;
-                 const lastPointOfPrevSegment = sortedLocations.slice().reverse().find(l => l.timestamp.seconds <= prevDepartureTimeInSeconds);
+                 const lastPointOfPrevSegment = sortedAndFilteredLocations.slice().reverse().find(l => l.timestamp.seconds <= prevDepartureTimeInSeconds);
                  if(lastPointOfPrevSegment) {
                      segmentPath.unshift([lastPointOfPrevSegment.longitude, lastPointOfPrevSegment.latitude]);
                  }
             }
         } else {
-             const firstPoint = sortedLocations.find(l => l.timestamp.seconds >= run.startTime.seconds);
+             const firstPoint = sortedAndFilteredLocations.find(l => l.timestamp.seconds >= run.startTime.seconds);
              if (firstPoint) {
                 segmentPath.unshift([firstPoint.longitude, firstPoint.latitude]);
              }
@@ -192,11 +226,11 @@ const processRunSegments = (run: AggregatedRun): Segment[] => {
     }
 
     // Add final segment to current location if run is in progress
-    if (run.status === 'IN_PROGRESS' && sortedLocations.length > 0) {
+    if (run.status === 'IN_PROGRESS' && sortedAndFilteredLocations.length > 0) {
         const lastStop = sortedStops[sortedStops.length - 1];
         if (lastStop && lastStop.departureTime) {
             const lastDepartureTime = lastStop.departureTime;
-            const finalSegmentPath = sortedLocations
+            const finalSegmentPath = sortedAndFilteredLocations
                 .filter(loc => loc.timestamp.seconds >= lastDepartureTime.seconds)
                 .map(loc => [loc.longitude, loc.latitude] as [number, number]);
 
@@ -588,6 +622,7 @@ const RunDetailsContent = ({ run, onSegmentClick, highlightedSegmentId }: { run:
                   const departureTime = stop.departureTime ? new Date(stop.departureTime.seconds * 1000) : null;
                   
                   const travelStartTime = lastDepartureTime; 
+                  const travelTime = arrivalTime ? formatDistanceStrict(new Date(travelStartTime.seconds * 1000), arrivalTime, { locale: ptBR, unit: 'minute'}) : null;
                   
                   const stopTime = arrivalTime && departureTime ? formatDistanceStrict(arrivalTime, departureTime, { locale: ptBR, unit: 'minute'}) : null;
 
@@ -619,7 +654,7 @@ const RunDetailsContent = ({ run, onSegmentClick, highlightedSegmentId }: { run:
                         <p className="font-medium">{stop.name}</p>
                         <p className={`text-xs ${isCompletedStop ? 'text-muted-foreground' : color}`}>{label}</p>
                          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground mt-1">
-                          {stop.arrivalTime && <span className='flex items-center gap-1'><Route className="h-3 w-3 text-gray-400"/> Viagem: <strong>{formatFirebaseTime(travelStartTime)} - {formatFirebaseTime(stop.arrivalTime)}</strong></span>}
+                          {stop.arrivalTime && <span className='flex items-center gap-1'><Route className="h-3 w-3 text-gray-400"/> Viagem: <strong>{formatFirebaseTime(travelStartTime)} - {formatFirebaseTime(stop.arrivalTime)}</strong> ({travelTime})</span>}
                           {stopTime && <span className='flex items-center gap-1'><Timer className="h-3 w-3 text-gray-400"/> Parada: <strong>{stopTime}</strong></span>}
                           {segmentDistance !== null && <span className='flex items-center gap-1'><Milestone className="h-3 w-3 text-gray-400"/> Distância: <strong>{segmentDistance.toFixed(1)} km</strong></span>}
                           {stop.collectedOccupiedCars !== null && <span className='flex items-center gap-1'><Car className="h-3 w-3 text-gray-400"/> Ocupados: <strong>{stop.collectedOccupiedCars}</strong></span>}
@@ -642,3 +677,5 @@ const RunDetailsContent = ({ run, onSegmentClick, highlightedSegmentId }: { run:
 }
 
 export default TrackingPage;
+
+    

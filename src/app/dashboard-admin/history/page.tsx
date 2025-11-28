@@ -65,6 +65,9 @@ const SEGMENT_COLORS = [
     '#6366f1', '#f59e0b', '#14b8a6', '#d946ef'
 ];
 
+const MAX_DISTANCE_BETWEEN_POINTS_KM = 5; // Max distance in km to be considered a valid point
+
+
 // --- Tipos ---
 type StopStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELED';
 
@@ -152,10 +155,42 @@ const formatTimeDiff = (start: Date, end: Date) => {
     return formatDistanceStrict(end, start, { locale: ptBR, unit: 'minute' });
 }
 
+// Haversine distance function
+const getHaversineDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371; // Radius of the Earth in km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+};
+
+
+const filterLocationOutliers = (locations: LocationPoint[]): LocationPoint[] => {
+    if (locations.length < 2) return locations;
+    const filtered: LocationPoint[] = [locations[0]];
+    for (let i = 1; i < locations.length; i++) {
+        const prev = filtered[filtered.length - 1];
+        const curr = locations[i];
+        const distance = getHaversineDistance(prev.latitude, prev.longitude, curr.latitude, curr.longitude);
+        if (distance <= MAX_DISTANCE_BETWEEN_POINTS_KM) {
+            filtered.push(curr);
+        } else {
+            console.warn(`Outlier detected and removed. Distance: ${distance.toFixed(2)} km`);
+        }
+    }
+    return filtered;
+}
+
 const processRunSegments = (run: AggregatedRun | Run | null, isAggregated: boolean): Segment[] => {
     if (!run || !run.locationHistory || run.locationHistory.length === 0) return [];
 
-    const sortedLocations = [...run.locationHistory].sort((a,b) => a.timestamp.seconds - b.timestamp.seconds);
+    const sortedAndFilteredLocations = filterLocationOutliers(
+        [...run.locationHistory].sort((a,b) => a.timestamp.seconds - b.timestamp.seconds)
+    );
     const sortedStops = [...run.stops].filter(s => s.status === 'COMPLETED').sort((a, b) => (a.arrivalTime?.seconds || 0) - (b.arrivalTime?.seconds || 0));
 
     const segments: Segment[] = [];
@@ -172,7 +207,7 @@ const processRunSegments = (run: AggregatedRun | Run | null, isAggregated: boole
 
         const segmentDistance = (stop.mileageAtStop && lastMileage) ? stop.mileageAtStop - lastMileage : null;
 
-        const segmentPath = sortedLocations
+        const segmentPath = sortedAndFilteredLocations
             .filter(loc => {
                 const locTime = loc.timestamp.seconds;
                 return locTime >= lastDepartureTime.seconds && locTime <= stop.arrivalTime!.seconds;
@@ -633,6 +668,9 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
 
     const mapSegments = useMemo(() => processRunSegments(mapRun, isAggregatedMap), [mapRun, isAggregatedMap]);
     
+    // This must be after all hook calls
+    if (!run) return null;
+
     const displayedSegments = useMemo(() => {
         if (!highlightedSegmentId) return mapSegments.map(s => ({ ...s, opacity: 0.9 }));
 
@@ -642,9 +680,6 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
         }));
     }, [mapSegments, highlightedSegmentId]);
     
-    // This must be after all hook calls
-    if (!run) return null;
-
     const fullLocationHistory = mapRun?.locationHistory?.map(p => ({ latitude: p.latitude, longitude: p.longitude })) || [];
 
     const formatFirebaseTime = (timestamp: FirebaseTimestamp | null) => {
@@ -804,3 +839,5 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
 }
 
 export default HistoryPage;
+
+    
