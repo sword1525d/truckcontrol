@@ -530,8 +530,8 @@ const RunAccordionItem = ({ run, onViewRoute }: { run: AggregatedRun, onViewRout
       <AccordionTrigger className="p-4 hover:no-underline">
         <div className="w-full flex flex-col sm:flex-row justify-between items-start sm:items-center text-left gap-4 sm:gap-2">
           <div className="flex-1 min-w-0">
-              <p className="font-bold text-lg text-primary truncate flex items-center gap-2"><User className="h-5 w-5" />{run.driverName}</p>
-              <p className="text-sm text-muted-foreground flex items-center gap-2"><Truck className="h-4 w-4" />{run.vehicleId} ({run.shift})</p>
+              <p className="font-bold text-lg text-primary truncate flex items-center gap-2"><Truck className="h-5 w-5" />{run.vehicleId} ({run.shift})</p>
+              <p className="text-sm text-muted-foreground flex items-center gap-2"><User className="h-4 w-4" />{run.driverName}</p>
           </div>
           <div className="flex-1 w-full sm:w-auto">
               <div className="flex justify-between text-sm mb-1">
@@ -622,7 +622,6 @@ const RunDetailsContent = ({ run, onSegmentClick, highlightedSegmentId }: { run:
                   const departureTime = stop.departureTime ? new Date(stop.departureTime.seconds * 1000) : null;
                   
                   const travelStartTime = lastDepartureTime; 
-                  const travelTime = arrivalTime ? formatDistanceStrict(new Date(travelStartTime.seconds * 1000), arrivalTime, { locale: ptBR, unit: 'minute'}) : null;
                   
                   const stopTime = arrivalTime && departureTime ? formatDistanceStrict(arrivalTime, departureTime, { locale: ptBR, unit: 'minute'}) : null;
 
@@ -654,7 +653,7 @@ const RunDetailsContent = ({ run, onSegmentClick, highlightedSegmentId }: { run:
                         <p className="font-medium">{stop.name}</p>
                         <p className={`text-xs ${isCompletedStop ? 'text-muted-foreground' : color}`}>{label}</p>
                          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground mt-1">
-                          {stop.arrivalTime && <span className='flex items-center gap-1'><Route className="h-3 w-3 text-gray-400"/> Viagem: <strong>{formatFirebaseTime(travelStartTime)} - {formatFirebaseTime(stop.arrivalTime)}</strong> ({travelTime})</span>}
+                          {stop.arrivalTime && <span className='flex items-center gap-1'><Route className="h-3 w-3 text-gray-400"/> Viagem: <strong>{formatFirebaseTime(travelStartTime)} - {formatFirebaseTime(stop.arrivalTime)}</strong></span>}
                           {stopTime && <span className='flex items-center gap-1'><Timer className="h-3 w-3 text-gray-400"/> Parada: <strong>{stopTime}</strong></span>}
                           {segmentDistance !== null && <span className='flex items-center gap-1'><Milestone className="h-3 w-3 text-gray-400"/> Distância: <strong>{segmentDistance.toFixed(1)} km</strong></span>}
                           {stop.collectedOccupiedCars !== null && <span className='flex items-center gap-1'><Car className="h-3 w-3 text-gray-400"/> Ocupados: <strong>{stop.collectedOccupiedCars}</strong></span>}
