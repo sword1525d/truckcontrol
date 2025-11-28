@@ -1,7 +1,8 @@
+
 'use client';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useFirebase } from '@/firebase';
-import { collectionGroup, query, getDocs, Timestamp, doc, deleteDoc } from 'firebase/firestore';
+import { collectionGroup, query, getDocs, Timestamp, doc, deleteDoc, collection, getDoc } from 'firebase/firestore';
 import {
   Card,
   CardContent,
@@ -52,6 +53,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { DateRange } from 'react-day-picker';
 import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import type { FirestoreUser } from '../history/page';
 
 
 // --- Tipos ---
@@ -68,7 +71,7 @@ type ChecklistItem = {
 
 type ChecklistRecord = {
     id: string;
-    path: string; // Adicionado para filtragem
+    path: string; 
     vehicleId: string;
     driverId: string;
     driverName: string;
@@ -89,6 +92,7 @@ const ChecklistHistoryPage = () => {
     const router = useRouter();
 
     const [user, setUser] = useState<UserData | null>(null);
+    const [users, setUsers] = useState<Map<string, FirestoreUser>>(new Map());
     const [isSuperAdmin, setIsSuperAdmin] = useState(false);
     const [allChecklists, setAllChecklists] = useState<ChecklistRecord[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -114,6 +118,17 @@ const ChecklistHistoryPage = () => {
             router.push('/login');
         }
     }, [router]);
+    
+    const fetchUsers = useCallback(async () => {
+        if (!firestore || !user) return;
+        const usersCol = collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/users`);
+        const usersSnapshot = await getDocs(usersCol);
+        const usersMap = new Map<string, FirestoreUser>();
+        usersSnapshot.forEach(doc => {
+            usersMap.set(doc.id, { id: doc.id, ...doc.data() } as FirestoreUser);
+        });
+        setUsers(usersMap);
+    }, [firestore, user]);
 
     const fetchChecklistData = useCallback(async () => {
         if (!firestore || !user) return;
@@ -122,8 +137,6 @@ const ChecklistHistoryPage = () => {
         try {
             const checklistsQuery = query(
                 collectionGroup(firestore, 'checklists')
-                // orderBy('timestamp', 'desc') -> Requires a composite index, which we can't create programmatically.
-                // We'll sort on the client-side.
             );
             const querySnapshot = await getDocs(checklistsQuery);
             const checklists = querySnapshot.docs.map(doc => ({
@@ -150,9 +163,10 @@ const ChecklistHistoryPage = () => {
 
     useEffect(() => {
         if(user) {
+            fetchUsers();
             fetchChecklistData();
         }
-    }, [user, fetchChecklistData]);
+    }, [user, fetchChecklistData, fetchUsers]);
 
     const handleDelete = async (checklistPath: string) => {
         if (!firestore || !isSuperAdmin) return;
@@ -219,7 +233,7 @@ const ChecklistHistoryPage = () => {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {filteredChecklists.length > 0 ? filteredChecklists.map(c => <ChecklistTableRow key={c.id} checklist={c} onViewDetails={() => setSelectedChecklist(c)} isSuperAdmin={isSuperAdmin} onDelete={handleDelete} />) : <TableRow><TableCell colSpan={5} className="text-center h-24">Nenhum checklist encontrado no período</TableCell></TableRow>}
+                                {filteredChecklists.length > 0 ? filteredChecklists.map(c => <ChecklistTableRow key={c.id} checklist={c} driver={users.get(c.driverId)} onViewDetails={() => setSelectedChecklist(c)} isSuperAdmin={isSuperAdmin} onDelete={handleDelete} />) : <TableRow><TableCell colSpan={5} className="text-center h-24">Nenhum checklist encontrado no período</TableCell></TableRow>}
                             </TableBody>
                         </Table>
                     </div>}
@@ -235,14 +249,25 @@ const ChecklistHistoryPage = () => {
     );
 };
 
-const ChecklistTableRow = ({ checklist, onViewDetails, isSuperAdmin, onDelete }: { checklist: ChecklistRecord, onViewDetails: () => void, isSuperAdmin: boolean, onDelete: (path: string) => void }) => {
+const ChecklistTableRow = ({ checklist, driver, onViewDetails, isSuperAdmin, onDelete }: { checklist: ChecklistRecord, driver?: FirestoreUser, onViewDetails: () => void, isSuperAdmin: boolean, onDelete: (path: string) => void }) => {
     const nonCompliantItems = checklist.items.filter(item => item.status === 'nao_conforme').length;
+
+    const getInitials = (name: string) => {
+        return name.split(' ').map(n => n[0]).slice(0, 2).join('');
+    }
+
     return (
         <TableRow>
             <TableCell>{format(new Date(checklist.timestamp.seconds * 1000), 'dd/MM/yy HH:mm')}</TableCell>
             <TableCell><div className="flex items-center gap-2"><Truck className="h-4 w-4 text-muted-foreground"/>{checklist.vehicleId}</div></TableCell>
             <TableCell>
-                <div className="font-medium flex items-center gap-2"><User className="h-4 w-4 text-muted-foreground" /> {checklist.driverName}</div>
+                <div className="font-medium flex items-center gap-2">
+                    <Avatar className="h-6 w-6">
+                        <AvatarImage src={driver?.photoURL} alt={checklist.driverName} />
+                        <AvatarFallback className="text-xs">{getInitials(checklist.driverName)}</AvatarFallback>
+                    </Avatar>
+                     {checklist.driverName}
+                </div>
             </TableCell>
             <TableCell>
                 {nonCompliantItems > 0 ? (
@@ -378,5 +403,3 @@ const ChecklistDetailsDialog = ({ checklist, isOpen, onClose }: { checklist: Che
 
 
 export default ChecklistHistoryPage;
-
-    

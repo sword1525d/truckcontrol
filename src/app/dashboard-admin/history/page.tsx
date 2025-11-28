@@ -49,6 +49,7 @@ import { DateRange } from 'react-day-picker';
 import dynamic from 'next/dynamic';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 
 // --- Constantes ---
@@ -126,6 +127,7 @@ export type FirestoreUser = {
   id: string;
   name:string;
   shift?: string;
+  photoURL?: string;
 }
 
 export type Segment = {
@@ -561,10 +563,21 @@ const KpiCard = ({ title, value }: { title: string, value: string }) => (
 const HistoryTableRow = ({ run, users, onViewDetails, isSuperAdmin, onDelete }: { run: Run, users: Map<string, FirestoreUser>, onViewDetails: () => void, isSuperAdmin: boolean, onDelete: () => void }) => {
     const driver = users.get(run.driverId);
     const distance = run.endMileage ? run.endMileage - run.startMileage : 0;
+    
+    const getInitials = (name: string) => {
+        return name.split(' ').map(n => n[0]).slice(0, 2).join('');
+    }
+
     return (
         <TableRow>
             <TableCell>
-                <div className="font-medium flex items-center gap-2"><User className="h-4 w-4 text-muted-foreground" /> {run.driverName}</div>
+                <div className="font-medium flex items-center gap-2">
+                   <Avatar className="h-6 w-6">
+                        <AvatarImage src={driver?.photoURL} alt={run.driverName} />
+                        <AvatarFallback className="text-xs">{getInitials(run.driverName)}</AvatarFallback>
+                    </Avatar>
+                    {run.driverName}
+                </div>
             </TableCell>
             <TableCell><div className="flex items-center gap-2"><Truck className="h-4 w-4 text-muted-foreground"/>{run.vehicleId}</div></TableCell>
             <TableCell>{driver?.shift || 'N/A'}</TableCell>
@@ -658,6 +671,7 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
     const [isAggregatedMap, setIsAggregatedMap] = useState<boolean>(true);
     const [highlightedSegmentId, setHighlightedSegmentId] = useState<string | null>(null);
     const [isMapFullscreen, setIsMapFullscreen] = useState(false);
+    const router = useRouter();
 
     useEffect(() => {
         if (run) {
@@ -694,16 +708,14 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
         }));
     }, [mapSegments, highlightedSegmentId]);
     
-    const router = useRouter();
+    if (!run) return null;
+    
     const handleViewFullscreen = () => {
       if (run) {
         // We'll pass the key of the aggregated run to the map view page
         router.push(`/dashboard-admin/map-view/${run.key}`);
       }
     };
-    
-    // This must be after all hook calls
-    if (!run) return null;
     
     const fullLocationHistory = mapRun?.locationHistory?.map(p => ({ latitude: p.latitude, longitude: p.longitude })) || [];
 

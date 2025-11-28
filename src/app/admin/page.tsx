@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -6,7 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useFirebase } from '@/firebase';
 import { collection, getDocs, doc, setDoc } from 'firebase/firestore';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -75,6 +76,7 @@ const userSchema = z.object({
   userPassword: z.string().min(1, 'A senha é obrigatória'),
   role: z.string().min(1, "A função é obrigatória"),
   shift: z.string().min(1, "O turno é obrigatório"),
+  photoURL: z.string().url("URL da foto inválida").optional().or(z.literal('')),
 });
 
 
@@ -95,6 +97,7 @@ const defaultUserValues = {
   userPassword: '',
   role: '',
   shift: '',
+  photoURL: '',
 };
 
 const defaultVehicleValues = {
@@ -236,12 +239,18 @@ export default function AdminPage() {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
 
+        await updateProfile(user, {
+            displayName: data.userName.toUpperCase(),
+            photoURL: data.photoURL,
+        });
+
         const userRef = doc(firestore, `companies/${data.companyId}/sectors/${data.sectorId}/users`, user.uid);
         await setDoc(userRef, {
             name: data.userName.toUpperCase(),
             truck: data.role === ROLES.MOTORISTA || data.role === ROLES.AMBOS,
             isAdmin: data.role === ROLES.ADMINISTRADOR || data.role === ROLES.AMBOS,
             shift: data.shift,
+            photoURL: data.photoURL || '',
         });
 
         toast({ title: 'Sucesso', description: 'Usuário cadastrado com sucesso!' });
@@ -455,6 +464,11 @@ export default function AdminPage() {
                 <Input type="password" {...userForm.register('userPassword')} placeholder="Senha do Usuário" />
                 {userForm.formState.errors.userPassword && <p className="text-sm text-destructive">{userForm.formState.errors.userPassword.message}</p>}
                 
+                <div>
+                    <Input {...userForm.register('photoURL')} placeholder="URL da foto do perfil (opcional)" />
+                    {userForm.formState.errors.photoURL && <p className="text-sm text-destructive mt-1">{userForm.formState.errors.photoURL.message}</p>}
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                      <Controller
                         name="role"
@@ -500,5 +514,3 @@ export default function AdminPage() {
     </div>
   );
 }
-
-    

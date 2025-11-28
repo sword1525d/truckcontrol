@@ -1,3 +1,4 @@
+
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { useFirebase } from '@/firebase';
@@ -23,6 +24,7 @@ export type FirestoreUser = {
   isAdmin: boolean;
   matricula: string;
   shift?: string;
+  photoURL?: string;
 };
 
 export type VehicleStatusEnum = 'PARADO' | 'EM_CORRIDA' | 'EM_MANUTENCAO';
@@ -84,7 +86,8 @@ const AdminManagementPage = () => {
                 truck: data.truck,
                 isAdmin: data.isAdmin,
                 matricula: 'N/A', // Placeholder - Ideally this is stored in the doc
-                shift: data.shift
+                shift: data.shift,
+                photoURL: data.photoURL,
             } as FirestoreUser
         });
         setUsers(userList.sort((a,b) => a.name.localeCompare(b.name)));

@@ -34,6 +34,7 @@ import { ptBR } from 'date-fns/locale';
 import dynamic from 'next/dynamic';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 
 // --- Tipos ---
@@ -95,6 +96,7 @@ export type FirestoreUser = {
   id: string;
   name:string;
   shift?: string;
+  photoURL?: string;
 }
 
 export type Segment = {
@@ -408,7 +410,12 @@ const TrackingPage = () => {
             });
         });
         
-        return aggregated.sort((a, b) => b.startTime.seconds - a.startTime.seconds);
+        return aggregated.sort((a, b) => {
+             // Sort by status first (IN_PROGRESS comes first), then by time
+            if (a.status === 'IN_PROGRESS' && b.status !== 'IN_PROGRESS') return -1;
+            if (a.status !== 'IN_PROGRESS' && b.status === 'IN_PROGRESS') return 1;
+            return b.startTime.seconds - a.startTime.seconds;
+        });
     }, [allRuns, users]);
 
 
@@ -463,7 +470,7 @@ const TrackingPage = () => {
             </Card>
         ) : (
           <Accordion type="single" collapsible className="w-full space-y-4" defaultValue={aggregatedRuns.find(r => r.status === 'IN_PROGRESS')?.key || aggregatedRuns[0]?.key}>
-            {aggregatedRuns.map(run => <RunAccordionItem key={run.key} run={run} onViewRoute={() => handleViewRoute(run.key)} />)}
+            {aggregatedRuns.map(run => <RunAccordionItem key={run.key} run={run} users={users} onViewRoute={() => handleViewRoute(run.key)} />)}
           </Accordion>
         )}
       
@@ -513,17 +520,22 @@ const TrackingPage = () => {
   );
 };
 
-const RunAccordionItem = ({ run, onViewRoute }: { run: AggregatedRun, onViewRoute: () => void }) => {
+const RunAccordionItem = ({ run, users, onViewRoute }: { run: AggregatedRun, users: Map<string, FirestoreUser>, onViewRoute: () => void }) => {
   const isCompletedRun = run.status === 'COMPLETED';
   const completedStops = run.stops.filter(s => s.status === 'COMPLETED').length;
   const totalStops = run.stops.filter(s => s.status !== 'CANCELED').length;
   const progress = isCompletedRun ? 100 : (totalStops > 0 ? (completedStops / totalStops) * 100 : 0);
   const currentStop = run.stops.find(s => s.status === 'IN_PROGRESS');
+  const driver = users.get(run.driverId);
 
   const formatFirebaseTime = (timestamp: FirebaseTimestamp | null | undefined) => {
     if (!timestamp) return '--:--';
     return format(new Date(timestamp.seconds * 1000), 'HH:mm');
   };
+  
+  const getInitials = (name: string) => {
+    return name.split(' ').map(n => n[0]).slice(0, 2).join('');
+  }
 
   return (
     <AccordionItem value={run.key} className="bg-card border rounded-lg shadow-sm">
@@ -531,7 +543,13 @@ const RunAccordionItem = ({ run, onViewRoute }: { run: AggregatedRun, onViewRout
         <div className="w-full flex flex-col sm:flex-row justify-between items-start sm:items-center text-left gap-4 sm:gap-2">
           <div className="flex-1 min-w-0">
               <p className="font-bold text-lg text-primary truncate flex items-center gap-2"><Truck className="h-5 w-5" />{run.vehicleId} ({run.shift})</p>
-              <p className="text-sm text-muted-foreground flex items-center gap-2"><User className="h-4 w-4" />{run.driverName}</p>
+              <div className="text-sm text-muted-foreground flex items-center gap-2">
+                <Avatar className="h-5 w-5">
+                    <AvatarImage src={driver?.photoURL} alt={run.driverName} />
+                    <AvatarFallback className="text-xs">{getInitials(run.driverName)}</AvatarFallback>
+                </Avatar>
+                {run.driverName}
+              </div>
           </div>
           <div className="flex-1 w-full sm:w-auto">
               <div className="flex justify-between text-sm mb-1">

@@ -28,6 +28,8 @@ import { ptBR } from 'date-fns/locale';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { DateRange } from 'react-day-picker';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import type { FirestoreUser } from '../history/page';
 
 // --- Tipos ---
 type FirebaseTimestamp = Timestamp;
@@ -55,6 +57,7 @@ const RefuelingHistoryPage = () => {
     const router = useRouter();
 
     const [user, setUser] = useState<UserData | null>(null);
+    const [users, setUsers] = useState<Map<string, FirestoreUser>>(new Map());
     const [allRefuels, setAllRefuels] = useState<RefuelRecord[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [date, setDate] = useState<DateRange | undefined>({
@@ -72,6 +75,18 @@ const RefuelingHistoryPage = () => {
             router.push('/login');
         }
     }, [router]);
+    
+    const fetchUsers = useCallback(async () => {
+        if (!firestore || !user) return;
+        const usersCol = collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/users`);
+        const usersSnapshot = await getDocs(usersCol);
+        const usersMap = new Map<string, FirestoreUser>();
+        usersSnapshot.forEach(doc => {
+            usersMap.set(doc.id, { id: doc.id, ...doc.data() } as FirestoreUser);
+        });
+        setUsers(usersMap);
+    }, [firestore, user]);
+
 
     const fetchRefuelData = useCallback(async () => {
         if (!firestore || !user) return;
@@ -96,9 +111,10 @@ const RefuelingHistoryPage = () => {
 
     useEffect(() => {
         if(user) {
+            fetchUsers();
             fetchRefuelData();
         }
-    }, [user, fetchRefuelData]);
+    }, [user, fetchRefuelData, fetchUsers]);
 
     const filteredRefuels = useMemo(() => {
         return allRefuels.filter(refuel => {
@@ -137,7 +153,7 @@ const RefuelingHistoryPage = () => {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {filteredRefuels.length > 0 ? filteredRefuels.map(refuel => <RefuelTableRow key={refuel.id} refuel={refuel} />) : <TableRow><TableCell colSpan={5} className="text-center h-24">Nenhum abastecimento encontrado no período</TableCell></TableRow>}
+                                {filteredRefuels.length > 0 ? filteredRefuels.map(refuel => <RefuelTableRow key={refuel.id} refuel={refuel} driver={users.get(refuel.driverId)} />) : <TableRow><TableCell colSpan={5} className="text-center h-24">Nenhum abastecimento encontrado no período</TableCell></TableRow>}
                             </TableBody>
                         </Table>
                     </div>}
@@ -147,13 +163,24 @@ const RefuelingHistoryPage = () => {
     );
 };
 
-const RefuelTableRow = ({ refuel }: { refuel: RefuelRecord }) => {
+const RefuelTableRow = ({ refuel, driver }: { refuel: RefuelRecord, driver?: FirestoreUser }) => {
+    
+    const getInitials = (name: string) => {
+        return name.split(' ').map(n => n[0]).slice(0, 2).join('');
+    }
+
     return (
         <TableRow>
             <TableCell>{format(new Date(refuel.timestamp.seconds * 1000), 'dd/MM/yy HH:mm')}</TableCell>
             <TableCell><div className="flex items-center gap-2"><Truck className="h-4 w-4 text-muted-foreground"/>{refuel.vehicleId}</div></TableCell>
             <TableCell>
-                <div className="font-medium flex items-center gap-2"><User className="h-4 w-4 text-muted-foreground" /> {refuel.driverName}</div>
+                <div className="font-medium flex items-center gap-2">
+                    <Avatar className="h-6 w-6">
+                        <AvatarImage src={driver?.photoURL} alt={refuel.driverName} />
+                        <AvatarFallback className="text-xs">{getInitials(refuel.driverName)}</AvatarFallback>
+                    </Avatar>
+                    {refuel.driverName}
+                </div>
             </TableCell>
             <TableCell><div className="flex items-center gap-2"><Fuel className="h-4 w-4 text-muted-foreground"/>{refuel.liters.toFixed(2)} L</div></TableCell>
             <TableCell className="text-right font-medium">

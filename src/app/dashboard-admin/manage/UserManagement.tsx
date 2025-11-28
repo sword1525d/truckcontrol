@@ -1,3 +1,4 @@
+
 'use client';
 import { useState } from 'react';
 import {
@@ -48,6 +49,8 @@ import { createUserWithEmailAndPassword } from "firebase/auth";
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Edit, Trash2 } from 'lucide-react';
 import type { FirestoreUser } from './page';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+
 
 const ROLES = {
     MOTORISTA: 'Motorista',
@@ -67,6 +70,7 @@ const userEditSchema = z.object({
   isAdmin: z.boolean(),
   truck: z.boolean(),
   shift: z.string().min(1, 'O turno é obrigatório'),
+  photoURL: z.string().url('URL da foto inválida').optional().or(z.literal('')),
 });
 
 const userCreateSchema = z.object({
@@ -75,6 +79,7 @@ const userCreateSchema = z.object({
   userPassword: z.string().min(1, 'A senha é obrigatória'),
   role: z.string().min(1, "A função é obrigatória"),
   shift: z.string().min(1, "O turno é obrigatório"),
+  photoURL: z.string().url('URL da foto inválida').optional().or(z.literal('')),
 });
 
 type UserEditForm = z.infer<typeof userEditSchema>;
@@ -108,6 +113,7 @@ export const UserManagement = ({ users, onDelete, onUpdate, session }: UserManag
       userPassword: '',
       role: '',
       shift: '',
+      photoURL: '',
     }
   });
 
@@ -118,6 +124,7 @@ export const UserManagement = ({ users, onDelete, onUpdate, session }: UserManag
       isAdmin: user.isAdmin,
       truck: user.truck,
       shift: user.shift || '',
+      photoURL: user.photoURL || '',
     });
     setIsEditDialogOpen(true);
   };
@@ -141,6 +148,7 @@ export const UserManagement = ({ users, onDelete, onUpdate, session }: UserManag
             truck: data.role === ROLES.MOTORISTA || data.role === ROLES.AMBOS,
             isAdmin: data.role === ROLES.ADMINISTRADOR || data.role === ROLES.AMBOS,
             shift: data.shift,
+            photoURL: data.photoURL || '',
         });
 
         toast({ title: 'Sucesso', description: 'Usuário cadastrado com sucesso!' });
@@ -168,6 +176,7 @@ export const UserManagement = ({ users, onDelete, onUpdate, session }: UserManag
         isAdmin: data.isAdmin,
         truck: data.truck,
         shift: data.shift,
+        photoURL: data.photoURL || '',
       });
       toast({ title: 'Sucesso', description: 'Usuário atualizado.' });
       onUpdate();
@@ -179,6 +188,10 @@ export const UserManagement = ({ users, onDelete, onUpdate, session }: UserManag
       setIsSubmitting(false);
     }
   };
+  
+    const getInitials = (name: string) => {
+        return name.split(' ').map(n => n[0]).slice(0, 2).join('');
+    }
 
   return (
     <>
@@ -199,7 +212,15 @@ export const UserManagement = ({ users, onDelete, onUpdate, session }: UserManag
           <TableBody>
             {users.map((user) => (
               <TableRow key={user.id}>
-                <TableCell className="font-medium">{user.name}</TableCell>
+                <TableCell className="font-medium">
+                    <div className="flex items-center gap-3">
+                        <Avatar>
+                            <AvatarImage src={user.photoURL} alt={user.name} />
+                            <AvatarFallback>{getInitials(user.name)}</AvatarFallback>
+                        </Avatar>
+                        {user.name}
+                    </div>
+                </TableCell>
                 <TableCell>{user.shift || 'N/A'}</TableCell>
                 <TableCell>{user.isAdmin ? 'Sim' : 'Não'}</TableCell>
                 <TableCell>{user.truck ? 'Sim' : 'Não'}</TableCell>
@@ -247,6 +268,11 @@ export const UserManagement = ({ users, onDelete, onUpdate, session }: UserManag
               <Label htmlFor="name">Nome</Label>
               <Input id="name" {...editForm.register('name')} />
               {editForm.formState.errors.name && <p className="text-sm text-destructive mt-1">{editForm.formState.errors.name.message}</p>}
+            </div>
+             <div>
+              <Label htmlFor="photoURL">URL da Foto</Label>
+              <Input id="photoURL" {...editForm.register('photoURL')} placeholder="https://exemplo.com/foto.png"/>
+              {editForm.formState.errors.photoURL && <p className="text-sm text-destructive mt-1">{editForm.formState.errors.photoURL.message}</p>}
             </div>
             
             <div>
@@ -320,6 +346,11 @@ export const UserManagement = ({ users, onDelete, onUpdate, session }: UserManag
                       <Input id="userMatricula" {...createForm.register('userMatricula')} placeholder="Matrícula" />
                       {createForm.formState.errors.userMatricula && <p className="text-sm text-destructive mt-1">{createForm.formState.errors.userMatricula.message}</p>}
                     </div>
+                 </div>
+                 <div>
+                    <Label htmlFor="photoURLCreate">URL da Foto</Label>
+                    <Input id="photoURLCreate" {...createForm.register('photoURL')} placeholder="https://exemplo.com/foto.png"/>
+                    {createForm.formState.errors.photoURL && <p className="text-sm text-destructive mt-1">{createForm.formState.errors.photoURL.message}</p>}
                  </div>
 
                 <div>
