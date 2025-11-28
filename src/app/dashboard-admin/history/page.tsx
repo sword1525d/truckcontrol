@@ -535,8 +535,8 @@ const HistoryPage = () => {
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead>Motorista</TableHead>
                                     <TableHead>Veículo</TableHead>
+                                    <TableHead>Motorista</TableHead>
                                     <TableHead>Turno</TableHead>
                                     <TableHead>Destino</TableHead>
                                     <TableHead>Distância</TableHead>
@@ -578,6 +578,7 @@ const HistoryTableRow = ({ run, users, onViewDetails, isSuperAdmin, onDelete }: 
 
     return (
         <TableRow>
+            <TableCell><div className="flex items-center gap-2"><Truck className="h-4 w-4 text-muted-foreground"/>{run.vehicleId}</div></TableCell>
             <TableCell>
                 <div className="font-medium flex items-center gap-2">
                    <Avatar className="h-6 w-6">
@@ -587,7 +588,6 @@ const HistoryTableRow = ({ run, users, onViewDetails, isSuperAdmin, onDelete }: 
                     {run.driverName}
                 </div>
             </TableCell>
-            <TableCell><div className="flex items-center gap-2"><Truck className="h-4 w-4 text-muted-foreground"/>{run.vehicleId}</div></TableCell>
             <TableCell>{driver?.shift || 'N/A'}</TableCell>
             <TableCell>{run.stops.map(s => s.name).join(', ')}</TableCell>
             <TableCell>{distance > 0 ? `${distance.toFixed(1)} km` : '0.0 km'}</TableCell>
@@ -694,6 +694,7 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
     }, [isOpen, run]);
 
     const mapSegments = useMemo(() => processRunSegments(mapRun, isAggregatedMap), [mapRun, isAggregatedMap]);
+    
     const displayedSegments = useMemo(() => {
         if (!highlightedSegmentId) return mapSegments.map(s => ({ ...s, opacity: 0.9 }));
 
