@@ -214,6 +214,23 @@ const processRunSegments = (run: AggregatedRun | Run | null, isAggregated: boole
             })
             .map(loc => [loc.longitude, loc.latitude] as [number, number]);
 
+        // Add the start point of the segment
+        if (i > 0) {
+            const prevStop = sortedStops[i-1];
+            if (prevStop.departureTime) {
+                 const prevDepartureTimeInSeconds = prevStop.departureTime.seconds;
+                 const lastPointOfPrevSegment = sortedAndFilteredLocations.slice().reverse().find(l => l.timestamp.seconds <= prevDepartureTimeInSeconds);
+                 if(lastPointOfPrevSegment) {
+                     segmentPath.unshift([lastPointOfPrevSegment.longitude, lastPointOfPrevSegment.latitude]);
+                 }
+            }
+        } else {
+             const firstPoint = sortedAndFilteredLocations.find(l => l.timestamp.seconds >= run.startTime.seconds);
+             if (firstPoint) {
+                segmentPath.unshift([firstPoint.longitude, firstPoint.latitude]);
+             }
+        }
+
         segments.push({
             id: `segment-${i}`,
             label: `Trajeto para ${stop.name}`,
@@ -677,6 +694,14 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
         }));
     }, [mapSegments, highlightedSegmentId]);
     
+    const router = useRouter();
+    const handleViewFullscreen = () => {
+      if (run) {
+        // We'll pass the key of the aggregated run to the map view page
+        router.push(`/dashboard-admin/map-view/${run.key}`);
+      }
+    };
+    
     // This must be after all hook calls
     if (!run) return null;
     
@@ -703,14 +728,14 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
                             Visualização detalhada da rota e paradas da corrida de {run.date} ({run.shift}).
                         </DialogDescription>
                     </div>
-                     <Button variant="ghost" size="icon" onClick={() => setIsMapFullscreen(prev => !prev)}>
-                        {isMapFullscreen ? <Minimize className="h-5 w-5" /> : <Maximize className="h-5 w-5" />}
-                        <span className="sr-only">{isMapFullscreen ? 'Restaurar' : 'Tela Cheia'}</span>
+                     <Button variant="ghost" size="icon" onClick={handleViewFullscreen}>
+                        <Maximize className="h-5 w-5" />
+                        <span className="sr-only">Tela Cheia</span>
                     </Button>
                 </DialogHeader>
 
-                <div className={cn("flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 p-6 pt-0 min-h-0", isMapFullscreen && "lg:grid-cols-1")}>
-                    <div className={cn("lg:col-span-2 bg-muted rounded-md min-h-[300px] lg:min-h-0", isMapFullscreen && "lg:col-span-1")}>
+                <div className={cn("flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 p-6 pt-0 min-h-0")}>
+                    <div className={cn("lg:col-span-2 bg-muted rounded-md min-h-[300px] lg:min-h-0")}>
                         {isClient && (
                             <RealTimeMap
                                 segments={displayedSegments}
@@ -720,7 +745,7 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
                         )}
                     </div>
 
-                    <div className={cn("lg:col-span-1 flex flex-col min-h-0", isMapFullscreen && "hidden")}>
+                    <div className={cn("lg:col-span-1 flex flex-col min-h-0")}>
                          <div className="flex items-center justify-between mb-2">
                              <h4 className="font-semibold">Detalhes da Rota</h4>
                              <div className="flex items-center gap-2">

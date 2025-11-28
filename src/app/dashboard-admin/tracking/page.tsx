@@ -478,9 +478,9 @@ const TrackingPage = () => {
                             Acompanhe a localização em tempo real ou veja o trajeto detalhado da rota.
                         </DialogDescription>
                     </div>
-                     <Button variant="ghost" size="icon" onClick={() => setIsMapFullscreen(prev => !prev)}>
-                        {isMapFullscreen ? <Minimize className="h-5 w-5" /> : <Maximize className="h-5 w-5" />}
-                        <span className="sr-only">{isMapFullscreen ? 'Restaurar' : 'Tela Cheia'}</span>
+                     <Button variant="ghost" size="icon" onClick={() => router.push(`/dashboard-admin/map-view/${selectedRunForMap.key}`)}>
+                        <Maximize className="h-5 w-5" />
+                        <span className="sr-only">Tela Cheia</span>
                     </Button>
                 </DialogHeader>
               <div className={cn("flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 p-6 pt-0 min-h-0", isMapFullscreen && "lg:grid-cols-1")}>
@@ -677,5 +677,3 @@ const RunDetailsContent = ({ run, onSegmentClick, highlightedSegmentId }: { run:
 }
 
 export default TrackingPage;
-
-    
