@@ -367,7 +367,10 @@ const HistoryPage = () => {
             const allLocations = runs.flatMap(r => r.locationHistory || []).sort((a, b) => a.timestamp.seconds - b.timestamp.seconds);
             const startMileage = firstRun.startMileage;
             const endMileage = lastRun.endMileage;
-            const totalDistance = (endMileage && startMileage) ? endMileage - startMileage : 0;
+            const totalDistance = runs.reduce((acc, run) => {
+              const distance = (run.endMileage ?? 0) - run.startMileage;
+              return acc + (distance > 0 ? distance : 0);
+            }, 0);
             const totalDuration = lastRun.endTime ? lastRun.endTime.seconds - firstRun.startTime.seconds : 0;
 
             aggregatedMap.set(key, {
@@ -393,7 +396,10 @@ const HistoryPage = () => {
 
     const kpis = useMemo(() => {
       const totalRuns = filteredRuns.length;
-      const totalDistance = filteredRuns.reduce((acc, run) => acc + ((run.endMileage || run.startMileage) - run.startMileage), 0);
+      const totalDistance = filteredRuns.reduce((acc, run) => {
+        const distance = (run.endMileage ?? run.startMileage) - run.startMileage;
+        return acc + (distance > 0 ? distance : 0);
+      }, 0);
       const totalDurationSeconds = filteredRuns.reduce((acc, run) => acc + (run.endTime ? run.endTime.seconds - run.startTime.seconds : 0), 0);
       const avgDurationMinutes = totalRuns > 0 ? (totalDurationSeconds / totalRuns / 60) : 0;
       const totalStops = filteredRuns.reduce((acc, run) => acc + run.stops.length, 0);
@@ -425,7 +431,9 @@ const HistoryPage = () => {
         const distanceMap = new Map<string, number>();
         filteredRuns.forEach(run => {
             const distance = (run.endMileage || run.startMileage) - run.startMileage;
-            distanceMap.set(run.vehicleId, (distanceMap.get(run.vehicleId) || 0) + distance);
+            if (distance > 0) {
+              distanceMap.set(run.vehicleId, (distanceMap.get(run.vehicleId) || 0) + distance);
+            }
         });
 
         return Array.from(distanceMap, ([vehicleId, distance]) => ({ name: vehicleId, total: Math.round(distance) }));
@@ -582,7 +590,7 @@ const HistoryTableRow = ({ run, users, onViewDetails, isSuperAdmin, onDelete }: 
             <TableCell><div className="flex items-center gap-2"><Truck className="h-4 w-4 text-muted-foreground"/>{run.vehicleId}</div></TableCell>
             <TableCell>{driver?.shift || 'N/A'}</TableCell>
             <TableCell>{run.stops.map(s => s.name).join(', ')}</TableCell>
-            <TableCell>{distance.toFixed(1)} km</TableCell>
+            <TableCell>{distance > 0 ? `${distance.toFixed(1)} km` : '0.0 km'}</TableCell>
             <TableCell>{format(run.startTime.toDate(), 'dd/MM/yyyy')}</TableCell>
             <TableCell className="text-right space-x-2">
                 <Button variant="outline" size="sm" onClick={onViewDetails}>
@@ -674,31 +682,18 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
     const router = useRouter();
 
     useEffect(() => {
-        if (run) {
-            setMapRun(run);
-            setIsAggregatedMap(true);
-        } else {
-            setMapRun(null);
+        if (isOpen) {
+             setMapRun(run);
+             setIsAggregatedMap(true);
         }
-        // Reset state on new run or when closing
-        setHighlightedSegmentId(null);
-        setIsMapFullscreen(false);
-    }, [run]);
-
-    // Added separate effect to handle closing, ensuring state resets properly
-    useEffect(() => {
+        // Reset state on close
         if (!isOpen) {
-             if(run) { // Keep the run context for the next open
-                setMapRun(run);
-                setIsAggregatedMap(true);
-            }
             setHighlightedSegmentId(null);
             setIsMapFullscreen(false);
         }
     }, [isOpen, run]);
 
     const mapSegments = useMemo(() => processRunSegments(mapRun, isAggregatedMap), [mapRun, isAggregatedMap]);
-    
     const displayedSegments = useMemo(() => {
         if (!highlightedSegmentId) return mapSegments.map(s => ({ ...s, opacity: 0.9 }));
 
@@ -839,7 +834,7 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
                                                                 </div>
                                                                 <div className="flex items-center gap-1">
                                                                     <Route className="h-3 w-3 text-muted-foreground" />
-                                                                    <span>{segmentDistance !== null ? `${segmentDistance.toFixed(1)} km` : 'N/A'}</span>
+                                                                    <span>{segmentDistance !== null && segmentDistance > 0 ? `${segmentDistance.toFixed(1)} km` : 'N/A'}</span>
                                                                 </div>
                                                                 <div className="flex items-center gap-1">
                                                                     <Car className="h-3 w-3 text-muted-foreground" />
