@@ -633,9 +633,6 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
 
     const mapSegments = useMemo(() => processRunSegments(mapRun, isAggregatedMap), [mapRun, isAggregatedMap]);
     
-    // This must be after all hook calls
-    if (!run) return null;
-
     const displayedSegments = useMemo(() => {
         if (!highlightedSegmentId) return mapSegments.map(s => ({ ...s, opacity: 0.9 }));
 
@@ -644,6 +641,9 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
             opacity: s.id === highlightedSegmentId ? 1.0 : 0.3,
         }));
     }, [mapSegments, highlightedSegmentId]);
+    
+    // This must be after all hook calls
+    if (!run) return null;
 
     const fullLocationHistory = mapRun?.locationHistory?.map(p => ({ latitude: p.latitude, longitude: p.longitude })) || [];
 
