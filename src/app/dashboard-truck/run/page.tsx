@@ -92,7 +92,7 @@ const PREDEFINED_STOP_POINTS: StopPoint[] = [
   "PINTURA ABS 2",
   "MOCOM MOTOR 2",
   "MANUTENÇÃO"
-];
+].sort((a, b) => a.localeCompare(b));
 
 export default function TruckRunPage() {
   const router = useRouter();
