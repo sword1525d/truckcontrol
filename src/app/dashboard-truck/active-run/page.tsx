@@ -4,7 +4,8 @@ import { Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useFirebase } from '@/firebase';
-import { doc, getDoc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { ref, update } from 'firebase/database';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -51,7 +52,7 @@ type Stop = {
 type LocationPoint = {
   latitude: number;
   longitude: number;
-  timestamp: any;
+  timestamp: number; // Using number for RTDB compatibility
 }
 
 type Run = {
@@ -64,40 +65,42 @@ type Run = {
   stops: Stop[];
   endTime: any;
   endMileage: number | null;
-  locationHistory?: LocationPoint[];
 };
 
 // Custom hook for location tracking with batching
 const useLocationTracking = (runId: string | null, isActive: boolean) => {
-  const { firestore } = useFirebase();
+  const { database } = useFirebase();
   const { toast } = useToast();
   const watchIdRef = useRef<number | null>(null);
   const locationBatchRef = useRef<LocationPoint[]>([]);
 
   const flushLocationBatch = useCallback(() => {
-    if (locationBatchRef.current.length === 0 || !runId || !firestore) {
+    if (locationBatchRef.current.length === 0 || !runId || !database) {
       return;
     }
-
-    const companyId = localStorage.getItem('companyId');
-    const sectorId = localStorage.getItem('sectorId');
-    if (!companyId || !sectorId) return;
     
-    const runRef = doc(firestore, `companies/${companyId}/sectors/${sectorId}/runs`, runId);
+    const updates: { [key: string]: any } = {};
     const batchToFlush = [...locationBatchRef.current];
     locationBatchRef.current = [];
 
-    updateDoc(runRef, {
-      locationHistory: arrayUnion(...batchToFlush)
-    }).catch(error => {
-      console.error("Erro ao salvar lote de localização: ", error);
+    batchToFlush.forEach(location => {
+      const timestamp = new Date(location.timestamp).toISOString();
+      updates[`/locations/${runId}/${timestamp}`] = {
+        lat: location.latitude,
+        lng: location.longitude,
+      };
+    });
+
+    update(ref(database), updates).catch(error => {
+      console.error("Erro ao salvar lote de localização no RTDB: ", error);
       // If flushing fails, add the batch back to be retried later
       locationBatchRef.current = [...batchToFlush, ...locationBatchRef.current];
     });
-  }, [runId, firestore]);
+
+  }, [runId, database]);
 
   useEffect(() => {
-    if (!runId || !isActive || !firestore) {
+    if (!runId || !isActive || !database) {
       if (watchIdRef.current !== null) {
         navigator.geolocation.clearWatch(watchIdRef.current);
         watchIdRef.current = null;
@@ -110,7 +113,7 @@ const useLocationTracking = (runId: string | null, isActive: boolean) => {
       const newLocation: LocationPoint = {
         latitude,
         longitude,
-        timestamp: new Date(),
+        timestamp: Date.now(),
       };
       locationBatchRef.current.push(newLocation);
     };
@@ -145,7 +148,7 @@ const useLocationTracking = (runId: string | null, isActive: boolean) => {
         navigator.geolocation.clearWatch(watchIdRef.current);
       }
     };
-  }, [runId, isActive, firestore, toast, flushLocationBatch]);
+  }, [runId, isActive, database, toast, flushLocationBatch]);
 };
 
 

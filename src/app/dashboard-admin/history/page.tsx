@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useFirebase } from '@/firebase';
 import { collection, query, where, getDocs, Timestamp, doc, deleteDoc } from 'firebase/firestore';
+import { ref, get, child } from 'firebase/database';
 import {
   Card,
   CardContent,
@@ -103,7 +104,6 @@ export type Run = {
   endTime: FirebaseTimestamp | null;
   status: 'COMPLETED';
   stops: Stop[];
-  locationHistory?: LocationPoint[];
 };
 
 export type AggregatedRun = {
@@ -255,7 +255,7 @@ const processRunSegments = (run: AggregatedRun | Run | null, isAggregated: boole
 }
 
 const HistoryPage = () => {
-    const { firestore } = useFirebase();
+    const { firestore, database } = useFirebase();
     const { toast } = useToast();
     const router = useRouter();
 
@@ -293,7 +293,7 @@ const HistoryPage = () => {
     }, [router]);
 
     const fetchInitialData = useCallback(async () => {
-        if (!firestore || !user) return;
+        if (!firestore || !user || !database) return;
         setIsLoading(true);
 
         try {
@@ -306,14 +306,31 @@ const HistoryPage = () => {
             });
             setUsers(usersMap);
 
-            // Fetch Completed Runs
+            // Fetch Completed Runs from Firestore
             const runsQuery = query(
                 collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/runs`),
                 where('status', '==', 'COMPLETED')
             );
             const querySnapshot = await getDocs(runsQuery);
             const runs = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Run));
-            setAllRuns(runs.sort((a, b) => (b.endTime?.seconds || 0) - (a.endTime?.seconds || 0)));
+
+            // Fetch location data from Realtime Database for each run
+            const runsWithLocation = await Promise.all(runs.map(async (run) => {
+                const locationsRef = ref(database, `/locations/${run.id}`);
+                const snapshot = await get(locationsRef);
+                let locationHistory: LocationPoint[] = [];
+                if (snapshot.exists()) {
+                    const data = snapshot.val();
+                    locationHistory = Object.entries(data).map(([ts, coords]: [string, any]) => ({
+                        latitude: coords.lat,
+                        longitude: coords.lng,
+                        timestamp: Timestamp.fromDate(new Date(ts))
+                    }));
+                }
+                return { ...run, locationHistory };
+            }));
+
+            setAllRuns(runsWithLocation.sort((a, b) => (b.endTime?.seconds || 0) - (a.endTime?.seconds || 0)));
 
         } catch (error) {
             console.error("Error fetching data: ", error);
@@ -321,7 +338,7 @@ const HistoryPage = () => {
         } finally {
             setIsLoading(false);
         }
-    }, [firestore, user, toast]);
+    }, [firestore, user, database, toast]);
 
     useEffect(() => {
         if(user) {
@@ -704,14 +721,14 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
         }));
     }, [mapSegments, highlightedSegmentId]);
     
-    if (!run) return null;
-    
-    const handleViewFullscreen = () => {
+     const handleViewFullscreen = () => {
       if (run) {
         // We'll pass the key of the aggregated run to the map view page
         router.push(`/dashboard-admin/map-view/${run.key}`);
       }
     };
+    
+    if (!run) return null;
     
     const fullLocationHistory = mapRun?.locationHistory?.map(p => ({ latitude: p.latitude, longitude: p.longitude })) || [];
 

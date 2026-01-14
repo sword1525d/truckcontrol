@@ -2,7 +2,8 @@
 'use client';
 import { useState, useEffect, useMemo } from 'react';
 import { useFirebase } from '@/firebase';
-import { collection, query, where, onSnapshot, Timestamp, getDocs } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, Timestamp } from 'firebase/firestore';
+import { ref, onValue } from 'firebase/database';
 import {
   Card,
   CardContent,
@@ -71,7 +72,7 @@ export type Run = {
   endMileage?: number | null;
   status: 'IN_PROGRESS' | 'COMPLETED';
   stops: Stop[];
-  locationHistory?: LocationPoint[];
+  locationHistory?: LocationPoint[]; // Location history now comes from RTDB
 };
 
 export type AggregatedRun = {
@@ -255,7 +256,7 @@ const processRunSegments = (run: AggregatedRun): Segment[] => {
 
 
 const TrackingPage = () => {
-  const { firestore } = useFirebase();
+  const { firestore, database } = useFirebase();
   const { toast } = useToast();
   const router = useRouter();
   
@@ -267,6 +268,8 @@ const TrackingPage = () => {
   const [highlightedSegmentId, setHighlightedSegmentId] = useState<string | null>(null);
   const [isMapFullscreen, setIsMapFullscreen] = useState(false);
   const [isClient, setIsClient] = useState(false);
+  
+  const [locationData, setLocationData] = useState<{[runId: string]: LocationPoint[]}>({});
 
   useEffect(() => {
     setIsClient(true);
@@ -286,13 +289,12 @@ const TrackingPage = () => {
   }, [router, toast]);
   
   useEffect(() => {
-    if (!firestore || !user) return;
+    if (!firestore || !user || !database) return;
 
     setIsLoading(true);
 
-    // Fetch Users first
     const usersCol = collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/users`);
-    getDocs(usersCol).then(usersSnapshot => {
+    const usersUnsub = onSnapshot(usersCol, (usersSnapshot) => {
         const usersMap = new Map<string, FirestoreUser>();
         usersSnapshot.forEach(doc => {
             usersMap.set(doc.id, { id: doc.id, ...doc.data() } as FirestoreUser);
@@ -301,72 +303,55 @@ const TrackingPage = () => {
     });
 
     const runsCol = collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/runs`);
+    const todayQuery = query(runsCol, 
+        where('startTime', '>=', Timestamp.fromDate(startOfDay(new Date()))),
+        where('startTime', '<=', Timestamp.fromDate(endOfDay(new Date())))
+    );
     
-    const activeRunsQuery = query(runsCol, where('status', '==', 'IN_PROGRESS'));
-    // This query might require an index. We handle the error by falling back to a client-side filter.
-    const completedRunsQuery = query(runsCol, where('status', '==', 'COMPLETED'));
+    const runsUnsub = onSnapshot(todayQuery, (snapshot) => {
+        const runs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Run));
+        setAllRuns(runs);
 
-    const handleSnapshots = (inProgressRuns: Run[], completedRuns: Run[]) => {
-        const completedToday = completedRuns.filter(run => run.endTime && isToday(run.endTime.toDate()));
-        
-        // Use a map to ensure in-progress runs overwrite completed ones if IDs conflict (shouldn't happen with good data)
-        const allRunsMap = new Map<string, Run>();
-
-        [...completedToday, ...inProgressRuns].forEach(run => {
-            allRunsMap.set(run.id, run);
+        // Subscribe to location updates for active runs
+        const activeRunIds = runs.filter(r => r.status === 'IN_PROGRESS').map(r => r.id);
+        activeRunIds.forEach(runId => {
+            const locationsRef = ref(database, `/locations/${runId}`);
+            onValue(locationsRef, (snapshot) => {
+                if (snapshot.exists()) {
+                    const data = snapshot.val();
+                    const locations: LocationPoint[] = Object.entries(data).map(([ts, coords]: [string, any]) => ({
+                        latitude: coords.lat,
+                        longitude: coords.lng,
+                        timestamp: Timestamp.fromDate(new Date(ts))
+                    }));
+                    setLocationData(prev => ({...prev, [runId]: locations}));
+                }
+            });
         });
-
-        const combinedRuns = Array.from(allRunsMap.values());
         
-        setAllRuns(combinedRuns);
         setIsLoading(false);
-    };
-
-    let inProgressRuns: Run[] = [];
-    let completedRuns: Run[] = [];
-
-    const unsubscribeInProgress = onSnapshot(activeRunsQuery, (snapshot) => {
-        inProgressRuns = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Run));
-        handleSnapshots(inProgressRuns, completedRuns);
     }, (error) => {
-        console.error("Error fetching active runs: ", error);
-        toast({ variant: 'destructive', title: 'Erro ao buscar corridas ativas' });
-        setIsLoading(false);
-    });
-
-    const unsubscribeCompleted = onSnapshot(completedRunsQuery, (snapshot) => {
-        completedRuns = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Run));
-        handleSnapshots(inProgressRuns, completedRuns);
-    }, (error) => {
-        // This query can fail if the index is not created. We'll fall back to client-side filtering.
-        if (error.code === 'failed-precondition') {
-          console.warn("Firestore index for completed runs query is not created. Filtering on the client.");
-          const allRunsQuery = query(runsCol); // Fetch all runs for the sector
-          const unsubscribeAll = onSnapshot(allRunsQuery, (allDocsSnapshot) => {
-            const allDocs = allDocsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as Run}));
-            inProgressRuns = allDocs.filter(r => r.status === 'IN_PROGRESS');
-            completedRuns = allDocs.filter(r => r.status === 'COMPLETED');
-            handleSnapshots(inProgressRuns, completedRuns);
-          });
-          return unsubscribeAll;
-        } else {
-          toast({ variant: 'destructive', title: 'Erro ao buscar corridas concluídas' });
-        }
+        console.error("Error fetching runs:", error);
+        toast({ variant: "destructive", title: "Erro ao buscar corridas" });
         setIsLoading(false);
     });
 
     return () => {
-        unsubscribeInProgress();
-        unsubscribeCompleted();
+      usersUnsub();
+      runsUnsub();
     };
-  }, [firestore, user, toast]);
+  }, [firestore, user, database, toast]);
 
  const aggregatedRuns = useMemo(() => {
+        const runsWithLocations = allRuns.map(run => ({
+            ...run,
+            locationHistory: locationData[run.id] || []
+        }));
+
         const groupedRuns = new Map<string, Run[]>();
-        allRuns.forEach(run => {
+        runsWithLocations.forEach(run => {
             const driver = users.get(run.driverId);
             const runDate = format(run.startTime.toDate(), 'yyyy-MM-dd');
-            // Group by vehicle, shift, and date
             const key = `${run.vehicleId}-${driver?.shift || 'sem-turno'}-${runDate}`;
             
             if (!groupedRuns.has(key)) {
@@ -386,14 +371,13 @@ const TrackingPage = () => {
             const allLocations = runs.flatMap(r => r.locationHistory || []).sort((a, b) => a.timestamp.seconds - b.timestamp.seconds);
             
             const startMileage = firstRun.startMileage;
-            // Use last run's endMileage if it exists, otherwise use last stop's mileage
             const endMileage = lastRun.endMileage ?? allStops.filter(s => s.mileageAtStop).slice(-1)[0]?.mileageAtStop ?? null;
             const totalDistance = (endMileage && startMileage) ? endMileage - startMileage : 0;
             const status = runs.some(r => r.status === 'IN_PROGRESS') ? 'IN_PROGRESS' : 'COMPLETED';
 
 
             aggregated.push({
-                key, // Using the group key for the accordion item
+                key,
                 driverId: firstRun.driverId,
                 driverName: firstRun.driverName,
                 vehicleId: firstRun.vehicleId,
@@ -411,12 +395,11 @@ const TrackingPage = () => {
         });
         
         return aggregated.sort((a, b) => {
-             // Sort by status first (IN_PROGRESS comes first), then by time
             if (a.status === 'IN_PROGRESS' && b.status !== 'IN_PROGRESS') return -1;
             if (a.status !== 'IN_PROGRESS' && b.status === 'IN_PROGRESS') return 1;
             return b.startTime.seconds - a.startTime.seconds;
         });
-    }, [allRuns, users]);
+    }, [allRuns, users, locationData]);
 
 
   const handleViewRoute = (runKey: string) => {
