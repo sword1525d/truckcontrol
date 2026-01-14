@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Suspense } from 'react';
@@ -68,11 +67,34 @@ type Run = {
   locationHistory?: LocationPoint[];
 };
 
-// Custom hook for location tracking
+// Custom hook for location tracking with batching
 const useLocationTracking = (runId: string | null, isActive: boolean) => {
   const { firestore } = useFirebase();
   const { toast } = useToast();
   const watchIdRef = useRef<number | null>(null);
+  const locationBatchRef = useRef<LocationPoint[]>([]);
+
+  const flushLocationBatch = useCallback(() => {
+    if (locationBatchRef.current.length === 0 || !runId || !firestore) {
+      return;
+    }
+
+    const companyId = localStorage.getItem('companyId');
+    const sectorId = localStorage.getItem('sectorId');
+    if (!companyId || !sectorId) return;
+    
+    const runRef = doc(firestore, `companies/${companyId}/sectors/${sectorId}/runs`, runId);
+    const batchToFlush = [...locationBatchRef.current];
+    locationBatchRef.current = [];
+
+    updateDoc(runRef, {
+      locationHistory: arrayUnion(...batchToFlush)
+    }).catch(error => {
+      console.error("Erro ao salvar lote de localização: ", error);
+      // If flushing fails, add the batch back to be retried later
+      locationBatchRef.current = [...batchToFlush, ...locationBatchRef.current];
+    });
+  }, [runId, firestore]);
 
   useEffect(() => {
     if (!runId || !isActive || !firestore) {
@@ -83,30 +105,14 @@ const useLocationTracking = (runId: string | null, isActive: boolean) => {
       return;
     }
 
-    const companyId = localStorage.getItem('companyId');
-    const sectorId = localStorage.getItem('sectorId');
-
-    if (!companyId || !sectorId) {
-      toast({ variant: 'destructive', title: 'Erro', description: 'Informações de empresa/setor não encontradas.' });
-      return;
-    }
-
-    const runRef = doc(firestore, `companies/${companyId}/sectors/${sectorId}/runs`, runId);
-
     const handleSuccess = (position: GeolocationPosition) => {
       const { latitude, longitude } = position.coords;
       const newLocation: LocationPoint = {
         latitude,
         longitude,
-        timestamp: new Date(), // Using client time for location timestamp
+        timestamp: new Date(),
       };
-
-      updateDoc(runRef, {
-        locationHistory: arrayUnion(newLocation)
-      }).catch(error => {
-        console.error("Erro ao salvar localização: ", error);
-        // Don't toast every time, could be overwhelming
-      });
+      locationBatchRef.current.push(newLocation);
     };
 
     const handleError = (error: GeolocationPositionError) => {
@@ -127,13 +133,19 @@ const useLocationTracking = (runId: string | null, isActive: boolean) => {
     } else {
       toast({ variant: 'destructive', title: 'Erro', description: 'Geolocalização não é suportada neste navegador.' });
     }
+    
+    // Set up an interval to flush the batch periodically
+    const flushInterval = setInterval(flushLocationBatch, 30000); // Flush every 30 seconds
 
+    // Flush when the component unmounts or dependencies change
     return () => {
+      clearInterval(flushInterval);
+      flushLocationBatch();
       if (watchIdRef.current !== null) {
         navigator.geolocation.clearWatch(watchIdRef.current);
       }
     };
-  }, [runId, isActive, firestore, toast]);
+  }, [runId, isActive, firestore, toast, flushLocationBatch]);
 };
 
 
