@@ -36,7 +36,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Button } from '@/components/ui/button';
-import { Loader2, Calendar as CalendarIcon, Route, Truck, User, Clock, Car, Package, Warehouse, Milestone, Hourglass, MapIcon, EyeOff, Maximize, Minimize, Trash2, Building } from 'lucide-react';
+import { Loader2, Calendar as CalendarIcon, Route, Truck, User, Clock, Car, Package, Warehouse, Milestone, Hourglass, MapIcon, EyeOff, Maximize, Minimize, Trash2, Building, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -631,10 +631,10 @@ const HistoryPage = () => {
 
     return (
         <div className="flex-1 space-y-6">
-             <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
-                <h2 className="text-3xl font-bold tracking-tight">Histórico e Análise</h2>
-                <div className="flex flex-wrap items-center justify-start md:justify-end gap-2">
-                    <Button onClick={handleExport}>Exportar para Excel</Button>
+            <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-4">
+                <h1 className="text-3xl font-bold tracking-tight">Histórico e Análise</h1>
+                <div className="flex w-full flex-wrap items-center justify-start gap-2 lg:w-auto lg:justify-end">
+                    <Button variant="outline" onClick={handleExport}><Download className="mr-2 h-4 w-4" />Exportar</Button>
                     <DateFilter date={date} setDate={setDate} />
                     {isSuperAdmin && <SectorFilter sectors={allSectors} selectedSector={selectedSector} onSectorChange={setSelectedSector} />}
                     <ShiftFilter selectedShift={selectedShift} onShiftChange={setSelectedShift} />
@@ -643,12 +643,15 @@ const HistoryPage = () => {
                 </div>
             </div>
 
-            <Tabs defaultValue="analysis" className="space-y-4">
-                <TabsList>
-                    <TabsTrigger value="analysis">Análise Gráfica</TabsTrigger>
-                    <TabsTrigger value="history">Histórico de Corridas</TabsTrigger>
-                </TabsList>
-                <TabsContent value="analysis" className="space-y-4">
+            <Tabs defaultValue="analysis" className="w-full">
+                <div className="flex justify-center border-b">
+                    <TabsList className="grid w-full max-w-md grid-cols-2">
+                        <TabsTrigger value="analysis">Análise Gráfica</TabsTrigger>
+                        <TabsTrigger value="history">Histórico de Corridas</TabsTrigger>
+                    </TabsList>
+                </div>
+                
+                <TabsContent value="analysis" className="py-6 space-y-4">
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                         <KpiCard title="Corridas Concluídas" value={kpis.totalRuns.toString()} />
                         <KpiCard title="Paradas Totais" value={kpis.totalStops.toString()} />
@@ -718,7 +721,7 @@ const HistoryPage = () => {
                         </Card>
                     </div>
                 </TabsContent>
-                <TabsContent value="history">
+                <TabsContent value="history" className="py-6">
                     <Card>
                         <CardHeader>
                             <CardTitle>Histórico de Corridas</CardTitle>
@@ -792,7 +795,7 @@ const HistoryTableRow = ({ run, users, onViewDetails, isSuperAdmin, onDelete }: 
             <TableCell>{format(run.startTime.toDate(), 'dd/MM/yyyy')}</TableCell>
             <TableCell className="text-right space-x-2">
                 <Button variant="outline" size="sm" onClick={onViewDetails}>
-                    <Route className="h-4 w-4 mr-2" />
+                    <Route className="mr-2 h-4 w-4" />
                     Ver Detalhes
                 </Button>
                 {isSuperAdmin && (
@@ -827,7 +830,7 @@ const DateFilter = ({ date, setDate }: { date: DateRange | undefined, setDate: (
           <Button
             id="date"
             variant={"outline"}
-            className="w-full sm:w-auto md:w-[260px] justify-start text-left font-normal"
+            className="w-full justify-start text-left font-normal sm:w-auto"
           >
             <CalendarIcon className="mr-2 h-4 w-4" />
             {date?.from ? (
@@ -860,7 +863,7 @@ const DateFilter = ({ date, setDate }: { date: DateRange | undefined, setDate: (
 
 const ShiftFilter = ({ selectedShift, onShiftChange }: { selectedShift: string, onShiftChange: (shift: string) => void }) => (
     <Select value={selectedShift} onValueChange={onShiftChange}>
-        <SelectTrigger className="w-full sm:w-auto md:w-[150px]">
+        <SelectTrigger className="w-full sm:w-auto">
             <SelectValue placeholder="Filtrar por turno" />
         </SelectTrigger>
         <SelectContent>
@@ -873,7 +876,7 @@ const ShiftFilter = ({ selectedShift, onShiftChange }: { selectedShift: string, 
 
 const SectorFilter = ({ sectors, selectedSector, onSectorChange }: { sectors: SectorInfo[], selectedSector: string, onSectorChange: (sector: string) => void }) => (
     <Select value={selectedSector} onValueChange={onSectorChange}>
-        <SelectTrigger className="w-full sm:w-auto md:w-[180px]">
+        <SelectTrigger className="w-full sm:w-auto">
              <SelectValue placeholder="Filtrar por setor" />
         </SelectTrigger>
         <SelectContent>
@@ -887,7 +890,7 @@ const SectorFilter = ({ sectors, selectedSector, onSectorChange }: { sectors: Se
 
 const VehicleFilter = ({ vehicles, selectedVehicle, onVehicleChange }: { vehicles: string[], selectedVehicle: string, onVehicleChange: (vehicle: string) => void }) => (
     <Select value={selectedVehicle} onValueChange={onVehicleChange}>
-        <SelectTrigger className="w-full sm:w-auto md:w-[180px]">
+        <SelectTrigger className="w-full sm:w-auto">
              <SelectValue placeholder="Filtrar por veículo" />
         </SelectTrigger>
         <SelectContent>
@@ -901,7 +904,7 @@ const VehicleFilter = ({ vehicles, selectedVehicle, onVehicleChange }: { vehicle
 
 const DriverFilter = ({ drivers, selectedDriver, onDriverChange }: { drivers: FirestoreUser[], selectedDriver: string, onDriverChange: (driver: string) => void }) => (
     <Select value={selectedDriver} onValueChange={onDriverChange}>
-        <SelectTrigger className="w-full sm:w-auto md:w-[180px]">
+        <SelectTrigger className="w-full sm:w-auto">
              <SelectValue placeholder="Filtrar por motorista" />
         </SelectTrigger>
         <SelectContent>
