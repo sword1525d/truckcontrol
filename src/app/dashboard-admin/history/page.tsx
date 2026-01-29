@@ -631,10 +631,9 @@ const HistoryPage = () => {
 
     return (
         <div className="flex-1 space-y-6">
-            <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-4">
+            <div className="space-y-4">
                 <h1 className="text-3xl font-bold tracking-tight">Histórico e Análise</h1>
-                <div className="flex w-full flex-wrap items-center justify-start gap-2 lg:w-auto lg:justify-end">
-                    <Button variant="outline" onClick={handleExport}><Download className="mr-2 h-4 w-4" />Exportar</Button>
+                <div className="flex w-full flex-wrap items-center justify-start gap-2">
                     <DateFilter date={date} setDate={setDate} />
                     {isSuperAdmin && <SectorFilter sectors={allSectors} selectedSector={selectedSector} onSectorChange={setSelectedSector} />}
                     <ShiftFilter selectedShift={selectedShift} onShiftChange={setSelectedShift} />
@@ -724,8 +723,13 @@ const HistoryPage = () => {
                 <TabsContent value="history" className="py-6">
                     <Card>
                         <CardHeader>
-                            <CardTitle>Histórico de Corridas</CardTitle>
-                            <CardDescription>Lista de corridas concluídas com os filtros selecionados.</CardDescription>
+                            <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-4">
+                                <div>
+                                    <CardTitle>Histórico de Corridas</CardTitle>
+                                    <CardDescription>Lista de corridas concluídas com os filtros selecionados.</CardDescription>
+                                </div>
+                                <Button variant="outline" onClick={handleExport}><Download className="mr-2 h-4 w-4" />Exportar para Excel</Button>
+                            </div>
                         </CardHeader>
                         <CardContent>
                         {isLoading ? <div className="flex justify-center items-center h-[300px]"><Loader2 className="w-8 h-8 animate-spin"/></div> :
