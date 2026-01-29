@@ -14,11 +14,13 @@ const DEFAULT_ZOOM = 12;
 
 interface RealTimeMapProps {
   segments?: (Segment & { opacity?: number })[];
-  fullLocationHistory: { latitude: number; longitude: number }[];
-  vehicleId: string;
+  fullLocationHistory?: { latitude: number; longitude: number }[];
+  vehicleId?: string;
+  fleetData?: { id: string; latitude: number; longitude: number }[];
 }
 
-const RealTimeMap = ({ segments, fullLocationHistory, vehicleId }: RealTimeMapProps) => {
+
+const RealTimeMap = ({ segments, fullLocationHistory = [], vehicleId, fleetData = [] }: RealTimeMapProps) => {
   const mapRef = useRef<MapRef>(null);
   const [showPopup, setShowPopup] = useState<Segment | null>(null);
   const { firestore } = useFirebase();
@@ -43,7 +45,22 @@ const RealTimeMap = ({ segments, fullLocationHistory, vehicleId }: RealTimeMapPr
 
 
   useEffect(() => {
-    if (mapRef.current && fullLocationHistory.length > 0) {
+    if (!mapRef.current) return;
+    
+    // Prioritize fleet view
+    if (fleetData && fleetData.length > 0) {
+        const coordinates = fleetData.map(p => [p.longitude, p.latitude]) as [number, number][];
+        if (coordinates.length === 0) return;
+        const bounds = new LngLatBounds(coordinates[0], coordinates[0]);
+        for (const coord of coordinates) {
+          bounds.extend(coord);
+        }
+        mapRef.current.fitBounds(bounds, {
+          padding: coordinates.length > 1 ? 80 : 200, // More padding if only one truck
+          duration: 1000,
+          maxZoom: initialZoom, // Don't zoom in too far
+        });
+    } else if (fullLocationHistory.length > 0) {
       // If segments are provided, fit the map to the bounds of the entire route.
       if (segments && segments.length > 0) {
         const coordinates = fullLocationHistory.map(p => [p.longitude, p.latitude]) as [number, number][];
@@ -70,8 +87,8 @@ const RealTimeMap = ({ segments, fullLocationHistory, vehicleId }: RealTimeMapPr
         }
       }
     }
-  // The dependency array ensures this effect runs when the view type (segments vs. no segments) changes.
-  }, [segments, fullLocationHistory, initialZoom]);
+  // The dependency array ensures this effect runs when the view type changes.
+  }, [fleetData, segments, fullLocationHistory, initialZoom]);
 
 
   if (!MAPBOX_TOKEN) {
@@ -84,7 +101,7 @@ const RealTimeMap = ({ segments, fullLocationHistory, vehicleId }: RealTimeMapPr
     );
   }
 
-  if (fullLocationHistory.length === 0) {
+  if (fullLocationHistory.length === 0 && fleetData.length === 0) {
     return (
       <div className="flex items-center justify-center h-full bg-muted rounded-lg">
         <p className="text-muted-foreground">Sem dados de localização para exibir.</p>
@@ -92,16 +109,20 @@ const RealTimeMap = ({ segments, fullLocationHistory, vehicleId }: RealTimeMapPr
     );
   }
 
-  const lastPosition = fullLocationHistory[fullLocationHistory.length - 1];
+  const lastPosition = fullLocationHistory.length > 0 ? fullLocationHistory[fullLocationHistory.length - 1] : null;
+  const centerPoint = fleetData?.[0] || fullLocationHistory?.[0];
+  
+  const initialViewState = {
+      longitude: centerPoint?.longitude || -46.6333,
+      latitude: centerPoint?.latitude || -23.5505,
+      zoom: initialZoom,
+  };
+
 
   return (
     <Map
       ref={mapRef}
-      initialViewState={{
-        longitude: lastPosition?.longitude || -46.6333,
-        latitude: lastPosition?.latitude || -23.5505,
-        zoom: initialZoom,
-      }}
+      initialViewState={initialViewState}
       style={{ width: '100%', height: '100%', borderRadius: '0.5rem' }}
       mapStyle="mapbox://styles/mapbox/streets-v12"
       mapboxAccessToken={MAPBOX_TOKEN}
@@ -163,23 +184,40 @@ const RealTimeMap = ({ segments, fullLocationHistory, vehicleId }: RealTimeMapPr
         </Popup>
       )}
 
-
-      {lastPosition && (
+    {fleetData && fleetData.length > 0 ? (
+        fleetData.map(truck => (
+            <Marker
+                key={truck.id}
+                longitude={truck.longitude}
+                latitude={truck.latitude}
+                anchor="bottom"
+            >
+                <div className="relative flex flex-col items-center">
+                    <div className="bg-primary text-primary-foreground text-xs font-bold px-2 py-0.5 rounded-md -mt-8 shadow-lg whitespace-nowrap">
+                        {truck.id}
+                    </div>
+                    <div className="bg-primary rounded-full p-2 shadow-lg mt-1">
+                        <Truck className="h-5 w-5 text-primary-foreground" />
+                    </div>
+                </div>
+            </Marker>
+        ))
+    ) : lastPosition && (
         <Marker
-          longitude={lastPosition.longitude}
-          latitude={lastPosition.latitude}
-          anchor="bottom"
+            longitude={lastPosition.longitude}
+            latitude={lastPosition.latitude}
+            anchor="bottom"
         >
-          <div className="relative flex flex-col items-center">
-            <div className="bg-primary text-primary-foreground text-xs font-bold px-2 py-0.5 rounded-md -mt-8 shadow-lg whitespace-nowrap">
-              {vehicleId}
+            <div className="relative flex flex-col items-center">
+                <div className="bg-primary text-primary-foreground text-xs font-bold px-2 py-0.5 rounded-md -mt-8 shadow-lg whitespace-nowrap">
+                {vehicleId}
+                </div>
+                <div className="bg-primary rounded-full p-2 shadow-lg mt-1">
+                <Truck className="h-5 w-5 text-primary-foreground" />
+                </div>
             </div>
-            <div className="bg-primary rounded-full p-2 shadow-lg mt-1">
-              <Truck className="h-5 w-5 text-primary-foreground" />
-            </div>
-          </div>
         </Marker>
-      )}
+    )}
     </Map>
   );
 };

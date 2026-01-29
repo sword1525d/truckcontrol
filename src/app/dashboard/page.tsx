@@ -10,7 +10,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Truck, User, Wrench, PlayCircle, Route, Timer, X, Hourglass, EyeOff, Milestone, Maximize, Car, Package, Warehouse, CheckCircle, Clock, Calendar as CalendarIcon, Fuel, ClipboardCheck, Building, Download, Trash2, MapPin, FileText } from 'lucide-react';
+import { Loader2, Truck, User, Wrench, PlayCircle, Route, Timer, X, Hourglass, EyeOff, Milestone, Maximize, Car, Package, Warehouse, CheckCircle, Clock, Calendar as CalendarIcon, Fuel, ClipboardCheck, Building, Download, Trash2, FileText, MapPin, Map } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -32,7 +32,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
 import * as XLSX from 'xlsx';
-import { Separator } from '@/components/ui/separator';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 
@@ -243,6 +242,8 @@ const AcompanhamentoTab = () => {
     type Vehicle = { id: string; model: string; isTruck: boolean; status: 'PARADO' | 'EM_CORRIDA' | 'EM_MANUTENCAO'; };
     const [vehicleStatuses, setVehicleStatuses] = useState<(Vehicle & { driverName?: string })[]>([]);
     const [isOverviewLoading, setIsOverviewLoading] = useState(true);
+    const [isFleetMapOpen, setIsFleetMapOpen] = useState(false);
+    const [activeTrucks, setActiveTrucks] = useState<{ id: string; latitude: number; longitude: number }[]>([]);
 
 
     useEffect(() => setIsClient(true), []);
@@ -359,6 +360,23 @@ const AcompanhamentoTab = () => {
             return b.startTime.seconds - a.startTime.seconds;
         });
     }, [allRuns, users]);
+    
+    useEffect(() => {
+        const inProgressRuns = aggregatedRuns.filter(run => run.status === 'IN_PROGRESS');
+        const truckLocations = inProgressRuns.flatMap(run => {
+            if (run.locationHistory && run.locationHistory.length > 0) {
+                const lastLocation = run.locationHistory[run.locationHistory.length - 1];
+                return [{
+                    id: run.vehicleId,
+                    latitude: lastLocation.latitude,
+                    longitude: lastLocation.longitude
+                }];
+            }
+            return [];
+        });
+        setActiveTrucks(truckLocations);
+    }, [aggregatedRuns]);
+
 
     const handleViewRoute = (runKey: string) => {
         const run = aggregatedRuns.find(r => r.key === runKey);
@@ -407,8 +425,16 @@ const AcompanhamentoTab = () => {
                     </div>
                     <Card>
                         <CardHeader>
-                            <CardTitle className="flex items-center gap-2"><Truck className="h-6 w-6"/> Status da Frota</CardTitle>
-                            <CardDescription>Visão geral de todos os caminhões do setor.</CardDescription>
+                            <div className="flex justify-between items-center">
+                                <div>
+                                    <CardTitle className="flex items-center gap-2"><Truck className="h-6 w-6"/> Status da Frota</CardTitle>
+                                    <CardDescription>Visão geral de todos os caminhões do setor.</CardDescription>
+                                </div>
+                                <Button variant="outline" size="icon" onClick={() => setIsFleetMapOpen(true)} disabled={activeTrucks.length === 0}>
+                                    <Map className="h-5 w-5" />
+                                    <span className="sr-only">Ver mapa da frota</span>
+                                </Button>
+                            </div>
                         </CardHeader>
                         <CardContent>
                             {vehicleStatuses.length === 0 ? (
@@ -461,6 +487,17 @@ const AcompanhamentoTab = () => {
                             </div>
                         </>
                     )}
+                </DialogContent>
+            </Dialog>
+            <Dialog open={isFleetMapOpen} onOpenChange={setIsFleetMapOpen}>
+                <DialogContent className="max-w-[90vw] w-full h-[90vh] flex flex-col p-2 sm:p-6">
+                    <DialogHeader>
+                        <DialogTitle>Localização da Frota Ativa</DialogTitle>
+                        <DialogDescription>Posição em tempo real dos caminhões que estão em corrida.</DialogDescription>
+                    </DialogHeader>
+                    <div className="flex-1 rounded-lg overflow-hidden">
+                        <RealTimeMap fleetData={activeTrucks} />
+                    </div>
                 </DialogContent>
             </Dialog>
         </div>
@@ -1205,13 +1242,11 @@ export default function DashboardPage() {
        <Tabs defaultValue="acompanhamento" className="w-full">
         <TabsList className={cn("grid w-full", isMobile ? "grid-cols-2" : "grid-cols-5")}>
             <TabsTrigger value="acompanhamento">Acompanhamento</TabsTrigger>
-            {!isMobile && (
-              <>
-                <TabsTrigger value="analise">Análise</TabsTrigger>
-                <TabsTrigger value="historico">Histórico</TabsTrigger>
-                <TabsTrigger value="abastecimentos">Abastecimentos</TabsTrigger>
-              </>
-            )}
+            
+            <TabsTrigger value="analise">Análise</TabsTrigger>
+            <TabsTrigger value="historico">Histórico</TabsTrigger>
+            <TabsTrigger value="abastecimentos">Abastecimentos</TabsTrigger>
+            
             <TabsTrigger value="checklists">Checklists</TabsTrigger>
         </TabsList>
 
@@ -1219,19 +1254,17 @@ export default function DashboardPage() {
             <AcompanhamentoTab />
         </TabsContent>
         
-        {!isMobile && (
-          <>
-            <TabsContent value="analise" className="mt-6">
-                <AnaliseTab />
-            </TabsContent>
-            <TabsContent value="historico" className="mt-6">
-                <HistoricoTab />
-            </TabsContent>
-            <TabsContent value="abastecimentos" className="mt-6">
-                <AbastecimentosTab />
-            </TabsContent>
-          </>
-        )}
+        
+        <TabsContent value="analise" className="mt-6">
+            <AnaliseTab />
+        </TabsContent>
+        <TabsContent value="historico" className="mt-6">
+            <HistoricoTab />
+        </TabsContent>
+        <TabsContent value="abastecimentos" className="mt-6">
+            <AbastecimentosTab />
+        </TabsContent>
+        
 
         <TabsContent value="checklists" className="mt-6">
             <ChecklistsTab />
