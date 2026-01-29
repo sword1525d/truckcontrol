@@ -564,18 +564,36 @@ const HistoryPage = () => {
             const sector = allSectors.find(s => s.id === run.sectorId);
             const distance = run.endMileage ? run.endMileage - run.startMileage : 0;
             const durationSeconds = run.endTime ? run.endTime.seconds - run.startTime.seconds : 0;
-            const duration = durationSeconds > 0 ? formatDistanceStrict(0, durationSeconds * 1000, { locale: ptBR }) : 'N/A';
+            const totalDuration = durationSeconds > 0 ? formatDistanceStrict(0, durationSeconds * 1000, { locale: ptBR }) : 'N/A';
             const stops = run.stops.map(s => s.name).join(', ');
+            
+            // New fields calculation
+            const startTime = format(run.startTime.toDate(), 'HH:mm');
+            const endTime = run.endTime ? format(run.endTime.toDate(), 'HH:mm') : 'N/A';
+            
+            const totalStopTimeSeconds = run.stops.reduce((acc, stop) => {
+                if (stop.arrivalTime && stop.departureTime) {
+                    return acc + (stop.departureTime.seconds - stop.arrivalTime.seconds);
+                }
+                return acc;
+            }, 0);
+            const idleTime = totalStopTimeSeconds > 0 ? formatDistanceStrict(0, totalStopTimeSeconds * 1000, { locale: ptBR, unit: 'minute' }) : '0 min';
+            
+            const observations = run.stops.map(s => s.observation).filter(Boolean).join('; ');
 
             return {
-                'Data': format(run.startTime.toDate(), 'dd/MM/yyyy HH:mm'),
+                'Data': format(run.startTime.toDate(), 'dd/MM/yyyy'),
+                'Horário Inicial': startTime,
+                'Horário Final': endTime,
+                'Duração Total': totalDuration,
+                'Tempo Parado': idleTime,
                 'Setor': sector?.name || run.sectorId,
                 'Veículo': run.vehicleId,
                 'Motorista': run.driverName,
                 'Turno': driver?.shift || 'N/A',
                 'Paradas': stops,
+                'Observações': observations,
                 'Distância (km)': distance > 0 ? distance.toFixed(1) : '0.0',
-                'Duração': duration,
                 'Km Inicial': run.startMileage,
                 'Km Final': run.endMileage || 'N/A'
             };
