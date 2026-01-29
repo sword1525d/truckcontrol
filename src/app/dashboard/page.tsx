@@ -1,3 +1,4 @@
+
 'use client';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useFirebase } from '@/firebase';
@@ -10,7 +11,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Truck, User, Wrench, PlayCircle, Route, Timer, X, Hourglass, EyeOff, Milestone, Maximize, Car, Package, Warehouse, CheckCircle, Clock, Calendar as CalendarIcon, Fuel, ClipboardCheck, Building, Download, FileText, Trash2 } from 'lucide-react';
+import { Loader2, Truck, User, Wrench, PlayCircle, Route, Timer, X, Hourglass, EyeOff, Milestone, Maximize, Car, Package, Warehouse, CheckCircle, Clock, Calendar as CalendarIcon, Fuel, ClipboardCheck, Building, Download, FileText, Trash2, MapPin } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -216,7 +217,7 @@ const processRunSegments = (run: AggregatedRun | Run | null, isAggregated: boole
         if (stop.mileageAtStop) lastMileage = stop.mileageAtStop;
     }
 
-    if ((run as AggregatedRun).status === 'IN_PROGRESS' && sortedAndFilteredLocations.length > 0) {
+    if (run.status === 'IN_PROGRESS' && sortedAndFilteredLocations.length > 0) {
         const lastStop = sortedStops[sortedStops.length - 1];
         if (lastStop && lastStop.departureTime) {
             const finalSegmentPath = sortedAndFilteredLocations
@@ -542,7 +543,7 @@ const RunAccordionItem = ({ run, users, onViewRoute }: { run: AggregatedRun, use
                         <div className="text-sm text-muted-foreground flex items-center gap-2"><Avatar className="h-5 w-5"><AvatarImage src={driver?.photoURL} alt={run.driverName} /><AvatarFallback className="text-xs">{getInitials(run.driverName)}</AvatarFallback></Avatar>{run.driverName}</div>
                     </div>
                     <div className="flex-1 w-full sm:w-auto"><div className="flex justify-between text-sm mb-1"><span className="font-medium">{isCompletedRun ? 'Concluído' : `${completedStops} de ${totalStops}`}</span><span className="font-bold text-primary">{Math.round(progress)}%</span></div><Progress value={progress} className="h-2" /></div>
-                    <div className="flex-none"><Badge variant={isCompletedRun ? 'default' : (currentStop ? "default" : "secondary")} className={`truncate ${isCompletedRun ? 'bg-green-600' : ''}`}><MapIcon className="h-3 w-3 mr-1.5"/>{isCompletedRun ? `Finalizado às ${formatFirebaseTime(run.endTime)}` : (currentStop ? currentStop.name : 'Iniciando...')}</Badge></div>
+                    <div className="flex-none"><Badge variant={isCompletedRun ? 'default' : (currentStop ? "default" : "secondary")} className={`truncate ${isCompletedRun ? 'bg-green-600' : ''}`}><MapPin className="h-3 w-3 mr-1.5"/>{isCompletedRun ? `Finalizado às ${formatFirebaseTime(run.endTime)}` : (currentStop ? currentStop.name : 'Iniciando...')}</Badge></div>
                 </div>
             </AccordionTrigger>
             <AccordionContent className="p-4 pt-0">
@@ -610,7 +611,7 @@ const RunDetailsContent = ({ run, onSegmentClick, highlightedSegmentId }: { run:
 
 
 // --- Componente da Aba: Histórico e Análise ---
-const AnalysisAndHistoryContent = ({ mode }: { mode: 'analysis' | 'history' }) => {
+const HistoricoTab = ({ mode }: { mode: 'analysis' | 'history' }) => {
     const { firestore } = useFirebase();
     const { toast } = useToast();
     const router = useRouter();
@@ -925,7 +926,7 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
                                         const globalStopIndex = run.stops.findIndex(s => s.arrivalTime?.seconds === stop.arrivalTime?.seconds); const previousStop = globalStopIndex > 0 ? run.stops[globalStopIndex - 1] : null; const segmentStartTime = previousStop?.departureTime ?? originalRun.startTime; const startMileage = previousStop?.mileageAtStop ?? run.startMileage; const segmentDistance = (stop.mileageAtStop && startMileage) ? stop.mileageAtStop - startMileage : null; const segmentId = `segment-${globalStopIndex}`;
                                         return (
                                             <Card key={`${originalRun.id}-${stopIndex}`} className={cn("bg-muted/50 mb-2 cursor-pointer transition-all hover:bg-muted", highlightedSegmentId === segmentId && "ring-2 ring-primary bg-muted")} onClick={() => { setMapRun(run); setIsAggregatedMap(true); setHighlightedSegmentId(segmentId); }}>
-                                                <CardHeader className="pb-3 flex-row items-center justify-between"><CardTitle className="text-base flex items-center gap-2"><Milestone className="h-5 w-5 text-muted-foreground" />{stop.name}</CardTitle><Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); handleViewIndividualRoute(originalRun); }}><MapIcon className="h-4 w-4" /></Button></CardHeader>
+                                                <CardHeader className="pb-3 flex-row items-center justify-between"><CardTitle className="text-base flex items-center gap-2"><Milestone className="h-5 w-5 text-muted-foreground" />{stop.name}</CardTitle><Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); handleViewIndividualRoute(originalRun); }}><MapPin className="h-4 w-4" /></Button></CardHeader>
                                                 <CardContent><div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs"><div className="flex items-center gap-1"><Clock className="h-3 w-3 text-muted-foreground" /><span>{formatFirebaseTime(segmentStartTime)} - {formatFirebaseTime(stop.arrivalTime)}</span></div><div className="flex items-center gap-1"><Route className="h-3 w-3 text-muted-foreground" /><span>{segmentDistance !== null && segmentDistance > 0 ? `${segmentDistance.toFixed(1)} km` : 'N/A'}</span></div><div className="flex items-center gap-1"><Car className="h-3 w-3 text-muted-foreground" /><span>Ocup: {stop.collectedOccupiedCars ?? 'N/A'}</span></div><div className="flex items-center gap-1"><Package className="h-3 w-3 text-muted-foreground" /><span>Vaz: {stop.collectedEmptyCars ?? 'N/A'}</span></div><div className="flex items-center gap-1 col-span-2"><Warehouse className="h-3 w-3 text-muted-foreground" /><span>Lotação: {stop.occupancy ?? 'N/A'}%</span></div>{stop.observation && <div className="col-span-full border-t mt-2 pt-2"><p className="text-xs text-muted-foreground"><strong>Obs:</strong> {stop.observation}</p></div>}</div></CardContent>
                                             </Card>
                                         )
@@ -1106,7 +1107,7 @@ export default function DashboardPage() {
        </div>
        
        <Tabs defaultValue="visao-geral" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-6">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-5">
             <TabsTrigger value="visao-geral">Visão Geral</TabsTrigger>
             <TabsTrigger value="acompanhamento">Acompanhamento</TabsTrigger>
             <TabsTrigger value="analise">Análise</TabsTrigger>
@@ -1122,10 +1123,10 @@ export default function DashboardPage() {
             <AcompanhamentoTab />
         </TabsContent>
         <TabsContent value="analise" className="mt-6">
-            <AnalysisAndHistoryContent mode="analysis" />
+            <HistoricoTab mode="analysis" />
         </TabsContent>
         <TabsContent value="historico" className="mt-6">
-            <AnalysisAndHistoryContent mode="history" />
+            <HistoricoTab mode="history" />
         </TabsContent>
         <TabsContent value="abastecimentos" className="mt-6">
             <AbastecimentosTab />
@@ -1137,3 +1138,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+
