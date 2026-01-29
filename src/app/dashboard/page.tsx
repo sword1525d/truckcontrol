@@ -11,7 +11,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Truck, User, Wrench, PlayCircle, Route, Timer, X, Hourglass, EyeOff, Milestone, Maximize, Car, Package, Warehouse, CheckCircle, Clock, Calendar as CalendarIcon, Fuel, ClipboardCheck, Building, Download, Trash2, MapPin } from 'lucide-react';
+import { Loader2, Truck, User, Wrench, PlayCircle, Route, Timer, X, Hourglass, EyeOff, Milestone, Maximize, Car, Package, Warehouse, CheckCircle, Clock, Calendar as CalendarIcon, Fuel, ClipboardCheck, Building, Download, Trash2, MapPin, FileText } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -33,6 +33,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
 import * as XLSX from 'xlsx';
+import { Separator } from '@/components/ui/separator';
 
 // --- Helper Functions and Constants ---
 const SEGMENT_COLORS = ['#3b82f6', '#ef4444', '#10b981', '#f97316', '#8b5cf6', '#ec4899', '#6366f1', '#f59e0b', '#14b8a6', '#d946ef'];
@@ -156,18 +157,6 @@ export type LocationPoint = {
   timestamp: FirebaseTimestamp;
 };
 
-export type Stop = {
-  name: string;
-  status: StopStatus;
-  arrivalTime: FirebaseTimestamp | null;
-  departureTime: FirebaseTimestamp | null;
-  collectedOccupiedCars?: number | null;
-  collectedEmptyCars?: number | null;
-  mileageAtStop?: number | null;
-  occupancy?: number | null;
-  observation?: string;
-};
-
 export type Run = {
   id: string;
   driverId: string;
@@ -240,15 +229,26 @@ const RealTimeMap = dynamic(() => import('./RealTimeMap'), {
 });
 
 
-// --- Componente da Aba: Visão Geral ---
-const VisaoGeralTab = () => {
+// --- Componente da Aba: Acompanhamento ---
+const AcompanhamentoTab = () => {
     const { firestore } = useFirebase();
     const { toast } = useToast();
+    const router = useRouter();
     const [user, setUser] = useState<UserData | null>(null);
-    const [vehicleStatuses, setVehicleStatuses] = useState<(Vehicle & { driverName?: string })[]>([]);
+    const [allRuns, setAllRuns] = useState<Run[]>([]);
+    const [users, setUsers] = useState<Map<string, FirestoreUser>>(new Map());
     const [isLoading, setIsLoading] = useState(true);
-
+    const [selectedRunKeyForMap, setSelectedRunKeyForMap] = useState<string | null>(null);
+    const [highlightedSegmentId, setHighlightedSegmentId] = useState<string | null>(null);
+    const [isClient, setIsClient] = useState(false);
+    
+    // From VisaoGeral
     type Vehicle = { id: string; model: string; isTruck: boolean; status: 'PARADO' | 'EM_CORRIDA' | 'EM_MANUTENCAO'; };
+    const [vehicleStatuses, setVehicleStatuses] = useState<(Vehicle & { driverName?: string })[]>([]);
+    const [isOverviewLoading, setIsOverviewLoading] = useState(true);
+
+
+    useEffect(() => setIsClient(true), []);
 
     useEffect(() => {
         const storedUser = localStorage.getItem('user');
@@ -258,9 +258,10 @@ const VisaoGeralTab = () => {
         if (storedUser && companyId && sectorId && matricula) setUser({ ...JSON.parse(storedUser), companyId, sectorId, matricula });
     }, []);
 
+    // Effect for Overview Data
     useEffect(() => {
         if (!firestore || !user) return;
-        setIsLoading(true);
+        setIsOverviewLoading(true);
         
         const vehiclesCol = collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/vehicles`);
         const vehiclesQuery = query(vehiclesCol, where('isTruck', '==', true));
@@ -278,117 +279,24 @@ const VisaoGeralTab = () => {
                     driverName: activeRunsMap.get(truck.id)
                 }));
                 setVehicleStatuses(statuses);
-                setIsLoading(false);
+                setIsOverviewLoading(false);
             }, (error) => {
                 console.error("Error fetching active runs: ", error);
                 toast({ variant: 'destructive', title: 'Erro ao buscar corridas' });
-                setIsLoading(false);
+                setIsOverviewLoading(false);
             });
             
             return () => unsubscribeRuns();
         }, (error) => {
             console.error("Error fetching vehicles: ", error);
             toast({ variant: 'destructive', title: 'Erro ao buscar veículos' });
-            setIsLoading(false);
+            setIsOverviewLoading(false);
         });
 
         return () => unsubscribeVehicles();
     }, [firestore, user, toast]);
 
-    if (isLoading) {
-        return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
-    }
-
-    const kpis = {
-        total: vehicleStatuses.length,
-        emCorrida: vehicleStatuses.filter(v => v.status === 'EM_CORRIDA').length,
-        parado: vehicleStatuses.filter(v => v.status === 'PARADO').length,
-        emManutencao: vehicleStatuses.filter(v => v.status === 'EM_MANUTENCAO').length,
-    };
-
-    return (
-        <div className="space-y-6">
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                <KpiCard title="Frota Total" value={kpis.total} icon={Truck} />
-                <KpiCard title="Em Corrida" value={kpis.emCorrida} icon={PlayCircle} />
-                <KpiCard title="Parados" value={kpis.parado} icon={Truck} />
-                <KpiCard title="Em Manutenção" value={kpis.emManutencao} icon={Wrench} />
-            </div>
-            <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2"><Truck className="h-6 w-6"/> Status da Frota</CardTitle>
-                    <CardDescription>Visão geral de todos os caminhões do setor.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    {vehicleStatuses.length === 0 ? (
-                        <p className="text-muted-foreground text-center">Nenhum caminhão encontrado.</p>
-                    ) : (
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
-                            {vehicleStatuses.map(v => <VehicleStatusCard key={v.id} vehicle={v} />)}
-                        </div>
-                    )}
-                </CardContent>
-            </Card>
-        </div>
-    );
-};
-
-const KpiCard = ({ title, value, icon: Icon }: { title: string; value: string | number; icon?: React.ElementType }) => (
-    <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">{title}</CardTitle>
-            {Icon && <Icon className="h-4 w-4 text-muted-foreground" />}
-        </CardHeader>
-        <CardContent>
-            <div className="text-2xl font-bold">{value}</div>
-        </CardContent>
-    </Card>
-);
-
-const VehicleStatusCard = ({ vehicle }: { vehicle: any }) => {
-  const getStatusDetails = (status: string | undefined) => {
-    switch (status) {
-      case 'EM_CORRIDA': return { text: 'EM CORRIDA', badgeClass: 'bg-blue-600', cardClass: 'bg-blue-50 dark:bg-blue-900/30' };
-      case 'EM_MANUTENCAO': return { text: 'MANUTENÇÃO', badgeClass: 'bg-yellow-500', cardClass: 'bg-yellow-50 dark:bg-yellow-900/30' };
-      case 'PARADO': default: return { text: 'PARADO', badgeClass: 'bg-green-600', cardClass: 'bg-green-50 dark:bg-green-800/30' };
-    }
-  };
-  const { text, badgeClass, cardClass } = getStatusDetails(vehicle.status);
-  return (
-    <Card className={`flex flex-col items-center justify-center p-4 text-center ${cardClass}`}>
-        <p className="font-bold text-lg">{vehicle.id}</p>
-        <p className="text-xs text-muted-foreground -mt-1 mb-2">{vehicle.model}</p>
-        <Badge variant={'default'} className={`${badgeClass} hover:${badgeClass}`}>{text}</Badge>
-        {vehicle.status === 'EM_CORRIDA' && vehicle.driverName && (
-            <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1"><User className="h-3 w-3"/>{vehicle.driverName}</p>
-        )}
-    </Card>
-  )
-};
-
-// --- Componente da Aba: Acompanhamento ---
-const AcompanhamentoTab = () => {
-    const { firestore } = useFirebase();
-    const { toast } = useToast();
-    const router = useRouter();
-    const [user, setUser] = useState<UserData | null>(null);
-    const [allRuns, setAllRuns] = useState<Run[]>([]);
-    const [users, setUsers] = useState<Map<string, FirestoreUser>>(new Map());
-    const [isLoading, setIsLoading] = useState(true);
-    const [selectedRunKeyForMap, setSelectedRunKeyForMap] = useState<string | null>(null);
-    const [highlightedSegmentId, setHighlightedSegmentId] = useState<string | null>(null);
-    const [isClient, setIsClient] = useState(false);
-
-    useEffect(() => setIsClient(true), []);
-
-    useEffect(() => {
-        const storedUser = localStorage.getItem('user');
-        const companyId = localStorage.getItem('companyId');
-        const sectorId = localStorage.getItem('sectorId');
-        const matricula = localStorage.getItem('matricula');
-        if (storedUser && companyId && sectorId && matricula) setUser({ ...JSON.parse(storedUser), companyId, sectorId, matricula });
-    }, []);
-
+    // Effect for Tracking Data
     useEffect(() => {
         if (!firestore || !user) return;
         setIsLoading(true);
@@ -480,19 +388,58 @@ const AcompanhamentoTab = () => {
         if (!highlightedSegmentId) return segments.map(s => ({ ...s, opacity: 0.9 }));
         return segments.map(s => ({ ...s, opacity: s.id === highlightedSegmentId ? 1.0 : 0.3 }));
     }, [selectedRunForMap, highlightedSegmentId]);
-
-    if (isLoading) {
-        return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
-    }
+    
+    const kpis = {
+        total: vehicleStatuses.length,
+        emCorrida: vehicleStatuses.filter(v => v.status === 'EM_CORRIDA').length,
+        parado: vehicleStatuses.filter(v => v.status === 'PARADO').length,
+        emManutencao: vehicleStatuses.filter(v => v.status === 'EM_MANUTENCAO').length,
+    };
 
     return (
-        <div className="space-y-4">
-            {aggregatedRuns.length === 0 ? (
-                <Card className="text-center p-8 mt-6"><CardHeader><CardTitle>Nenhuma atividade hoje</CardTitle><CardDescription>Não há motoristas em rota ou corridas finalizadas hoje.</CardDescription></CardHeader></Card>
+        <div className="space-y-6">
+             {isOverviewLoading ? (
+                <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
             ) : (
-                <Accordion type="single" collapsible className="w-full space-y-4" defaultValue={aggregatedRuns.find(r => r.status === 'IN_PROGRESS')?.key || aggregatedRuns[0]?.key}>
-                    {aggregatedRuns.map(run => <RunAccordionItem key={run.key} run={run} users={users} onViewRoute={() => handleViewRoute(run.key)} />)}
-                </Accordion>
+                <>
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                        <KpiCard title="Frota Total" value={kpis.total} icon={Truck} />
+                        <KpiCard title="Em Corrida" value={kpis.emCorrida} icon={PlayCircle} />
+                        <KpiCard title="Parados" value={kpis.parado} icon={Truck} />
+                        <KpiCard title="Em Manutenção" value={kpis.emManutencao} icon={Wrench} />
+                    </div>
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2"><Truck className="h-6 w-6"/> Status da Frota</CardTitle>
+                            <CardDescription>Visão geral de todos os caminhões do setor.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            {vehicleStatuses.length === 0 ? (
+                                <p className="text-muted-foreground text-center">Nenhum caminhão encontrado.</p>
+                            ) : (
+                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+                                    {vehicleStatuses.map(v => <VehicleStatusCard key={v.id} vehicle={v} />)}
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                </>
+            )}
+
+            <Separator className="my-8"/>
+            <h2 className="text-2xl font-bold tracking-tight">Corridas do Dia</h2>
+            {isLoading ? (
+                <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+            ): (
+                <>
+                {aggregatedRuns.length === 0 ? (
+                    <Card className="text-center p-8 mt-6"><CardHeader><CardTitle>Nenhuma atividade hoje</CardTitle><CardDescription>Não há motoristas em rota ou corridas finalizadas hoje.</CardDescription></CardHeader></Card>
+                ) : (
+                    <Accordion type="single" collapsible className="w-full space-y-4" defaultValue={aggregatedRuns.find(r => r.status === 'IN_PROGRESS')?.key || aggregatedRuns[0]?.key}>
+                        {aggregatedRuns.map(run => <RunAccordionItem key={run.key} run={run} users={users} onViewRoute={() => handleViewRoute(run.key)} />)}
+                    </Accordion>
+                )}
+                </>
             )}
             <Dialog open={selectedRunForMap !== null} onOpenChange={(isOpen) => !isOpen && handleCloseDialog()}>
                 <DialogContent className="max-w-[90vw] lg:max-w-7xl w-full h-[90vh] flex flex-col p-0">
@@ -523,6 +470,39 @@ const AcompanhamentoTab = () => {
             </Dialog>
         </div>
     );
+};
+
+const KpiCard = ({ title, value, icon: Icon }: { title: string; value: string | number; icon?: React.ElementType }) => (
+    <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">{title}</CardTitle>
+            {Icon && <Icon className="h-4 w-4 text-muted-foreground" />}
+        </CardHeader>
+        <CardContent>
+            <div className="text-2xl font-bold">{value}</div>
+        </CardContent>
+    </Card>
+);
+
+const VehicleStatusCard = ({ vehicle }: { vehicle: any }) => {
+  const getStatusDetails = (status: string | undefined) => {
+    switch (status) {
+      case 'EM_CORRIDA': return { text: 'EM CORRIDA', badgeClass: 'bg-blue-600', cardClass: 'bg-blue-50 dark:bg-blue-900/30' };
+      case 'EM_MANUTENCAO': return { text: 'MANUTENÇÃO', badgeClass: 'bg-yellow-500', cardClass: 'bg-yellow-50 dark:bg-yellow-900/30' };
+      case 'PARADO': default: return { text: 'PARADO', badgeClass: 'bg-green-600', cardClass: 'bg-green-50 dark:bg-green-800/30' };
+    }
+  };
+  const { text, badgeClass, cardClass } = getStatusDetails(vehicle.status);
+  return (
+    <Card className={`flex flex-col items-center justify-center p-4 text-center ${cardClass}`}>
+        <p className="font-bold text-lg">{vehicle.id}</p>
+        <p className="text-xs text-muted-foreground -mt-1 mb-2">{vehicle.model}</p>
+        <Badge variant={'default'} className={`${badgeClass} hover:${badgeClass}`}>{text}</Badge>
+        {vehicle.status === 'EM_CORRIDA' && vehicle.driverName && (
+            <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1"><User className="h-3 w-3"/>{vehicle.driverName}</p>
+        )}
+    </Card>
+  )
 };
 
 const RunAccordionItem = ({ run, users, onViewRoute }: { run: AggregatedRun, users: Map<string, FirestoreUser>, onViewRoute: () => void }) => {
@@ -989,7 +969,7 @@ const HistoryTableRow = ({ run, users, onViewDetails, isSuperAdmin, onDelete }: 
     const getInitials = (name: string) => name.split(' ').map(n => n[0]).slice(0, 2).join('');
     return (<TableRow><TableCell><div className="flex items-center gap-2"><Truck className="h-4 w-4 text-muted-foreground"/>{run.vehicleId}</div></TableCell><TableCell><div className="font-medium flex items-center gap-2"><Avatar className="h-6 w-6"><AvatarImage src={driver?.photoURL} alt={run.driverName} /><AvatarFallback className="text-xs">{getInitials(run.driverName)}</AvatarFallback></Avatar>{run.driverName}</div></TableCell><TableCell>{driver?.shift || 'N/A'}</TableCell><TableCell>{run.stops.map(s => s.name).join(', ')}</TableCell><TableCell>{distance > 0 ? `${distance.toFixed(1)} km` : '0.0 km'}</TableCell><TableCell>{format(run.startTime.toDate(), 'dd/MM/yyyy')}</TableCell><TableCell className="text-right space-x-2"><Button variant="outline" size="sm" onClick={onViewDetails}><Route className="mr-2 h-4 w-4" />Ver Detalhes</Button>{isSuperAdmin && (<AlertDialog><AlertDialogTrigger asChild><Button variant="destructive" size="sm"><Trash2 className="h-4 w-4 mr-1" /> Deletar</Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Você tem certeza?</AlertDialogTitle><AlertDialogDescription>Esta ação não pode ser desfeita. Isto irá apagar permanentemente a corrida do motorista {run.driverName} para {run.stops.map(s => s.name).join(', ')}.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={onDelete}>Confirmar</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>)}</TableCell></TableRow>);
 };
-const DateFilter = ({ date, setDate }: { date: DateRange | undefined, setDate: (date: DateRange | undefined) => void }) => (<Popover><PopoverTrigger asChild><Button id="date" variant={"outline"} className="w-full justify-start text-left font-normal sm:w-auto"><CalendarIcon className="mr-2 h-4 w-4" />{date?.from ? (date.to ? `${format(date.from, "dd/MM/y", { locale: ptBR })} - ${format(date.to, "dd/MM/y", { locale: ptBR })}` : format(date.from, "dd/MM/y", { locale: ptBR })) : <span>Selecione um período</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0" align="end"><Calendar initialFocus mode="range" defaultMonth={date?.from} selected={date} onSelect={setDate} numberOfMonths={2} locale={ptBR} /></PopoverContent></Popover>);
+const DateFilter = ({ date, setDate }: { date: DateRange | undefined, setDate: (date: DateRange | undefined) => void }) => (<Popover><PopoverTrigger asChild><Button id="date" variant={"outline"} className="w-full justify-start text-left font-normal sm:w-auto"><CalendarIcon className="mr-2 h-4 w-4" />{date?.from ? (date.to ? `${format(date.from, "dd/MM/y", { locale: ptBR })} - ${format(date.to, "dd/MM/y", { locale: ptBR })}` : format(date.from, "dd/MM/y", { locale: ptBR })) : <span>Selecione um período</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0" align="center"><Calendar initialFocus mode="range" defaultMonth={date?.from} selected={date} onSelect={setDate} numberOfMonths={2} locale={ptBR} /></PopoverContent></Popover>);
 const ShiftFilter = ({ selectedShift, onShiftChange }: { selectedShift: string, onShiftChange: (shift: string) => void }) => (<Select value={selectedShift} onValueChange={onShiftChange}><SelectTrigger className="w-full sm:w-auto"><SelectValue placeholder="Filtrar por turno" /></SelectTrigger><SelectContent>{Object.values({ TODOS: 'Todos', PRIMEIRO_NORMAL: '1° NORMAL', SEGUNDO_NORMAL: '2° NORMAL', PRIMEIRO_ESPECIAL: '1° ESPECIAL', SEGUNDO_ESPECIAL: '2° ESPECIAL' }).map(turno => (<SelectItem key={turno} value={turno}>{turno}</SelectItem>))}</SelectContent></Select>);
 const SectorFilter = ({ sectors, selectedSector, onSectorChange }: { sectors: SectorInfo[], selectedSector: string, onSectorChange: (sector: string) => void }) => (<Select value={selectedSector} onValueChange={onSectorChange}><SelectTrigger className="w-full sm:w-auto"><SelectValue placeholder="Filtrar por setor" /></SelectTrigger><SelectContent><SelectItem value="all"><Building className="h-4 w-4 inline-block mr-2"/>Todos os Setores</SelectItem>{sectors.map(s => (<SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>))}</SelectContent></Select>);
 const VehicleFilter = ({ vehicles, selectedVehicle, onVehicleChange }: { vehicles: string[], selectedVehicle: string, onVehicleChange: (vehicle: string) => void }) => (<Select value={selectedVehicle} onValueChange={onVehicleChange}><SelectTrigger className="w-full sm:w-auto"><SelectValue placeholder="Filtrar por veículo" /></SelectTrigger><SelectContent><SelectItem value="all"><Truck className="h-4 w-4 inline-block mr-2"/>Todos os Veículos</SelectItem>{vehicles.map(v => (<SelectItem key={v} value={v}><Truck className="h-4 w-4 inline-block mr-2"/>{v}</SelectItem>))}</SelectContent></Select>);
@@ -1226,19 +1206,17 @@ export default function DashboardPage() {
         <p className="text-muted-foreground">Visão geral do sistema Frotacontrol.</p>
        </div>
        
-       <Tabs defaultValue="visao-geral" className="w-full">
-        <TabsList className="grid w-full grid-cols-6">
-            <TabsTrigger value="visao-geral">Visão Geral</TabsTrigger>
-            <TabsTrigger value="acompanhamento">Acompanhamento</TabsTrigger>
-            <TabsTrigger value="analise">Análise</TabsTrigger>
-            <TabsTrigger value="historico">Histórico</TabsTrigger>
-            <TabsTrigger value="abastecimentos">Abastecimentos</TabsTrigger>
-            <TabsTrigger value="checklists">Checklists</TabsTrigger>
-        </TabsList>
+       <Tabs defaultValue="acompanhamento" className="w-full">
+        <div className="border-b">
+            <TabsList className="grid w-full grid-cols-5">
+                <TabsTrigger value="acompanhamento">Acompanhamento</TabsTrigger>
+                <TabsTrigger value="analise">Análise</TabsTrigger>
+                <TabsTrigger value="historico">Histórico</TabsTrigger>
+                <TabsTrigger value="abastecimentos">Abastecimentos</TabsTrigger>
+                <TabsTrigger value="checklists">Checklists</TabsTrigger>
+            </TabsList>
+        </div>
 
-        <TabsContent value="visao-geral" className="mt-6">
-            <VisaoGeralTab />
-        </TabsContent>
         <TabsContent value="acompanhamento" className="mt-6">
             <AcompanhamentoTab />
         </TabsContent>
@@ -1258,3 +1236,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+
