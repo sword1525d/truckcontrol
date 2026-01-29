@@ -58,7 +58,7 @@ export default function LoginPage() {
         if (storedUserData) {
             const userData = JSON.parse(storedUserData);
             if (userData.isAdmin) {
-                router.push('/dashboard-admin');
+                router.push('/dashboard');
                 return;
             }
              if (userData.truck) {
@@ -142,7 +142,7 @@ export default function LoginPage() {
         localStorage.setItem('sectorId', data.sectorId);
         localStorage.setItem('matricula', data.email);
         toast({ title: 'Login bem-sucedido!' });
-        router.push(userData.isAdmin ? '/dashboard-admin' : '/dashboard-truck');
+        router.push(userData.isAdmin ? '/dashboard' : '/dashboard-truck');
       } else {
         throw new Error("Usuário não pertence ao setor selecionado.");
       }

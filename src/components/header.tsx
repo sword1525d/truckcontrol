@@ -1,7 +1,7 @@
 "use client";
 
 import React from 'react';
-import { Truck, LogOut, Shield, User as UserIcon } from 'lucide-react';
+import { Truck, LogOut, Shield, User as UserIcon, Settings, LayoutDashboard } from 'lucide-react';
 import Link from 'next/link';
 import { useFirebase } from '@/firebase';
 import { useRouter } from 'next/navigation';
@@ -70,15 +70,30 @@ export function Header() {
                       </div>
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                     <DropdownMenuItem onClick={() => router.push('/dashboard-truck')}>
-                      <UserIcon className="mr-2 h-4 w-4" />
-                      <span>Painel do Motorista</span>
-                    </DropdownMenuItem>
+                    
+                    {userIsAdmin ? (
+                       <DropdownMenuItem onClick={() => router.push('/dashboard')}>
+                          <LayoutDashboard className="mr-2 h-4 w-4" />
+                          <span>Painel de Controle</span>
+                      </DropdownMenuItem>
+                    ) : (
+                       <DropdownMenuItem onClick={() => router.push('/dashboard-truck')}>
+                        <UserIcon className="mr-2 h-4 w-4" />
+                        <span>Painel do Motorista</span>
+                      </DropdownMenuItem>
+                    )}
+
                     {userIsAdmin && (
-                        <DropdownMenuItem onClick={() => router.push('/dashboard-admin')}>
-                            <Shield className="mr-2 h-4 w-4" />
-                            <span>Painel do Admin</span>
-                        </DropdownMenuItem>
+                        <>
+                          <DropdownMenuItem onClick={() => router.push('/dashboard/manage')}>
+                              <UserIcon className="mr-2 h-4 w-4" />
+                              <span>Gerenciamento</span>
+                          </DropdownMenuItem>
+                           <DropdownMenuItem onClick={() => router.push('/dashboard/settings')}>
+                              <Settings className="mr-2 h-4 w-4" />
+                              <span>Configurações</span>
+                          </DropdownMenuItem>
+                        </>
                     )}
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={handleLogout}>
