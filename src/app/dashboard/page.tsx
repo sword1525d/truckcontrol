@@ -10,7 +10,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Truck, User, Wrench, PlayCircle, Route, Timer, X, Hourglass, EyeOff, Milestone, Maximize, Car, Package, Warehouse, CheckCircle, Clock, Calendar as CalendarIcon, Fuel, ClipboardCheck, Building, Download, FileText, MapIcon } from 'lucide-react';
+import { Loader2, Truck, User, Wrench, PlayCircle, Route, Timer, X, Hourglass, EyeOff, Milestone, Maximize, Car, Package, Warehouse, CheckCircle, Clock, Calendar as CalendarIcon, Fuel, ClipboardCheck, Building, Download, FileText, MapIcon, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -474,7 +474,7 @@ const AcompanhamentoTab = () => {
 
     const displayedSegments = useMemo(() => {
         if (!selectedRunForMap) return [];
-        const segments = processRunSegments(selectedRunForMap);
+        const segments = processRunSegments(selectedRunForMap, true);
         if (!highlightedSegmentId) return segments.map(s => ({ ...s, opacity: 0.9 }));
         return segments.map(s => ({ ...s, opacity: s.id === highlightedSegmentId ? 1.0 : 0.3 }));
     }, [selectedRunForMap, highlightedSegmentId]);
@@ -798,8 +798,6 @@ const HistoricoTab = () => {
                 const stopTime = totalStopTimeSeconds > 0 ? formatDistanceStrict(0, totalStopTimeSeconds * 1000, { locale: ptBR, unit: 'minute' }) : '0 min';
                 const observations = run.stops.map(s => s.observation).filter(Boolean).join('; ');
                 
-                const previousRun = index > 0 ? vehicleRuns[index - 1] : null;
-
                 return { 
                     'Data': format(run.startTime.toDate(), 'dd/MM/yyyy'), 
                     'Horário Inicial': format(run.startTime.toDate(), 'HH:mm'), 
@@ -834,14 +832,12 @@ const HistoricoTab = () => {
 
     return (
         <div className="space-y-6">
-            <div className='space-y-2'>
-              <div className="flex w-full flex-wrap items-center justify-end gap-2">
+             <div className="flex w-full flex-wrap items-center justify-end gap-2">
                   <DateFilter date={date} setDate={setDate} />
                   {isSuperAdmin && <SectorFilter sectors={allSectors} selectedSector={selectedSector} onSectorChange={setSelectedSector} />}
                   <ShiftFilter selectedShift={selectedShift} onShiftChange={setSelectedShift} />
                   <VehicleFilter vehicles={vehicleList} selectedVehicle={selectedVehicle} onVehicleChange={setSelectedVehicle} />
                   <DriverFilter drivers={driverList} selectedDriver={selectedDriver} onDriverChange={setSelectedDriver} />
-              </div>
             </div>
 
             <Tabs defaultValue="analysis" className="w-full">
