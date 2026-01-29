@@ -10,6 +10,7 @@ import { Card, CardContent, CardTitle } from '@/components/ui/card';
 import { Loader2, PlayCircle, ClipboardCheck, Fuel } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Header } from '@/components/header';
+import { Footer } from '@/components/footer';
 
 type UserData = {
   id: string;
@@ -101,12 +102,13 @@ export default function DashboardTruckPage() {
 
   if (isUserLoading || !user || isCheckingRun) {
     return (
-        <>
+        <div className="flex flex-col flex-grow">
             <Header />
-            <div className="flex flex-grow items-center justify-center bg-background">
+            <div className="flex-grow flex items-center justify-center bg-background">
                 <Loader2 className="h-12 w-12 animate-spin text-primary" />
             </div>
-        </>
+            <Footer />
+        </div>
     );
   }
 
@@ -154,6 +156,7 @@ export default function DashboardTruckPage() {
             </div>
         </div>
       </main>
+      <Footer />
     </div>
   );
 }
