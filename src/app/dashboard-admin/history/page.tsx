@@ -51,6 +51,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import * as XLSX from 'xlsx';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 
 // --- Constantes ---
@@ -469,7 +470,7 @@ const HistoryPage = () => {
     }, [filteredRuns]);
     
     const chartData = useMemo(() => {
-        if (!date || !date.from) return { runsByDay: [], distanceByVehicle: [], idleTimeByVehicle: [] };
+        if (!date || !date.from) return { runsByDay: [], distanceByVehicle: [], stoppedTimeByVehicle: [] };
         
         // Runs by Day
         const from = startOfDay(date.from);
@@ -496,36 +497,34 @@ const HistoryPage = () => {
             }
         });
 
-        // Idle Time by Vehicle
-        const runsByVehicle = new Map<string, Run[]>();
+        // Stopped Time by Vehicle (during runs)
+        const stoppedTimeMap = new Map<string, number>();
         filteredRuns.forEach(run => {
-            if (!runsByVehicle.has(run.vehicleId)) runsByVehicle.set(run.vehicleId, []);
-            runsByVehicle.get(run.vehicleId)!.push(run);
-        });
-
-        const idleTimes = new Map<string, number>();
-        runsByVehicle.forEach((runs, vehicleId) => {
-            const sortedRuns = runs.sort((a, b) => a.startTime.seconds - b.startTime.seconds);
-            let totalIdleSeconds = 0;
-            for (let i = 1; i < sortedRuns.length; i++) {
-                const prevRun = sortedRuns[i - 1];
-                const currentRun = sortedRuns[i];
-                if (prevRun.endTime) {
-                    const idleSeconds = currentRun.startTime.seconds - prevRun.endTime.seconds;
-                    if (idleSeconds > 60) { // Only count idle time > 1 minute
-                        totalIdleSeconds += idleSeconds;
+            let runStopTimeSeconds = 0;
+            run.stops.forEach(stop => {
+                if (stop.arrivalTime && stop.departureTime) {
+                    const stopSeconds = stop.departureTime.seconds - stop.arrivalTime.seconds;
+                    if (stopSeconds > 0) {
+                        runStopTimeSeconds += stopSeconds;
                     }
                 }
-            }
-            if (totalIdleSeconds > 0) {
-              idleTimes.set(vehicleId, totalIdleSeconds / 3600); // to hours
+            });
+            if (runStopTimeSeconds > 0) {
+                const currentTotal = stoppedTimeMap.get(run.vehicleId) || 0;
+                stoppedTimeMap.set(run.vehicleId, currentTotal + runStopTimeSeconds);
             }
         });
+
+        const stoppedTimes = Array.from(stoppedTimeMap.entries()).map(([name, totalSeconds]) => ({
+            name,
+            total: parseFloat((totalSeconds / 3600).toFixed(1)) // to hours
+        })).sort((a,b) => b.total - a.total);
+
 
         return {
             runsByDay: Array.from(dateMap, ([name, total]) => ({ name, total })),
             distanceByVehicle: Array.from(distanceMap, ([name, total]) => ({ name, total: Math.round(total) })).sort((a,b) => b.total - a.total),
-            idleTimeByVehicle: Array.from(idleTimes, ([name, total]) => ({ name, total: parseFloat(total.toFixed(1)) })).sort((a,b) => b.total - a.total),
+            stoppedTimeByVehicle: stoppedTimes,
         };
     }, [filteredRuns, date]);
 
@@ -644,103 +643,112 @@ const HistoryPage = () => {
                 </div>
             </div>
 
+            <Tabs defaultValue="analysis" className="space-y-4">
+                <TabsList>
+                    <TabsTrigger value="analysis">Análise Gráfica</TabsTrigger>
+                    <TabsTrigger value="history">Histórico de Corridas</TabsTrigger>
+                </TabsList>
+                <TabsContent value="analysis" className="space-y-4">
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                        <KpiCard title="Corridas Concluídas" value={kpis.totalRuns.toString()} />
+                        <KpiCard title="Paradas Totais" value={kpis.totalStops.toString()} />
+                        <KpiCard title="Distância Total" value={`${kpis.totalDistance.toFixed(1)} km`} />
+                        <KpiCard title="Duração Média" value={`${kpis.avgDurationMinutes.toFixed(0)} min`} />
+                    </div>
 
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                <KpiCard title="Corridas Concluídas" value={kpis.totalRuns.toString()} />
-                <KpiCard title="Paradas Totais" value={kpis.totalStops.toString()} />
-                <KpiCard title="Distância Total" value={`${kpis.totalDistance.toFixed(1)} km`} />
-                <KpiCard title="Duração Média" value={`${kpis.avgDurationMinutes.toFixed(0)} min`} />
-            </div>
+                    <div className="grid gap-6 lg:grid-cols-2">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Corridas por Dia</CardTitle>
+                                <CardDescription>Total de corridas concluídas por dia no período e filtros selecionados.</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                {isLoading ? <div className="flex justify-center items-center h-[300px]"><Loader2 className="w-8 h-8 animate-spin"/></div> :
+                                <ResponsiveContainer width="100%" height={300}>
+                                    <BarChart data={chartData.runsByDay}>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                        <XAxis dataKey="name" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
+                                        <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} allowDecimals={false} />
+                                        <Tooltip cursor={{fill: 'hsl(var(--muted))'}} contentStyle={{backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)'}}/>
+                                        <Bar dataKey="total" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                                    </BarChart>
+                                </ResponsiveContainer>}
+                            </CardContent>
+                        </Card>
 
-            <div className="grid gap-6 lg:grid-cols-2">
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Corridas por Dia</CardTitle>
-                        <CardDescription>Total de corridas concluídas por dia no período e filtros selecionados.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Km Rodados por Caminhão</CardTitle>
+                                <CardDescription>Distância total percorrida por cada caminhão nos filtros selecionados.</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                {isLoading ? <div className="flex justify-center items-center h-[300px]"><Loader2 className="w-8 h-8 animate-spin"/></div> :
+                                <ResponsiveContainer width="100%" height={300}>
+                                    <BarChart data={chartData.distanceByVehicle} layout="vertical">
+                                        <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                                        <XAxis type="number" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
+                                        <YAxis type="category" dataKey="name" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} width={80} />
+                                        <Tooltip cursor={{fill: 'hsl(var(--muted))'}} contentStyle={{backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)'}} formatter={(value) => `${value} km`}/>
+                                        <Bar dataKey="total" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
+                                    </BarChart>
+                                </ResponsiveContainer>}
+                            </CardContent>
+                        </Card>
+                        <Card className="lg:col-span-2">
+                            <CardHeader>
+                                <CardTitle>Tempo Parado por Caminhão (Horas)</CardTitle>
+                                <CardDescription>Soma do tempo em que o veículo ficou parado nas paradas (coletas/entregas).</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                {isLoading ? <div className="flex justify-center items-center h-[300px]"><Loader2 className="w-8 h-8 animate-spin"/></div> :
+                                <ResponsiveContainer width="100%" height={300}>
+                                <BarChart data={chartData.stoppedTimeByVehicle}>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                        <XAxis dataKey="name" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
+                                        <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} unit="h" />
+                                        <Tooltip
+                                            cursor={{fill: 'hsl(var(--muted))'}}
+                                            contentStyle={{backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)'}}
+                                            formatter={(value: number) => `${value.toFixed(1)} horas`}
+                                        />
+                                        <Bar dataKey="total" fill="hsl(var(--destructive))" radius={[4, 4, 0, 0]} />
+                                    </BarChart>
+                                </ResponsiveContainer>}
+                            </CardContent>
+                        </Card>
+                    </div>
+                </TabsContent>
+                <TabsContent value="history">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Histórico de Corridas</CardTitle>
+                            <CardDescription>Lista de corridas concluídas com os filtros selecionados.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
                         {isLoading ? <div className="flex justify-center items-center h-[300px]"><Loader2 className="w-8 h-8 animate-spin"/></div> :
-                        <ResponsiveContainer width="100%" height={300}>
-                            <BarChart data={chartData.runsByDay}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                <XAxis dataKey="name" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
-                                <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} allowDecimals={false} />
-                                <Tooltip cursor={{fill: 'hsl(var(--muted))'}} contentStyle={{backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)'}}/>
-                                <Bar dataKey="total" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                            </BarChart>
-                        </ResponsiveContainer>}
-                    </CardContent>
-                </Card>
+                            <div className="overflow-auto max-h-[400px]">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Veículo</TableHead>
+                                            <TableHead>Motorista</TableHead>
+                                            <TableHead>Turno</TableHead>
+                                            <TableHead>Destino</TableHead>
+                                            <TableHead>Distância</TableHead>
+                                            <TableHead>Data</TableHead>
+                                            <TableHead className="text-right">Ação</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {filteredRuns.length > 0 ? filteredRuns.map(run => <HistoryTableRow key={run.id} run={run} users={users} onViewDetails={() => handleViewDetails(run)} isSuperAdmin={isSuperAdmin} onDelete={() => handleDelete(run)} />) : <TableRow><TableCell colSpan={7} className="text-center h-24">Nenhuma corrida encontrada</TableCell></TableRow>}
+                                    </TableBody>
+                                </Table>
+                            </div>}
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+            </Tabs>
 
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Km Rodados por Caminhão</CardTitle>
-                        <CardDescription>Distância total percorrida por cada caminhão nos filtros selecionados.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        {isLoading ? <div className="flex justify-center items-center h-[300px]"><Loader2 className="w-8 h-8 animate-spin"/></div> :
-                        <ResponsiveContainer width="100%" height={300}>
-                            <BarChart data={chartData.distanceByVehicle} layout="vertical">
-                                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                                <XAxis type="number" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
-                                <YAxis type="category" dataKey="name" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} width={80} />
-                                <Tooltip cursor={{fill: 'hsl(var(--muted))'}} contentStyle={{backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)'}} formatter={(value) => `${value} km`}/>
-                                <Bar dataKey="total" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
-                            </BarChart>
-                        </ResponsiveContainer>}
-                    </CardContent>
-                </Card>
-                 <Card className="lg:col-span-2">
-                    <CardHeader>
-                        <CardTitle>Tempo Ocioso por Caminhão (Horas)</CardTitle>
-                        <CardDescription>Soma do tempo parado entre corridas para cada caminhão (intervalos maiores que 1 minuto).</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        {isLoading ? <div className="flex justify-center items-center h-[300px]"><Loader2 className="w-8 h-8 animate-spin"/></div> :
-                        <ResponsiveContainer width="100%" height={300}>
-                           <BarChart data={chartData.idleTimeByVehicle}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                <XAxis dataKey="name" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
-                                <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} unit="h" />
-                                <Tooltip
-                                    cursor={{fill: 'hsl(var(--muted))'}}
-                                    contentStyle={{backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)'}}
-                                    formatter={(value: number) => `${value.toFixed(1)} horas`}
-                                />
-                                <Bar dataKey="total" fill="hsl(var(--destructive))" radius={[4, 4, 0, 0]} />
-                            </BarChart>
-                        </ResponsiveContainer>}
-                    </CardContent>
-                </Card>
-            </div>
-
-            <Card>
-                <CardHeader>
-                    <CardTitle>Histórico de Corridas</CardTitle>
-                    <CardDescription>Lista de corridas concluídas com os filtros selecionados.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                {isLoading ? <div className="flex justify-center items-center h-[300px]"><Loader2 className="w-8 h-8 animate-spin"/></div> :
-                    <div className="overflow-auto max-h-[400px]">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Veículo</TableHead>
-                                    <TableHead>Motorista</TableHead>
-                                    <TableHead>Turno</TableHead>
-                                    <TableHead>Destino</TableHead>
-                                    <TableHead>Distância</TableHead>
-                                    <TableHead>Data</TableHead>
-                                    <TableHead className="text-right">Ação</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {filteredRuns.length > 0 ? filteredRuns.map(run => <HistoryTableRow key={run.id} run={run} users={users} onViewDetails={() => handleViewDetails(run)} isSuperAdmin={isSuperAdmin} onDelete={() => handleDelete(run)} />) : <TableRow><TableCell colSpan={7} className="text-center h-24">Nenhuma corrida encontrada</TableCell></TableRow>}
-                            </TableBody>
-                        </Table>
-                    </div>}
-                </CardContent>
-            </Card>
 
              <RunDetailsDialog run={selectedRunForDialog} isOpen={selectedRunForDialog !== null} onClose={() => setSelectedRunForDialog(null)} isClient={isClient} />
         </div>
