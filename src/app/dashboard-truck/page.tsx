@@ -24,12 +24,26 @@ type UserData = {
 export default function DashboardTruckPage() {
   const router = useRouter();
   const { toast } = useToast();
-  const { firestore, auth, user: authUser } = useFirebase();
+  const { firestore, auth, user: authUser, isUserLoading } = useFirebase();
   const [user, setUser] = useState<UserData | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isCheckingRun, setIsCheckingRun] = useState(true);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
 
   useEffect(() => {
+    if (isUserLoading) {
+      return; // Aguardar o estado de autenticação ser resolvido
+    }
+
+    if (!authUser) {
+      toast({
+        variant: 'destructive',
+        title: 'Sessão Expirada',
+        description: 'Por favor, faça login novamente.',
+      });
+      router.push('/login');
+      return;
+    }
+
     const storedUser = localStorage.getItem('user');
     const companyId = localStorage.getItem('companyId');
     const sectorId = localStorage.getItem('sectorId');
@@ -37,22 +51,24 @@ export default function DashboardTruckPage() {
 
     if (storedUser && companyId && sectorId && matricula) {
         const parsedUser = JSON.parse(storedUser);
-      setUser({ ...parsedUser, companyId, sectorId, matricula });
+      setUser({ ...parsedUser, id: authUser.uid, companyId, sectorId, matricula });
     } else {
       toast({
         variant: 'destructive',
-        title: 'Erro',
-        description: 'Sessão inválida. Por favor, faça login novamente.',
+        title: 'Erro de Sessão',
+        description: 'Dados da sessão não encontrados. Por favor, faça login novamente.',
       });
+      auth.signOut();
+      localStorage.clear();
       router.push('/login');
     }
-  }, [router, toast]);
+  }, [isUserLoading, authUser, router, toast, auth]);
   
   useEffect(() => {
     if (!firestore || !user || !authUser) return;
     
     const checkForActiveRun = async () => {
-      setIsLoading(true);
+      setIsCheckingRun(true);
       try {
         const runsCol = collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/runs`);
         const activeRunsQuery = query(runsCol, 
@@ -75,7 +91,7 @@ export default function DashboardTruckPage() {
           description: 'Não foi possível verificar se há uma corrida ativa.',
         });
       } finally {
-        setIsLoading(false);
+        setIsCheckingRun(false);
       }
     };
 
@@ -83,7 +99,7 @@ export default function DashboardTruckPage() {
   }, [firestore, user, authUser, toast]);
 
 
-  if (!user || isLoading) {
+  if (isUserLoading || !user || isCheckingRun) {
     return (
         <>
             <Header />
