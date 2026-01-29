@@ -1,4 +1,3 @@
-
 'use client';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useFirebase } from '@/firebase';
@@ -33,6 +32,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
 import * as XLSX from 'xlsx';
+import { Separator } from '@/components/ui/separator';
+import { useIsMobile } from '@/hooks/use-mobile';
+
 
 // --- Constantes e Funções de Ajuda ---
 const SEGMENT_COLORS = ['#3b82f6', '#ef4444', '#10b981', '#f97316', '#8b5cf6', '#ec4899', '#6366f1', '#f59e0b', '#14b8a6', '#d946ef'];
@@ -60,7 +62,6 @@ const filterLocationOutliers = (locations: LocationPoint[]): LocationPoint[] => 
             console.warn(`Outlier detectado e removido. Distância: ${distance.toFixed(2)} km`);
         }
     }
-    return filtered;
     return filtered;
 };
 
@@ -1192,6 +1193,8 @@ const ChecklistDetailsDialog = ({ checklist, isOpen, onClose }: { checklist: any
 
 // --- Componente Principal da Página ---
 export default function DashboardPage() {
+  const isMobile = useIsMobile();
+
   return (
     <div className="flex flex-col gap-6">
        <div>
@@ -1200,26 +1203,36 @@ export default function DashboardPage() {
        </div>
        
        <Tabs defaultValue="acompanhamento" className="w-full">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className={cn("grid w-full", isMobile ? "grid-cols-2" : "grid-cols-5")}>
             <TabsTrigger value="acompanhamento">Acompanhamento</TabsTrigger>
-            <TabsTrigger value="analise">Análise</TabsTrigger>
-            <TabsTrigger value="historico">Histórico</TabsTrigger>
-            <TabsTrigger value="abastecimentos">Abastecimentos</TabsTrigger>
+            {!isMobile && (
+              <>
+                <TabsTrigger value="analise">Análise</TabsTrigger>
+                <TabsTrigger value="historico">Histórico</TabsTrigger>
+                <TabsTrigger value="abastecimentos">Abastecimentos</TabsTrigger>
+              </>
+            )}
             <TabsTrigger value="checklists">Checklists</TabsTrigger>
         </TabsList>
 
         <TabsContent value="acompanhamento" className="mt-6">
             <AcompanhamentoTab />
         </TabsContent>
-        <TabsContent value="analise" className="mt-6">
-            <AnaliseTab />
-        </TabsContent>
-         <TabsContent value="historico" className="mt-6">
-            <HistoricoTab />
-        </TabsContent>
-        <TabsContent value="abastecimentos" className="mt-6">
-            <AbastecimentosTab />
-        </TabsContent>
+        
+        {!isMobile && (
+          <>
+            <TabsContent value="analise" className="mt-6">
+                <AnaliseTab />
+            </TabsContent>
+            <TabsContent value="historico" className="mt-6">
+                <HistoricoTab />
+            </TabsContent>
+            <TabsContent value="abastecimentos" className="mt-6">
+                <AbastecimentosTab />
+            </TabsContent>
+          </>
+        )}
+
         <TabsContent value="checklists" className="mt-6">
             <ChecklistsTab />
         </TabsContent>
@@ -1227,9 +1240,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-
-
-
-
-    
