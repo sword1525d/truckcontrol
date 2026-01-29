@@ -14,7 +14,6 @@ export default function DashboardLayout({
       <main className="flex-grow p-4 md:p-6 lg:p-8">
         {children}
       </main>
-      <Footer />
     </div>
   );
 }

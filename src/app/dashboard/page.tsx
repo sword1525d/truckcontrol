@@ -10,7 +10,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Truck, User, Wrench, PlayCircle, Route, Timer, X, Hourglass, EyeOff, Milestone, Maximize, Car, Package, Warehouse, CheckCircle, Clock, Calendar as CalendarIcon, Fuel, ClipboardCheck, Building, Download, FileText, MapIcon, Trash2 } from 'lucide-react';
+import { Loader2, Truck, User, Wrench, PlayCircle, Route, Timer, X, Hourglass, EyeOff, Milestone, Maximize, Car, Package, Warehouse, CheckCircle, Clock, Calendar as CalendarIcon, Fuel, ClipboardCheck, Building, Download, FileText, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -610,7 +610,7 @@ const RunDetailsContent = ({ run, onSegmentClick, highlightedSegmentId }: { run:
 
 
 // --- Componente da Aba: Histórico e Análise ---
-const HistoricoTab = () => {
+const AnalysisAndHistoryContent = ({ mode }: { mode: 'analysis' | 'history' }) => {
     const { firestore } = useFirebase();
     const { toast } = useToast();
     const router = useRouter();
@@ -840,14 +840,8 @@ const HistoricoTab = () => {
                   <DriverFilter drivers={driverList} selectedDriver={selectedDriver} onDriverChange={setSelectedDriver} />
             </div>
 
-            <Tabs defaultValue="analysis" className="w-full">
-                <div className="flex justify-center border-b">
-                    <TabsList className="grid w-full max-w-md grid-cols-2">
-                        <TabsTrigger value="analysis">Análise Gráfica</TabsTrigger>
-                        <TabsTrigger value="history">Histórico de Corridas</TabsTrigger>
-                    </TabsList>
-                </div>
-                <TabsContent value="analysis" className="py-6 space-y-4">
+            {mode === 'analysis' && (
+                <div className="py-6 space-y-4">
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                         <KpiCard title="Corridas Concluídas" value={kpis.totalRuns} icon={ClipboardCheck} />
                         <KpiCard title="Paradas Totais" value={kpis.totalStops} icon={Milestone} />
@@ -859,8 +853,11 @@ const HistoricoTab = () => {
                         <ChartCard title="Km Rodados por Caminhão" description="Distância total percorrida por caminhão."><BarChart data={chartData.distanceByVehicle} layout="vertical"><CartesianGrid strokeDasharray="3 3" horizontal={false} /><XAxis type="number" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} /><YAxis type="category" dataKey="name" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} width={80} /><Tooltip cursor={{fill: 'hsl(var(--muted))'}} contentStyle={{backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)'}} formatter={(value) => `${value} km`}/><Bar dataKey="total" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} /></BarChart></ChartCard>
                         <ChartCard title="Tempo Parado por Caminhão (Horas)" description="Soma do tempo em que o veículo ficou parado nas paradas (coletas/entregas)." className="lg:col-span-2"><BarChart data={chartData.stoppedTimeByVehicle}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="name" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} /><YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} unit="h" /><Tooltip cursor={{fill: 'hsl(var(--muted))'}} contentStyle={{backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)'}} formatter={(value: number) => `${value.toFixed(1)} horas`}/><Bar dataKey="total" fill="hsl(var(--destructive))" radius={[4, 4, 0, 0]} /></BarChart></ChartCard>
                     </div>
-                </TabsContent>
-                <TabsContent value="history" className="py-6">
+                </div>
+            )}
+            
+            {mode === 'history' && (
+                 <div className="py-6">
                     <Card>
                         <CardHeader>
                             <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-4">
@@ -870,8 +867,9 @@ const HistoricoTab = () => {
                         </CardHeader>
                         <CardContent><div className="overflow-auto max-h-[400px]"><Table><TableHeader><TableRow><TableHead>Veículo</TableHead><TableHead>Motorista</TableHead><TableHead>Turno</TableHead><TableHead>Destino</TableHead><TableHead>Distância</TableHead><TableHead>Data</TableHead><TableHead className="text-right">Ação</TableHead></TableRow></TableHeader><TableBody>{filteredRuns.length > 0 ? filteredRuns.map(run => <HistoryTableRow key={run.id} run={run} users={users} onViewDetails={() => handleViewDetails(run)} isSuperAdmin={isSuperAdmin} onDelete={() => handleDelete(run)} />) : <TableRow><TableCell colSpan={7} className="text-center h-24">Nenhuma corrida encontrada</TableCell></TableRow>}</TableBody></Table></div></CardContent>
                     </Card>
-                </TabsContent>
-            </Tabs>
+                 </div>
+            )}
+
             <RunDetailsDialog run={selectedRunForDialog} isOpen={selectedRunForDialog !== null} onClose={() => setSelectedRunForDialog(null)} isClient={isClient} />
         </div>
     );
@@ -1108,10 +1106,11 @@ export default function DashboardPage() {
        </div>
        
        <Tabs defaultValue="visao-geral" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-5">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-6">
             <TabsTrigger value="visao-geral">Visão Geral</TabsTrigger>
             <TabsTrigger value="acompanhamento">Acompanhamento</TabsTrigger>
-            <TabsTrigger value="historico">Histórico e Análise</TabsTrigger>
+            <TabsTrigger value="analise">Análise</TabsTrigger>
+            <TabsTrigger value="historico">Histórico</TabsTrigger>
             <TabsTrigger value="abastecimentos">Abastecimentos</TabsTrigger>
             <TabsTrigger value="checklists">Checklists</TabsTrigger>
         </TabsList>
@@ -1122,8 +1121,11 @@ export default function DashboardPage() {
         <TabsContent value="acompanhamento" className="mt-6">
             <AcompanhamentoTab />
         </TabsContent>
+        <TabsContent value="analise" className="mt-6">
+            <AnalysisAndHistoryContent mode="analysis" />
+        </TabsContent>
         <TabsContent value="historico" className="mt-6">
-            <HistoricoTab />
+            <AnalysisAndHistoryContent mode="history" />
         </TabsContent>
         <TabsContent value="abastecimentos" className="mt-6">
             <AbastecimentosTab />
