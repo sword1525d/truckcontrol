@@ -11,7 +11,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Truck, User, Wrench, PlayCircle, Route, Timer, X, Hourglass, EyeOff, Milestone, Maximize, Car, Package, Warehouse, CheckCircle, Clock, Calendar as CalendarIcon, Fuel, ClipboardCheck, Building, Download, Trash2, MapPin, FileText } from 'lucide-react';
+import { Loader2, Truck, User, Wrench, PlayCircle, Route, Timer, X, Hourglass, EyeOff, Milestone, Maximize, Car, Package, Warehouse, CheckCircle, Clock, Calendar as CalendarIcon, Fuel, ClipboardCheck, Building, Download, Trash2, MapPin } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -33,20 +33,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
 import * as XLSX from 'xlsx';
-import { Separator } from '@/components/ui/separator';
 
-// --- Helper Functions and Constants ---
+// --- Constantes e Funções de Ajuda ---
 const SEGMENT_COLORS = ['#3b82f6', '#ef4444', '#10b981', '#f97316', '#8b5cf6', '#ec4899', '#6366f1', '#f59e0b', '#14b8a6', '#d946ef'];
 const MAX_DISTANCE_BETWEEN_POINTS_KM = 5;
 
 const getHaversineDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-    const R = 6371; // Radius of the Earth in km
+    const R = 6371; // Raio da Terra em km
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a =
-        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
 };
@@ -61,7 +57,7 @@ const filterLocationOutliers = (locations: LocationPoint[]): LocationPoint[] => 
         if (distance <= MAX_DISTANCE_BETWEEN_POINTS_KM) {
             filtered.push(curr);
         } else {
-            console.warn(`Outlier detected and removed. Distance: ${distance.toFixed(2)} km`);
+            console.warn(`Outlier detectado e removido. Distância: ${distance.toFixed(2)} km`);
         }
     }
     return filtered;
@@ -71,7 +67,6 @@ const formatTimeDiff = (start: Date, end: Date) => {
     if (!start || !end) return 'N/A';
     return formatDistanceStrict(end, start, { locale: ptBR, unit: 'minute' });
 }
-
 
 const processRunSegments = (run: AggregatedRun | Run | null, isAggregated: boolean = true): Segment[] => {
     if (!run || !run.locationHistory || run.locationHistory.length === 0) return [];
@@ -426,12 +421,10 @@ const AcompanhamentoTab = () => {
                 </>
             )}
 
-            <Separator className="my-8"/>
-            <h2 className="text-2xl font-bold tracking-tight">Corridas do Dia</h2>
             {isLoading ? (
                 <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
             ): (
-                <>
+                <div className='mt-6'>
                 {aggregatedRuns.length === 0 ? (
                     <Card className="text-center p-8 mt-6"><CardHeader><CardTitle>Nenhuma atividade hoje</CardTitle><CardDescription>Não há motoristas em rota ou corridas finalizadas hoje.</CardDescription></CardHeader></Card>
                 ) : (
@@ -439,7 +432,7 @@ const AcompanhamentoTab = () => {
                         {aggregatedRuns.map(run => <RunAccordionItem key={run.key} run={run} users={users} onViewRoute={() => handleViewRoute(run.key)} />)}
                     </Accordion>
                 )}
-                </>
+                </div>
             )}
             <Dialog open={selectedRunForMap !== null} onOpenChange={(isOpen) => !isOpen && handleCloseDialog()}>
                 <DialogContent className="max-w-[90vw] lg:max-w-7xl w-full h-[90vh] flex flex-col p-0">
@@ -717,7 +710,7 @@ const AnaliseTab = () => {
     return (
         <div className="space-y-6">
             <div className="flex justify-center">
-                <div className="flex w-full max-w-5xl flex-wrap items-center justify-center gap-2">
+                <div className="flex w-full flex-wrap items-center justify-center gap-2">
                     <DateFilter date={date} setDate={setDate} />
                     {isSuperAdmin && <SectorFilter sectors={allSectors} selectedSector={selectedSector} onSectorChange={setSelectedSector} />}
                     <ShiftFilter selectedShift={selectedShift} onShiftChange={setSelectedShift} />
@@ -934,7 +927,7 @@ const HistoricoTab = () => {
     return (
         <div className="space-y-6">
             <div className="flex justify-center">
-                <div className="flex w-full max-w-5xl flex-wrap items-center justify-center gap-2">
+                <div className="flex w-full flex-wrap items-center justify-center gap-2">
                     <DateFilter date={date} setDate={setDate} />
                     {isSuperAdmin && <SectorFilter sectors={allSectors} selectedSector={selectedSector} onSectorChange={setSelectedSector} />}
                     <ShiftFilter selectedShift={selectedShift} onShiftChange={setSelectedShift} />
@@ -979,10 +972,9 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
     const [mapRun, setMapRun] = useState<AggregatedRun | Run | null>(null);
     const [isAggregatedMap, setIsAggregatedMap] = useState<boolean>(true);
     const [highlightedSegmentId, setHighlightedSegmentId] = useState<string | null>(null);
-    const [isMapFullscreen, setIsMapFullscreen] = useState(false);
     const router = useRouter();
 
-    useEffect(() => { if (isOpen) { setMapRun(run); setIsAggregatedMap(true); } if (!isOpen) { setHighlightedSegmentId(null); setIsMapFullscreen(false); } }, [isOpen, run]);
+    useEffect(() => { if (isOpen) { setMapRun(run); setIsAggregatedMap(true); } if (!isOpen) { setHighlightedSegmentId(null); } }, [isOpen, run]);
     const mapSegments = useMemo(() => processRunSegments(mapRun, isAggregatedMap), [mapRun, isAggregatedMap]);
     const displayedSegments = useMemo(() => { if (!highlightedSegmentId) return mapSegments.map(s => ({ ...s, opacity: 0.9 })); return mapSegments.map(s => ({ ...s, opacity: s.id === highlightedSegmentId ? 1.0 : 0.3, })); }, [mapSegments, highlightedSegmentId]);
     if (!run) return null;
@@ -1207,7 +1199,7 @@ export default function DashboardPage() {
        </div>
        
        <Tabs defaultValue="acompanhamento" className="w-full">
-        <div className="border-b">
+        <div className='w-full'>
             <TabsList className="grid w-full grid-cols-5">
                 <TabsTrigger value="acompanhamento">Acompanhamento</TabsTrigger>
                 <TabsTrigger value="analise">Análise</TabsTrigger>
@@ -1223,7 +1215,7 @@ export default function DashboardPage() {
         <TabsContent value="analise" className="mt-6">
             <AnaliseTab />
         </TabsContent>
-        <TabsContent value="historico" className="mt-6">
+         <TabsContent value="historico" className="mt-6">
             <HistoricoTab />
         </TabsContent>
         <TabsContent value="abastecimentos" className="mt-6">
@@ -1236,4 +1228,6 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+
 
