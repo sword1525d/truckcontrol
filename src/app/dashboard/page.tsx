@@ -10,7 +10,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Truck, User, Wrench, PlayCircle, Route, Timer, X, Hourglass, EyeOff, Milestone, Maximize, Car, Package, Warehouse, CheckCircle, Clock, Calendar as CalendarIcon, Fuel, ClipboardCheck, Building, Download, Trash2, FileText, MapPin, Map } from 'lucide-react';
+import { Loader2, Truck, User, Wrench, PlayCircle, Route, Timer, X, Hourglass, EyeOff, Milestone, Maximize, Car, Package, Warehouse, CheckCircle, Clock, Calendar as CalendarIcon, Fuel, ClipboardCheck, Building, Download, Trash2, FileText, MapPin, Map as MapIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -431,7 +431,7 @@ const AcompanhamentoTab = () => {
                                     <CardDescription>Visão geral de todos os caminhões do setor.</CardDescription>
                                 </div>
                                 <Button variant="outline" size="icon" onClick={() => setIsFleetMapOpen(true)} disabled={activeTrucks.length === 0}>
-                                    <Map className="h-5 w-5" />
+                                    <MapIcon className="h-5 w-5" />
                                     <span className="sr-only">Ver mapa da frota</span>
                                 </Button>
                             </div>
@@ -1243,9 +1243,9 @@ export default function DashboardPage() {
         <TabsList className={cn("grid w-full", isMobile ? "grid-cols-2" : "grid-cols-5")}>
             <TabsTrigger value="acompanhamento">Acompanhamento</TabsTrigger>
             
-            <TabsTrigger value="analise">Análise</TabsTrigger>
-            <TabsTrigger value="historico">Histórico</TabsTrigger>
-            <TabsTrigger value="abastecimentos">Abastecimentos</TabsTrigger>
+            {!isMobile && <TabsTrigger value="analise">Análise</TabsTrigger>}
+            {!isMobile && <TabsTrigger value="historico">Histórico</TabsTrigger>}
+            {!isMobile && <TabsTrigger value="abastecimentos">Abastecimentos</TabsTrigger>}
             
             <TabsTrigger value="checklists">Checklists</TabsTrigger>
         </TabsList>
