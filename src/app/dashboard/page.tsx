@@ -1,3 +1,4 @@
+
 'use client';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useFirebase } from '@/firebase';
@@ -10,7 +11,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Truck, User, Wrench, PlayCircle, Route, Timer, X, Hourglass, EyeOff, Milestone, Maximize, Car, Package, Warehouse, CheckCircle, Clock, Calendar as CalendarIcon, Fuel, ClipboardCheck, Building, Download, FileText, Trash2, MapPin } from 'lucide-react';
+import { Loader2, Truck, User, Wrench, PlayCircle, Route, Timer, X, Hourglass, EyeOff, Milestone, Maximize, Car, Package, Warehouse, CheckCircle, Clock, Calendar as CalendarIcon, Fuel, ClipboardCheck, Building, Download, Trash2, MapPin, FileText } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -32,6 +33,118 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
 import * as XLSX from 'xlsx';
+
+// --- Helper Functions and Constants ---
+const SEGMENT_COLORS = ['#3b82f6', '#ef4444', '#10b981', '#f97316', '#8b5cf6', '#ec4899', '#6366f1', '#f59e0b', '#14b8a6', '#d946ef'];
+const MAX_DISTANCE_BETWEEN_POINTS_KM = 5;
+
+const getHaversineDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371; // Radius of the Earth in km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+};
+
+const filterLocationOutliers = (locations: LocationPoint[]): LocationPoint[] => {
+    if (locations.length < 2) return locations;
+    const filtered: LocationPoint[] = [locations[0]];
+    for (let i = 1; i < locations.length; i++) {
+        const prev = filtered[filtered.length - 1];
+        const curr = locations[i];
+        const distance = getHaversineDistance(prev.latitude, prev.longitude, curr.latitude, curr.longitude);
+        if (distance <= MAX_DISTANCE_BETWEEN_POINTS_KM) {
+            filtered.push(curr);
+        } else {
+            console.warn(`Outlier detected and removed. Distance: ${distance.toFixed(2)} km`);
+        }
+    }
+    return filtered;
+};
+
+const formatTimeDiff = (start: Date, end: Date) => {
+    if (!start || !end) return 'N/A';
+    return formatDistanceStrict(end, start, { locale: ptBR, unit: 'minute' });
+}
+
+
+const processRunSegments = (run: AggregatedRun | Run | null, isAggregated: boolean = true): Segment[] => {
+    if (!run || !run.locationHistory || run.locationHistory.length === 0) return [];
+    
+    const sortedAndFilteredLocations = filterLocationOutliers([...run.locationHistory].sort((a, b) => a.timestamp.seconds - b.timestamp.seconds));
+    const sortedStops = [...run.stops].filter(s => s.status === 'COMPLETED' || s.status === 'IN_PROGRESS').sort((a, b) => (a.arrivalTime?.seconds || Infinity) - (b.arrivalTime?.seconds || Infinity));
+    const segments: Segment[] = [];
+    let lastDepartureTime = run.startTime;
+    const startMileage = isAggregated ? (run as AggregatedRun).startMileage : (run as Run).startMileage;
+    let lastMileage = startMileage;
+
+    for (let i = 0; i < sortedStops.length; i++) {
+        const stop = sortedStops[i];
+        if (!stop.arrivalTime) continue;
+
+        const stopArrivalTime = new Date(stop.arrivalTime.seconds * 1000);
+        const stopDepartureTime = stop.departureTime ? new Date(stop.departureTime.seconds * 1000) : null;
+        const segmentDistance = (stop.mileageAtStop && lastMileage) ? stop.mileageAtStop - lastMileage : null;
+
+        const segmentPath = sortedAndFilteredLocations
+            .filter(loc => loc.timestamp.seconds >= lastDepartureTime.seconds && loc.timestamp.seconds <= stop.arrivalTime!.seconds)
+            .map(loc => [loc.longitude, loc.latitude] as [number, number]);
+
+        if (i > 0) {
+            const prevStop = sortedStops[i - 1];
+            if (prevStop.departureTime) {
+                const prevDepartureTimeInSeconds = prevStop.departureTime.seconds;
+                const lastPointOfPrevSegment = sortedAndFilteredLocations.slice().reverse().find(l => l.timestamp.seconds <= prevDepartureTimeInSeconds);
+                if (lastPointOfPrevSegment) {
+                    segmentPath.unshift([lastPointOfPrevSegment.longitude, lastPointOfPrevSegment.latitude]);
+                }
+            }
+        } else {
+            const firstPoint = sortedAndFilteredLocations.find(l => l.timestamp.seconds >= run.startTime.seconds);
+            if (firstPoint) {
+                segmentPath.unshift([firstPoint.longitude, firstPoint.latitude]);
+            }
+        }
+
+        segments.push({
+            id: `segment-${i}`,
+            label: `Trajeto para ${stop.name}`,
+            path: segmentPath,
+            color: SEGMENT_COLORS[i % SEGMENT_COLORS.length],
+            travelTime: formatTimeDiff(new Date(lastDepartureTime.seconds * 1000), stopArrivalTime),
+            stopTime: stopDepartureTime ? formatTimeDiff(stopArrivalTime, stopDepartureTime) : 'Em andamento',
+            distance: segmentDistance !== null ? `${segmentDistance.toFixed(1)} km` : undefined
+        });
+
+        if (stop.departureTime) lastDepartureTime = stop.departureTime;
+        if (stop.mileageAtStop) lastMileage = stop.mileageAtStop;
+    }
+
+    if (run.status === 'IN_PROGRESS' && sortedAndFilteredLocations.length > 0) {
+        const lastStop = sortedStops[sortedStops.length - 1];
+        if (lastStop && lastStop.departureTime) {
+            const finalSegmentPath = sortedAndFilteredLocations
+                .filter(loc => loc.timestamp.seconds >= lastStop.departureTime!.seconds)
+                .map(loc => [loc.longitude, loc.latitude] as [number, number]);
+            if (finalSegmentPath.length > 0) {
+                segments.push({
+                    id: `segment-current`,
+                    label: `Posição Atual`,
+                    path: finalSegmentPath,
+                    color: '#71717a',
+                    travelTime: formatTimeDiff(new Date(lastStop.departureTime.seconds * 1000), new Date()),
+                    stopTime: ''
+                });
+            }
+        }
+    }
+    return segments;
+};
+
 
 // --- Tipos Globais ---
 type StopStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELED';
@@ -125,117 +238,6 @@ const RealTimeMap = dynamic(() => import('./RealTimeMap'), {
   ssr: false,
   loading: () => <div className="flex justify-center items-center h-full"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
 });
-
-
-// --- Helper Functions and Constants ---
-const SEGMENT_COLORS = ['#3b82f6', '#ef4444', '#10b981', '#f97316', '#8b5cf6', '#ec4899', '#6366f1', '#f59e0b', '#14b8a6', '#d946ef'];
-const MAX_DISTANCE_BETWEEN_POINTS_KM = 5;
-
-const getHaversineDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-    const R = 6371; // Radius of the Earth in km
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a =
-        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-        Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
-};
-
-const filterLocationOutliers = (locations: LocationPoint[]): LocationPoint[] => {
-    if (locations.length < 2) return locations;
-    const filtered: LocationPoint[] = [locations[0]];
-    for (let i = 1; i < locations.length; i++) {
-        const prev = filtered[filtered.length - 1];
-        const curr = locations[i];
-        const distance = getHaversineDistance(prev.latitude, prev.longitude, curr.latitude, curr.longitude);
-        if (distance <= MAX_DISTANCE_BETWEEN_POINTS_KM) {
-            filtered.push(curr);
-        } else {
-            console.warn(`Outlier detected and removed. Distance: ${distance.toFixed(2)} km`);
-        }
-    }
-    return filtered;
-};
-
-const formatTimeDiff = (start: Date, end: Date) => {
-    if (!start || !end) return 'N/A';
-    return formatDistanceStrict(end, start, { locale: ptBR, unit: 'minute' });
-}
-
-const processRunSegments = (run: AggregatedRun | Run | null, isAggregated: boolean = true): Segment[] => {
-    if (!run || !run.locationHistory || run.locationHistory.length === 0) return [];
-    
-    const sortedAndFilteredLocations = filterLocationOutliers([...run.locationHistory].sort((a, b) => a.timestamp.seconds - b.timestamp.seconds));
-    const sortedStops = [...run.stops].filter(s => s.status === 'COMPLETED' || s.status === 'IN_PROGRESS').sort((a, b) => (a.arrivalTime?.seconds || Infinity) - (b.arrivalTime?.seconds || Infinity));
-    const segments: Segment[] = [];
-    let lastDepartureTime = run.startTime;
-    const startMileage = isAggregated ? (run as AggregatedRun).startMileage : (run as Run).startMileage;
-    let lastMileage = startMileage;
-
-    for (let i = 0; i < sortedStops.length; i++) {
-        const stop = sortedStops[i];
-        if (!stop.arrivalTime) continue;
-
-        const stopArrivalTime = new Date(stop.arrivalTime.seconds * 1000);
-        const stopDepartureTime = stop.departureTime ? new Date(stop.departureTime.seconds * 1000) : null;
-        const segmentDistance = (stop.mileageAtStop && lastMileage) ? stop.mileageAtStop - lastMileage : null;
-
-        const segmentPath = sortedAndFilteredLocations
-            .filter(loc => loc.timestamp.seconds >= lastDepartureTime.seconds && loc.timestamp.seconds <= stop.arrivalTime!.seconds)
-            .map(loc => [loc.longitude, loc.latitude] as [number, number]);
-
-        if (i > 0) {
-            const prevStop = sortedStops[i - 1];
-            if (prevStop.departureTime) {
-                const prevDepartureTimeInSeconds = prevStop.departureTime.seconds;
-                const lastPointOfPrevSegment = sortedAndFilteredLocations.slice().reverse().find(l => l.timestamp.seconds <= prevDepartureTimeInSeconds);
-                if (lastPointOfPrevSegment) {
-                    segmentPath.unshift([lastPointOfPrevSegment.longitude, lastPointOfPrevSegment.latitude]);
-                }
-            }
-        } else {
-            const firstPoint = sortedAndFilteredLocations.find(l => l.timestamp.seconds >= run.startTime.seconds);
-            if (firstPoint) {
-                segmentPath.unshift([firstPoint.longitude, firstPoint.latitude]);
-            }
-        }
-
-        segments.push({
-            id: `segment-${i}`,
-            label: `Trajeto para ${stop.name}`,
-            path: segmentPath,
-            color: SEGMENT_COLORS[i % SEGMENT_COLORS.length],
-            travelTime: formatTimeDiff(new Date(lastDepartureTime.seconds * 1000), stopArrivalTime),
-            stopTime: stopDepartureTime ? formatTimeDiff(stopArrivalTime, stopDepartureTime) : 'Em andamento',
-            distance: segmentDistance !== null ? `${segmentDistance.toFixed(1)} km` : undefined
-        });
-
-        if (stop.departureTime) lastDepartureTime = stop.departureTime;
-        if (stop.mileageAtStop) lastMileage = stop.mileageAtStop;
-    }
-
-    if (run.status === 'IN_PROGRESS' && sortedAndFilteredLocations.length > 0) {
-        const lastStop = sortedStops[sortedStops.length - 1];
-        if (lastStop && lastStop.departureTime) {
-            const finalSegmentPath = sortedAndFilteredLocations
-                .filter(loc => loc.timestamp.seconds >= lastStop.departureTime!.seconds)
-                .map(loc => [loc.longitude, loc.latitude] as [number, number]);
-            if (finalSegmentPath.length > 0) {
-                segments.push({
-                    id: `segment-current`,
-                    label: `Posição Atual`,
-                    path: finalSegmentPath,
-                    color: '#71717a',
-                    travelTime: formatTimeDiff(new Date(lastStop.departureTime.seconds * 1000), new Date()),
-                    stopTime: ''
-                });
-            }
-        }
-    }
-    return segments;
-};
 
 
 // --- Componente da Aba: Visão Geral ---
@@ -734,12 +736,12 @@ const AnaliseTab = () => {
 
     return (
         <div className="space-y-6">
-             <div className="flex w-full flex-wrap items-center justify-center gap-2">
-                  <DateFilter date={date} setDate={setDate} />
-                  {isSuperAdmin && <SectorFilter sectors={allSectors} selectedSector={selectedSector} onSectorChange={setSelectedSector} />}
-                  <ShiftFilter selectedShift={selectedShift} onShiftChange={setSelectedShift} />
-                  <VehicleFilter vehicles={vehicleList} selectedVehicle={selectedVehicle} onVehicleChange={setSelectedVehicle} />
-                  <DriverFilter drivers={driverList} selectedDriver={selectedDriver} onDriverChange={setSelectedDriver} />
+            <div className="flex w-full flex-wrap items-center justify-center gap-2">
+                <DateFilter date={date} setDate={setDate} />
+                {isSuperAdmin && <SectorFilter sectors={allSectors} selectedSector={selectedSector} onSectorChange={setSelectedSector} />}
+                <ShiftFilter selectedShift={selectedShift} onShiftChange={setSelectedShift} />
+                <VehicleFilter vehicles={vehicleList} selectedVehicle={selectedVehicle} onVehicleChange={setSelectedVehicle} />
+                <DriverFilter drivers={driverList} selectedDriver={selectedDriver} onDriverChange={setSelectedDriver} />
             </div>
              <div className="py-6 space-y-4">
                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -1086,9 +1088,16 @@ const AbastecimentosTab = () => {
 
     return (
         <Card>
-            <CardHeader><CardTitle>Registros de Abastecimento</CardTitle><CardDescription>Lista de todos os abastecimentos no período selecionado.</CardDescription></CardHeader>
+            <CardHeader>
+                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+                    <div>
+                        <CardTitle>Registros de Abastecimento</CardTitle>
+                        <CardDescription>Lista de todos os abastecimentos no período selecionado.</CardDescription>
+                    </div>
+                    <DateFilter date={date} setDate={setDate} />
+                </div>
+            </CardHeader>
             <CardContent>
-                <div className="flex justify-end mb-4"><DateFilter date={date} setDate={setDate} /></div>
                 <div className="overflow-auto max-h-[60vh]"><Table><TableHeader><TableRow><TableHead>Data</TableHead><TableHead>Veículo</TableHead><TableHead>Motorista</TableHead><TableHead>Litros</TableHead><TableHead className="text-right">Valor</TableHead></TableRow></TableHeader><TableBody>{filteredRefuels.length > 0 ? filteredRefuels.map(refuel => <RefuelTableRow key={refuel.id} refuel={refuel} driver={users.get(refuel.driverId)} />) : <TableRow><TableCell colSpan={5} className="text-center h-24">Nenhum abastecimento encontrado</TableCell></TableRow>}</TableBody></Table></div>
             </CardContent>
         </Card>
@@ -1163,9 +1172,19 @@ const ChecklistsTab = () => {
 
     return (
         <Card>
-            <CardHeader><CardTitle>Registros de Checklist</CardTitle><CardDescription>Lista de checklists preenchidos no período.</CardDescription></CardHeader>
+            <CardHeader>
+                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+                    <div>
+                        <CardTitle>Registros de Checklist</CardTitle>
+                        <CardDescription>Lista de checklists preenchidos no período.</CardDescription>
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                        <VehicleFilter vehicles={vehicleList} selectedVehicle={selectedVehicle} onVehicleChange={setSelectedVehicle} />
+                        <DateFilter date={date} setDate={setDate} />
+                    </div>
+                </div>
+            </CardHeader>
             <CardContent>
-                <div className="flex flex-col sm:flex-row gap-2 mb-4 justify-end"><VehicleFilter vehicles={vehicleList} selectedVehicle={selectedVehicle} onVehicleChange={setSelectedVehicle} /><DateFilter date={date} setDate={setDate} /></div>
                 <div className="overflow-auto max-h-[60vh]"><Table><TableHeader><TableRow><TableHead>Data</TableHead><TableHead>Veículo</TableHead><TableHead>Motorista</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader><TableBody>{filteredChecklists.length > 0 ? filteredChecklists.map(c => <ChecklistTableRow key={c.id} checklist={c} driver={users.get(c.driverId)} onViewDetails={() => setSelectedChecklist(c)} isSuperAdmin={isSuperAdmin} onDelete={handleDelete} />) : <TableRow><TableCell colSpan={5} className="text-center h-24">Nenhum checklist encontrado</TableCell></TableRow>}</TableBody></Table></div>
             </CardContent>
             <ChecklistDetailsDialog checklist={selectedChecklist} isOpen={selectedChecklist !== null} onClose={() => setSelectedChecklist(null)} />
@@ -1204,8 +1223,8 @@ export default function DashboardPage() {
        </div>
        
        <Tabs defaultValue="visao-geral" className="w-full">
-        <div className="flex justify-center border-b">
-          <TabsList className="grid w-full max-w-2xl grid-cols-6">
+        <div className="border-b">
+          <TabsList className="grid w-full grid-cols-6">
               <TabsTrigger value="visao-geral">Visão Geral</TabsTrigger>
               <TabsTrigger value="acompanhamento">Acompanhamento</TabsTrigger>
               <TabsTrigger value="analise">Análise</TabsTrigger>
