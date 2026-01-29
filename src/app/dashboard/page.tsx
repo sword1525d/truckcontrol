@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useFirebase } from '@/firebase';
-import { collection, onSnapshot, query, where, Timestamp, getDocs, doc, deleteDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, Timestamp, getDocs, doc, deleteDoc, collectionGroup, orderBy } from 'firebase/firestore';
 import {
   Card,
   CardContent,
@@ -10,7 +10,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Truck, User, Wrench, PlayCircle, Route, Timer, X, Hourglass, EyeOff, Milestone, Maximize, Car, Package, Warehouse, CheckCircle, Clock, Calendar as CalendarIcon, Fuel, ClipboardCheck, Building, Download, MapIcon } from 'lucide-react';
+import { Loader2, Truck, User, Wrench, PlayCircle, Route, Timer, X, Hourglass, EyeOff, Milestone, Maximize, Car, Package, Warehouse, CheckCircle, Clock, Calendar as CalendarIcon, Fuel, ClipboardCheck, Building, Download, MapIcon, FileText } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -113,6 +113,7 @@ type UserData = {
   isAdmin: boolean;
   companyId: string;
   sectorId: string;
+  matricula: string;
 };
 
 type SectorInfo = {
@@ -140,7 +141,8 @@ const VisaoGeralTab = () => {
         const storedUser = localStorage.getItem('user');
         const companyId = localStorage.getItem('companyId');
         const sectorId = localStorage.getItem('sectorId');
-        if (storedUser && companyId && sectorId) setUser({ ...JSON.parse(storedUser), companyId, sectorId });
+        const matricula = localStorage.getItem('matricula');
+        if (storedUser && companyId && sectorId && matricula) setUser({ ...JSON.parse(storedUser), companyId, sectorId, matricula });
     }, []);
 
     useEffect(() => {
@@ -218,11 +220,11 @@ const VisaoGeralTab = () => {
     );
 };
 
-const KpiCard = ({ title, value, icon: Icon }: { title: string, value: number, icon: React.ElementType }) => (
+const KpiCard = ({ title, value, icon: Icon }: { title: string; value: string | number; icon?: React.ElementType }) => (
     <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">{title}</CardTitle>
-            <Icon className="h-4 w-4 text-muted-foreground" />
+            {Icon && <Icon className="h-4 w-4 text-muted-foreground" />}
         </CardHeader>
         <CardContent>
             <div className="text-2xl font-bold">{value}</div>
@@ -270,7 +272,8 @@ const AcompanhamentoTab = () => {
         const storedUser = localStorage.getItem('user');
         const companyId = localStorage.getItem('companyId');
         const sectorId = localStorage.getItem('sectorId');
-        if (storedUser && companyId && sectorId) setUser({ ...JSON.parse(storedUser), companyId, sectorId });
+        const matricula = localStorage.getItem('matricula');
+        if (storedUser && companyId && sectorId && matricula) setUser({ ...JSON.parse(storedUser), companyId, sectorId, matricula });
     }, []);
 
     useEffect(() => {
@@ -565,8 +568,8 @@ const HistoricoTab = () => {
         const companyId = localStorage.getItem('companyId');
         const sectorId = localStorage.getItem('sectorId');
         const matricula = localStorage.getItem('matricula');
-        if (storedUser && companyId && sectorId) {
-            setUser({ ...JSON.parse(storedUser), companyId, sectorId });
+        if (storedUser && companyId && sectorId && matricula) {
+            setUser({ ...JSON.parse(storedUser), companyId, sectorId, matricula });
             if (matricula === '801231') setIsSuperAdmin(true);
         } else {
             router.push('/login');
@@ -578,8 +581,6 @@ const HistoricoTab = () => {
         setIsLoading(true);
         try {
             const usersMap = new Map<string, FirestoreUser>();
-            const sectorsList: SectorInfo[] = [];
-            let runs: Run[] = [];
             const sectorRefsToFetch: {id: string, name: string}[] = [];
 
             if (isSuperAdmin) {
@@ -591,14 +592,18 @@ const HistoricoTab = () => {
             }
             setAllSectors(sectorRefsToFetch);
             
-            for (const sector of sectorRefsToFetch) {
+            const runsPromises = sectorRefsToFetch.map(async (sector) => {
                 const usersSnapshot = await getDocs(collection(firestore, `companies/${user.companyId}/sectors/${sector.id}/users`));
                 usersSnapshot.forEach(doc => { if (!usersMap.has(doc.id)) usersMap.set(doc.id, { id: doc.id, ...doc.data() } as FirestoreUser); });
                 const querySnapshot = await getDocs(query(collection(firestore, `companies/${user.companyId}/sectors/${sector.id}/runs`), where('status', '==', 'COMPLETED')));
-                querySnapshot.docs.forEach(doc => runs.push({ id: doc.id, ...(doc.data() as Omit<Run, 'id'>), sectorId: sector.id }));
-            }
+                return querySnapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as Omit<Run, 'id'>), sectorId: sector.id }));
+            });
+
+            const runsBySector = await Promise.all(runsPromises);
+            const allFetchedRuns = runsBySector.flat();
+
             setUsers(usersMap);
-            setAllRuns(runs.sort((a, b) => (b.endTime?.seconds || 0) - (a.endTime?.seconds || 0)));
+            setAllRuns(allFetchedRuns.sort((a, b) => (b.endTime?.seconds || 0) - (a.endTime?.seconds || 0)));
         } catch (error) {
             console.error("Error fetching data: ", error);
             toast({ variant: 'destructive', title: 'Erro ao buscar dados' });
@@ -726,7 +731,25 @@ const HistoricoTab = () => {
                 const totalStopTimeSeconds = run.stops.reduce((acc, stop) => acc + (stop.arrivalTime && stop.departureTime ? stop.departureTime.seconds - stop.arrivalTime.seconds : 0), 0);
                 const stopTime = totalStopTimeSeconds > 0 ? formatDistanceStrict(0, totalStopTimeSeconds * 1000, { locale: ptBR, unit: 'minute' }) : '0 min';
                 const observations = run.stops.map(s => s.observation).filter(Boolean).join('; ');
-                return { 'Data': format(run.startTime.toDate(), 'dd/MM/yyyy'), 'Horário Inicial': format(run.startTime.toDate(), 'HH:mm'), 'Horário Final': run.endTime ? format(run.endTime.toDate(), 'HH:mm') : 'N/A', 'Duração Total': totalDuration, 'Tempo Parado (na corrida)': stopTime, 'Setor': sector?.name || run.sectorId, 'Veículo': run.vehicleId, 'Motorista': run.driverName, 'Turno': driver?.shift || 'N/A', 'Paradas': run.stops.map(s => s.name).join(', '), 'Observações': observations, 'Distância (km)': distance > 0 ? distance.toFixed(1) : '0.0', 'Km Inicial': run.startMileage, 'Km Final': run.endMileage || 'N/A' };
+                
+                const previousRun = index > 0 ? vehicleRuns[index - 1] : null;
+                const idleTime = previousRun?.endTime ? formatDistanceStrict(previousRun.endTime.toDate(), run.startTime.toDate(), { locale: ptBR }) : 'N/A';
+
+                return { 
+                    'Data': format(run.startTime.toDate(), 'dd/MM/yyyy'), 
+                    'Horário Inicial': format(run.startTime.toDate(), 'HH:mm'), 
+                    'Horário Final': run.endTime ? format(run.endTime.toDate(), 'HH:mm') : 'N/A', 
+                    'Duração Total': totalDuration, 
+                    'Tempo Parado (na corrida)': stopTime, 
+                    'Setor': sector?.name || run.sectorId, 
+                    'Veículo': run.vehicleId, 'Motorista': 
+                    run.driverName, 'Turno': driver?.shift || 'N/A', 
+                    'Paradas': run.stops.map(s => s.name).join(', '), 
+                    'Observações': observations, 
+                    'Distância (km)': distance > 0 ? distance.toFixed(1) : '0.0', 
+                    'Km Inicial': run.startMileage, 
+                    'Km Final': run.endMileage || 'N/A' 
+                };
             });
             if (dataToExport.length > 0) {
                 const worksheet = XLSX.utils.json_to_sheet(dataToExport);
@@ -746,12 +769,15 @@ const HistoricoTab = () => {
 
     return (
         <div className="space-y-6">
-            <div className="flex w-full flex-wrap items-center justify-end gap-2">
-                <DateFilter date={date} setDate={setDate} />
-                {isSuperAdmin && <SectorFilter sectors={allSectors} selectedSector={selectedSector} onSectorChange={setSelectedSector} />}
-                <ShiftFilter selectedShift={selectedShift} onShiftChange={setSelectedShift} />
-                <VehicleFilter vehicles={vehicleList} selectedVehicle={selectedVehicle} onVehicleChange={setSelectedVehicle} />
-                <DriverFilter drivers={driverList} selectedDriver={selectedDriver} onDriverChange={setSelectedDriver} />
+            <div className='space-y-2'>
+              <h2 className="text-3xl font-bold tracking-tight">Histórico e Análise</h2>
+              <div className="flex w-full flex-wrap items-center justify-end gap-2">
+                  <DateFilter date={date} setDate={setDate} />
+                  {isSuperAdmin && <SectorFilter sectors={allSectors} selectedSector={selectedSector} onSectorChange={setSelectedSector} />}
+                  <ShiftFilter selectedShift={selectedShift} onShiftChange={setSelectedShift} />
+                  <VehicleFilter vehicles={vehicleList} selectedVehicle={selectedVehicle} onVehicleChange={setSelectedVehicle} />
+                  <DriverFilter drivers={driverList} selectedDriver={selectedDriver} onDriverChange={setSelectedDriver} />
+              </div>
             </div>
 
             <Tabs defaultValue="analysis" className="w-full">
@@ -763,10 +789,10 @@ const HistoricoTab = () => {
                 </div>
                 <TabsContent value="analysis" className="py-6 space-y-4">
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                        <KpiCard title="Corridas Concluídas" value={kpis.totalRuns} />
-                        <KpiCard title="Paradas Totais" value={kpis.totalStops} />
-                        <KpiCard title="Distância Total" value={`${kpis.totalDistance.toFixed(1)} km`} />
-                        <KpiCard title="Duração Média" value={`${kpis.avgDurationMinutes.toFixed(0)} min`} />
+                        <KpiCard title="Corridas Concluídas" value={kpis.totalRuns} icon={ClipboardCheck} />
+                        <KpiCard title="Paradas Totais" value={kpis.totalStops} icon={Milestone} />
+                        <KpiCard title="Distância Total" value={`${kpis.totalDistance.toFixed(1)} km`} icon={Route} />
+                        <KpiCard title="Duração Média" value={`${kpis.avgDurationMinutes.toFixed(0)} min`} icon={Timer} />
                     </div>
                     <div className="grid gap-6 lg:grid-cols-2">
                         <ChartCard title="Corridas por Dia" description="Total de corridas concluídas por dia."><BarChart data={chartData.runsByDay}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="name" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} /><YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} allowDecimals={false} /><Tooltip cursor={{fill: 'hsl(var(--muted))'}} contentStyle={{backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)'}}/><Bar dataKey="total" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} /></BarChart></ChartCard>
@@ -871,7 +897,8 @@ const AbastecimentosTab = () => {
         const storedUser = localStorage.getItem('user');
         const companyId = localStorage.getItem('companyId');
         const sectorId = localStorage.getItem('sectorId');
-        if (storedUser && companyId && sectorId) setUser({ ...JSON.parse(storedUser), companyId, sectorId });
+        const matricula = localStorage.getItem('matricula');
+        if (storedUser && companyId && sectorId && matricula) setUser({ ...JSON.parse(storedUser), companyId, sectorId, matricula });
     }, []);
     
     const fetchUsers = useCallback(async () => {
@@ -935,7 +962,7 @@ const ChecklistsTab = () => {
 
     useEffect(() => {
         const storedUser = localStorage.getItem('user'); const companyId = localStorage.getItem('companyId'); const sectorId = localStorage.getItem('sectorId'); const matricula = localStorage.getItem('matricula');
-        if (storedUser && companyId && sectorId) { setUser({ ...JSON.parse(storedUser), companyId, sectorId }); if (matricula === '801231') setIsSuperAdmin(true); } else router.push('/login');
+        if (storedUser && companyId && sectorId && matricula) { setUser({ ...JSON.parse(storedUser), companyId, sectorId, matricula }); if (matricula === '801231') setIsSuperAdmin(true); } else router.push('/login');
     }, [router]);
     
     const fetchUsers = useCallback(async () => {
