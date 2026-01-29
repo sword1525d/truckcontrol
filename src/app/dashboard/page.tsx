@@ -11,7 +11,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Truck, User, Wrench, PlayCircle, Route, Timer, X, Hourglass, EyeOff, Milestone, Maximize, Car, Package, Warehouse, CheckCircle, Clock, Calendar as CalendarIcon, Fuel, ClipboardCheck, Building, Download, Trash2, MapPin, FileText } from 'lucide-react';
+import { Loader2, Truck, User, Wrench, PlayCircle, Route, Timer, X, Hourglass, EyeOff, Milestone, Maximize, Car, Package, Warehouse, CheckCircle, Clock, Calendar as CalendarIcon, Fuel, ClipboardCheck, Building, Download, Trash2, MapPin } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -736,12 +736,14 @@ const AnaliseTab = () => {
 
     return (
         <div className="space-y-6">
-            <div className="flex w-full flex-wrap items-center justify-center gap-2">
-                <DateFilter date={date} setDate={setDate} />
-                {isSuperAdmin && <SectorFilter sectors={allSectors} selectedSector={selectedSector} onSectorChange={setSelectedSector} />}
-                <ShiftFilter selectedShift={selectedShift} onShiftChange={setSelectedShift} />
-                <VehicleFilter vehicles={vehicleList} selectedVehicle={selectedVehicle} onVehicleChange={setSelectedVehicle} />
-                <DriverFilter drivers={driverList} selectedDriver={selectedDriver} onDriverChange={setSelectedDriver} />
+            <div className="flex justify-center">
+                <div className="flex w-full max-w-5xl flex-wrap items-center justify-center gap-2">
+                    <DateFilter date={date} setDate={setDate} />
+                    {isSuperAdmin && <SectorFilter sectors={allSectors} selectedSector={selectedSector} onSectorChange={setSelectedSector} />}
+                    <ShiftFilter selectedShift={selectedShift} onShiftChange={setSelectedShift} />
+                    <VehicleFilter vehicles={vehicleList} selectedVehicle={selectedVehicle} onVehicleChange={setSelectedVehicle} />
+                    <DriverFilter drivers={driverList} selectedDriver={selectedDriver} onDriverChange={setSelectedDriver} />
+                </div>
             </div>
              <div className="py-6 space-y-4">
                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -951,12 +953,14 @@ const HistoricoTab = () => {
     
     return (
         <div className="space-y-6">
-            <div className="flex w-full flex-wrap items-center justify-center gap-2">
-                <DateFilter date={date} setDate={setDate} />
-                {isSuperAdmin && <SectorFilter sectors={allSectors} selectedSector={selectedSector} onSectorChange={setSelectedSector} />}
-                <ShiftFilter selectedShift={selectedShift} onShiftChange={setSelectedShift} />
-                <VehicleFilter vehicles={vehicleList} selectedVehicle={selectedVehicle} onVehicleChange={setSelectedVehicle} />
-                <DriverFilter drivers={driverList} selectedDriver={selectedDriver} onDriverChange={setSelectedDriver} />
+            <div className="flex justify-center">
+                <div className="flex w-full max-w-5xl flex-wrap items-center justify-center gap-2">
+                    <DateFilter date={date} setDate={setDate} />
+                    {isSuperAdmin && <SectorFilter sectors={allSectors} selectedSector={selectedSector} onSectorChange={setSelectedSector} />}
+                    <ShiftFilter selectedShift={selectedShift} onShiftChange={setSelectedShift} />
+                    <VehicleFilter vehicles={vehicleList} selectedVehicle={selectedVehicle} onVehicleChange={setSelectedVehicle} />
+                    <DriverFilter drivers={driverList} selectedDriver={selectedDriver} onDriverChange={setSelectedDriver} />
+                </div>
             </div>
              <div className="py-6">
                 <Card>
@@ -1223,16 +1227,14 @@ export default function DashboardPage() {
        </div>
        
        <Tabs defaultValue="visao-geral" className="w-full">
-        <div className="border-b">
-          <TabsList className="grid w-full grid-cols-6">
-              <TabsTrigger value="visao-geral">Visão Geral</TabsTrigger>
-              <TabsTrigger value="acompanhamento">Acompanhamento</TabsTrigger>
-              <TabsTrigger value="analise">Análise</TabsTrigger>
-              <TabsTrigger value="historico">Histórico</TabsTrigger>
-              <TabsTrigger value="abastecimentos">Abastecimentos</TabsTrigger>
-              <TabsTrigger value="checklists">Checklists</TabsTrigger>
-          </TabsList>
-        </div>
+        <TabsList className="grid w-full grid-cols-6">
+            <TabsTrigger value="visao-geral">Visão Geral</TabsTrigger>
+            <TabsTrigger value="acompanhamento">Acompanhamento</TabsTrigger>
+            <TabsTrigger value="analise">Análise</TabsTrigger>
+            <TabsTrigger value="historico">Histórico</TabsTrigger>
+            <TabsTrigger value="abastecimentos">Abastecimentos</TabsTrigger>
+            <TabsTrigger value="checklists">Checklists</TabsTrigger>
+        </TabsList>
 
         <TabsContent value="visao-geral" className="mt-6">
             <VisaoGeralTab />

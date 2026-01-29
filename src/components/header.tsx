@@ -37,10 +37,10 @@ export function Header() {
   const userIsAdmin = user?.uid ? localStorage.getItem('user') && JSON.parse(localStorage.getItem('user')!).isAdmin : false;
 
   return (
-    <header className="bg-background sticky top-0 z-40 border-b">
+    <header className="bg-background sticky top-0 z-40">
       <div className="px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          <Link href="/" className="flex items-center gap-3">
+          <Link href="/dashboard" className="flex items-center gap-3">
             <Truck className="h-7 w-7 text-primary" />
             <h1 className="text-xl font-bold text-foreground">Frotacontrol</h1>
           </Link>
