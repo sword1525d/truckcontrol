@@ -1,6 +1,6 @@
 "use client";
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Truck, LogOut, Shield, User as UserIcon, Settings, LayoutDashboard } from 'lucide-react';
 import Link from 'next/link';
 import { useFirebase } from '@/firebase';
@@ -20,6 +20,31 @@ import { Skeleton } from './ui/skeleton';
 export function Header() {
   const { user, auth, isUserLoading } = useFirebase();
   const router = useRouter();
+  const [dashboardPath, setDashboardPath] = useState('#');
+  const [userIsAdmin, setUserIsAdmin] = useState(false);
+
+  useEffect(() => {
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
+        try {
+            const userData = JSON.parse(storedUser);
+            if (userData.isAdmin) {
+                setUserIsAdmin(true);
+                setDashboardPath('/dashboard');
+            } else {
+                setUserIsAdmin(false);
+                setDashboardPath('/dashboard-truck');
+            }
+        } catch (e) {
+            setUserIsAdmin(false);
+            setDashboardPath('/dashboard-truck');
+        }
+    } else {
+        // Fallback for cases where localStorage is not set but user might be on a page
+        setUserIsAdmin(false);
+        setDashboardPath('/dashboard-truck');
+    }
+  }, []);
 
   const handleLogout = () => {
     if (auth) {
@@ -34,13 +59,11 @@ export function Header() {
     return name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase();
   }
 
-  const userIsAdmin = user?.uid ? localStorage.getItem('user') && JSON.parse(localStorage.getItem('user')!).isAdmin : false;
-
   return (
     <header className="bg-background sticky top-0 z-40">
       <div className="px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          <Link href="/dashboard" className="flex items-center gap-3">
+          <Link href={dashboardPath} className="flex items-center gap-3">
             <Truck className="h-7 w-7 text-primary" />
             <h1 className="text-xl font-bold text-foreground">Frotacontrol</h1>
           </Link>
