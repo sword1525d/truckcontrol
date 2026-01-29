@@ -11,7 +11,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Truck, User, Wrench, PlayCircle, Route, Timer, X, Hourglass, EyeOff, Milestone, Maximize, Car, Package, Warehouse, CheckCircle, Clock, Calendar as CalendarIcon, Fuel, ClipboardCheck, Building, Download, Trash2, MapPin } from 'lucide-react';
+import { Loader2, Truck, User, Wrench, PlayCircle, Route, Timer, X, Hourglass, EyeOff, Milestone, Maximize, Car, Package, Warehouse, CheckCircle, Clock, Calendar as CalendarIcon, Fuel, ClipboardCheck, Building, Download, Trash2, MapPin, FileText } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -60,6 +60,7 @@ const filterLocationOutliers = (locations: LocationPoint[]): LocationPoint[] => 
             console.warn(`Outlier detectado e removido. Distância: ${distance.toFixed(2)} km`);
         }
     }
+    return filtered;
     return filtered;
 };
 
@@ -1199,15 +1200,13 @@ export default function DashboardPage() {
        </div>
        
        <Tabs defaultValue="acompanhamento" className="w-full">
-        <div className='w-full'>
-            <TabsList className="grid w-full grid-cols-5">
-                <TabsTrigger value="acompanhamento">Acompanhamento</TabsTrigger>
-                <TabsTrigger value="analise">Análise</TabsTrigger>
-                <TabsTrigger value="historico">Histórico</TabsTrigger>
-                <TabsTrigger value="abastecimentos">Abastecimentos</TabsTrigger>
-                <TabsTrigger value="checklists">Checklists</TabsTrigger>
-            </TabsList>
-        </div>
+        <TabsList className="grid w-full grid-cols-5">
+            <TabsTrigger value="acompanhamento">Acompanhamento</TabsTrigger>
+            <TabsTrigger value="analise">Análise</TabsTrigger>
+            <TabsTrigger value="historico">Histórico</TabsTrigger>
+            <TabsTrigger value="abastecimentos">Abastecimentos</TabsTrigger>
+            <TabsTrigger value="checklists">Checklists</TabsTrigger>
+        </TabsList>
 
         <TabsContent value="acompanhamento" className="mt-6">
             <AcompanhamentoTab />
@@ -1231,3 +1230,6 @@ export default function DashboardPage() {
 
 
 
+
+
+    
