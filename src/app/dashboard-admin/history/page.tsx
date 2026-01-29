@@ -2,7 +2,7 @@
 'use client';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useFirebase } from '@/firebase';
-import { collection, query, where, getDocs, Timestamp, doc, deleteDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, Timestamp, doc, deleteDoc, getDoc } from 'firebase/firestore';
 import {
   Card,
   CardContent,
@@ -36,7 +36,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Button } from '@/components/ui/button';
-import { Loader2, Calendar as CalendarIcon, Route, Truck, User, Clock, Car, Package, Warehouse, Milestone, Hourglass, MapIcon, EyeOff, Maximize, Minimize, Trash2 } from 'lucide-react';
+import { Loader2, Calendar as CalendarIcon, Route, Truck, User, Clock, Car, Package, Warehouse, Milestone, Hourglass, MapIcon, EyeOff, Maximize, Minimize, Trash2, Building } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -50,6 +50,7 @@ import dynamic from 'next/dynamic';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import * as XLSX from 'xlsx';
 
 
 // --- Constantes ---
@@ -104,6 +105,7 @@ export type Run = {
   status: 'COMPLETED';
   stops: Stop[];
   locationHistory?: LocationPoint[];
+  sectorId: string;
 };
 
 export type AggregatedRun = {
@@ -146,6 +148,11 @@ type UserData = {
   companyId: string;
   sectorId: string;
 };
+
+type SectorInfo = {
+    id: string;
+    name: string;
+}
 
 const RealTimeMap = dynamic(() => import('../RealTimeMap'), {
   ssr: false,
@@ -263,12 +270,20 @@ const HistoryPage = () => {
     const [isSuperAdmin, setIsSuperAdmin] = useState(false);
     const [allRuns, setAllRuns] = useState<Run[]>([]);
     const [users, setUsers] = useState<Map<string, FirestoreUser>>(new Map());
+    const [allSectors, setAllSectors] = useState<SectorInfo[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    
+    // Filter states
     const [selectedShift, setSelectedShift] = useState<string>(TURNOS.TODOS);
     const [date, setDate] = useState<DateRange | undefined>({
       from: startOfDay(subDays(new Date(), 6)),
       to: endOfDay(new Date()),
     });
+    const [selectedVehicle, setSelectedVehicle] = useState<string>('all');
+    const [selectedDriver, setSelectedDriver] = useState<string>('all');
+    const [selectedSector, setSelectedSector] = useState<string>('all');
+
+
     const [selectedRunForDialog, setSelectedRunForDialog] = useState<AggregatedRun | null>(null);
     const [isClient, setIsClient] = useState(false);
 
@@ -297,22 +312,45 @@ const HistoryPage = () => {
         setIsLoading(true);
 
         try {
-            // Fetch Users
-            const usersCol = collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/users`);
-            const usersSnapshot = await getDocs(usersCol);
             const usersMap = new Map<string, FirestoreUser>();
-            usersSnapshot.forEach(doc => {
-                usersMap.set(doc.id, { id: doc.id, ...doc.data() } as FirestoreUser);
-            });
-            setUsers(usersMap);
+            const sectorsList: SectorInfo[] = [];
+            let runs: Run[] = [];
+            const sectorRefsToFetch: {id: string, name: string}[] = [];
 
-            // Fetch Completed Runs
-            const runsQuery = query(
-                collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/runs`),
-                where('status', '==', 'COMPLETED')
-            );
-            const querySnapshot = await getDocs(runsQuery);
-            const runs = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Run));
+            // 1. Determine which sectors to fetch
+            if (isSuperAdmin) {
+                const sectorsRef = collection(firestore, `companies/${user.companyId}/sectors`);
+                const sectorsSnapshot = await getDocs(sectorsRef);
+                sectorsSnapshot.docs.forEach(doc => sectorRefsToFetch.push({ id: doc.id, name: doc.data().name as string }));
+            } else {
+                const sectorRef = doc(firestore, `companies/${user.companyId}/sectors`, user.sectorId);
+                const sectorSnap = await getDoc(sectorRef);
+                if (sectorSnap.exists()) {
+                    sectorRefsToFetch.push({ id: sectorSnap.id, name: sectorSnap.data().name as string });
+                }
+            }
+            setAllSectors(sectorRefsToFetch);
+            
+            // 2. Fetch users and runs for all relevant sectors
+            for (const sector of sectorRefsToFetch) {
+                // Fetch users
+                const usersCol = collection(firestore, `companies/${user.companyId}/sectors/${sector.id}/users`);
+                const usersSnapshot = await getDocs(usersCol);
+                usersSnapshot.forEach(doc => {
+                    if (!usersMap.has(doc.id)) {
+                        usersMap.set(doc.id, { id: doc.id, ...doc.data() } as FirestoreUser);
+                    }
+                });
+
+                // Fetch runs
+                const runsQuery = query(collection(firestore, `companies/${user.companyId}/sectors/${sector.id}/runs`), where('status', '==', 'COMPLETED'));
+                const querySnapshot = await getDocs(runsQuery);
+                querySnapshot.docs.forEach(doc => {
+                    runs.push({ id: doc.id, ...(doc.data() as Omit<Run, 'id'>), sectorId: sector.id });
+                });
+            }
+
+            setUsers(usersMap);
             setAllRuns(runs.sort((a, b) => (b.endTime?.seconds || 0) - (a.endTime?.seconds || 0)));
 
         } catch (error) {
@@ -321,7 +359,8 @@ const HistoryPage = () => {
         } finally {
             setIsLoading(false);
         }
-    }, [firestore, user, toast]);
+    }, [firestore, user, toast, isSuperAdmin]);
+
 
     useEffect(() => {
         if(user) {
@@ -329,20 +368,42 @@ const HistoryPage = () => {
         }
     }, [user, fetchInitialData]);
 
-    const filteredRuns = useMemo(() => {
-        return allRuns.filter(run => {
+    const { filteredRuns, vehicleList, driverList } = useMemo(() => {
+        const dateFiltered = allRuns.filter(run => {
             const runDate = run.endTime ? new Date(run.endTime.seconds * 1000) : null;
             if (!runDate) return false;
+            return date?.from && runDate >= startOfDay(date.from) && runDate <= endOfDay(date.to || date.from);
+        });
 
-            const isWithinDateRange = date?.from && runDate >= startOfDay(date.from) && runDate <= endOfDay(date.to || date.from);
-            if (!isWithinDateRange) return false;
+        const vehicles = new Set<string>();
+        dateFiltered.forEach(run => vehicles.add(run.vehicleId));
 
+        const drivers = new Map<string, FirestoreUser>();
+        dateFiltered.forEach(run => {
+            if (!drivers.has(run.driverId)) {
+                const driverInfo = users.get(run.driverId);
+                if (driverInfo) {
+                    drivers.set(run.driverId, driverInfo);
+                }
+            }
+        });
+        
+        const finalFiltered = dateFiltered.filter(run => {
             const driver = users.get(run.driverId);
             if (selectedShift !== TURNOS.TODOS && driver?.shift !== selectedShift) return false;
-
+            if (isSuperAdmin && selectedSector !== 'all' && run.sectorId !== selectedSector) return false;
+            if (selectedVehicle !== 'all' && run.vehicleId !== selectedVehicle) return false;
+            if (selectedDriver !== 'all' && run.driverId !== selectedDriver) return false;
             return true;
         });
-    }, [allRuns, date, selectedShift, users]);
+
+        return {
+            filteredRuns: finalFiltered,
+            vehicleList: Array.from(vehicles).sort(),
+            driverList: Array.from(drivers.values()).sort((a, b) => a.name.localeCompare(b.name)),
+        };
+    }, [allRuns, date, selectedShift, selectedVehicle, selectedDriver, selectedSector, users, isSuperAdmin]);
+
 
     const aggregatedRunsMap = useMemo(() => {
         const groupedRuns = new Map<string, Run[]>();
@@ -406,9 +467,11 @@ const HistoryPage = () => {
 
       return { totalRuns, totalDistance, avgDurationMinutes, totalStops };
     }, [filteredRuns]);
-
-    const runsByDayChartData = useMemo(() => {
-        if (!date || !date.from) return [];
+    
+    const chartData = useMemo(() => {
+        if (!date || !date.from) return { runsByDay: [], distanceByVehicle: [], idleTimeByVehicle: [] };
+        
+        // Runs by Day
         const from = startOfDay(date.from);
         const to = endOfDay(date.to || date.from);
 
@@ -423,11 +486,8 @@ const HistoryPage = () => {
                 dateMap.set(day, (dateMap.get(day) || 0) + 1);
             }
         });
-
-        return Array.from(dateMap, ([name, total]) => ({ name, total }));
-    }, [filteredRuns, date]);
-
-    const distanceByVehicleChartData = useMemo(() => {
+        
+        // Distance by Vehicle
         const distanceMap = new Map<string, number>();
         filteredRuns.forEach(run => {
             const distance = (run.endMileage || run.startMileage) - run.startMileage;
@@ -436,8 +496,38 @@ const HistoryPage = () => {
             }
         });
 
-        return Array.from(distanceMap, ([vehicleId, distance]) => ({ name: vehicleId, total: Math.round(distance) }));
-    }, [filteredRuns]);
+        // Idle Time by Vehicle
+        const runsByVehicle = new Map<string, Run[]>();
+        filteredRuns.forEach(run => {
+            if (!runsByVehicle.has(run.vehicleId)) runsByVehicle.set(run.vehicleId, []);
+            runsByVehicle.get(run.vehicleId)!.push(run);
+        });
+
+        const idleTimes = new Map<string, number>();
+        runsByVehicle.forEach((runs, vehicleId) => {
+            const sortedRuns = runs.sort((a, b) => a.startTime.seconds - b.startTime.seconds);
+            let totalIdleSeconds = 0;
+            for (let i = 1; i < sortedRuns.length; i++) {
+                const prevRun = sortedRuns[i - 1];
+                const currentRun = sortedRuns[i];
+                if (prevRun.endTime) {
+                    const idleSeconds = currentRun.startTime.seconds - prevRun.endTime.seconds;
+                    if (idleSeconds > 60) { // Only count idle time > 1 minute
+                        totalIdleSeconds += idleSeconds;
+                    }
+                }
+            }
+            if (totalIdleSeconds > 0) {
+              idleTimes.set(vehicleId, totalIdleSeconds / 3600); // to hours
+            }
+        });
+
+        return {
+            runsByDay: Array.from(dateMap, ([name, total]) => ({ name, total })),
+            distanceByVehicle: Array.from(distanceMap, ([name, total]) => ({ name, total: Math.round(total) })).sort((a,b) => b.total - a.total),
+            idleTimeByVehicle: Array.from(idleTimes, ([name, total]) => ({ name, total: parseFloat(total.toFixed(1)) })).sort((a,b) => b.total - a.total),
+        };
+    }, [filteredRuns, date]);
 
     const handleViewDetails = (run: Run) => {
         const driver = users.get(run.driverId);
@@ -452,7 +542,7 @@ const HistoryPage = () => {
     const handleDelete = async (runToDelete: Run) => {
         if (!firestore || !user || !isSuperAdmin) return;
         try {
-            const runRef = doc(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/runs`, runToDelete.id);
+            const runRef = doc(firestore, `companies/${user.companyId}/sectors/${runToDelete.sectorId}/runs`, runToDelete.id);
             await deleteDoc(runRef);
 
             toast({ title: 'Sucesso', description: 'A corrida foi deletada.' });
@@ -462,6 +552,47 @@ const HistoryPage = () => {
             toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível deletar a corrida.' });
         }
     };
+    
+    const handleExport = () => {
+        if (!filteredRuns.length) {
+            toast({ variant: 'destructive', title: 'Nenhum dado', description: 'Não há dados para exportar com os filtros atuais.' });
+            return;
+        }
+
+        const dataToExport = filteredRuns.map(run => {
+            const driver = users.get(run.driverId);
+            const sector = allSectors.find(s => s.id === run.sectorId);
+            const distance = run.endMileage ? run.endMileage - run.startMileage : 0;
+            const durationSeconds = run.endTime ? run.endTime.seconds - run.startTime.seconds : 0;
+            const duration = durationSeconds > 0 ? formatDistanceStrict(0, durationSeconds * 1000, { locale: ptBR }) : 'N/A';
+            const stops = run.stops.map(s => s.name).join(', ');
+
+            return {
+                'Data': format(run.startTime.toDate(), 'dd/MM/yyyy HH:mm'),
+                'Setor': sector?.name || run.sectorId,
+                'Veículo': run.vehicleId,
+                'Motorista': run.driverName,
+                'Turno': driver?.shift || 'N/A',
+                'Paradas': stops,
+                'Distância (km)': distance > 0 ? distance.toFixed(1) : '0.0',
+                'Duração': duration,
+                'Km Inicial': run.startMileage,
+                'Km Final': run.endMileage || 'N/A'
+            };
+        });
+
+        const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Histórico de Corridas');
+        
+        // Auto-size columns
+        const objectMaxLength = Object.keys(dataToExport[0]).map(key => ({
+            wch: Math.max(...dataToExport.map(obj => (obj[key as keyof typeof obj] ?? '').toString().length), key.length)
+        }));
+        worksheet['!cols'] = objectMaxLength;
+
+        XLSX.writeFile(workbook, `Historico_Frotacontrol_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+    };
 
     if (isLoading || !user) {
         return <div className="flex justify-center items-center h-full"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
@@ -469,13 +600,18 @@ const HistoryPage = () => {
 
     return (
         <div className="flex-1 space-y-6">
-            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+             <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
                 <h2 className="text-3xl font-bold tracking-tight">Histórico e Análise</h2>
-                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                    <ShiftFilter selectedShift={selectedShift} onShiftChange={setSelectedShift} />
+                <div className="flex flex-wrap items-center justify-start md:justify-end gap-2">
+                    <Button onClick={handleExport}>Exportar para Excel</Button>
                     <DateFilter date={date} setDate={setDate} />
+                    {isSuperAdmin && <SectorFilter sectors={allSectors} selectedSector={selectedSector} onSectorChange={setSelectedSector} />}
+                    <ShiftFilter selectedShift={selectedShift} onShiftChange={setSelectedShift} />
+                    <VehicleFilter vehicles={vehicleList} selectedVehicle={selectedVehicle} onVehicleChange={setSelectedVehicle} />
+                    <DriverFilter drivers={driverList} selectedDriver={selectedDriver} onDriverChange={setSelectedDriver} />
                 </div>
             </div>
+
 
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <KpiCard title="Corridas Concluídas" value={kpis.totalRuns.toString()} />
@@ -488,12 +624,12 @@ const HistoryPage = () => {
                 <Card>
                     <CardHeader>
                         <CardTitle>Corridas por Dia</CardTitle>
-                        <CardDescription>Total de corridas concluídas por dia no período e turno selecionados.</CardDescription>
+                        <CardDescription>Total de corridas concluídas por dia no período e filtros selecionados.</CardDescription>
                     </CardHeader>
                     <CardContent>
                         {isLoading ? <div className="flex justify-center items-center h-[300px]"><Loader2 className="w-8 h-8 animate-spin"/></div> :
                         <ResponsiveContainer width="100%" height={300}>
-                            <BarChart data={runsByDayChartData}>
+                            <BarChart data={chartData.runsByDay}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                                 <XAxis dataKey="name" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
                                 <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} allowDecimals={false} />
@@ -507,12 +643,12 @@ const HistoryPage = () => {
                 <Card>
                     <CardHeader>
                         <CardTitle>Km Rodados por Caminhão</CardTitle>
-                        <CardDescription>Distância total percorrida por cada caminhão no período e turno.</CardDescription>
+                        <CardDescription>Distância total percorrida por cada caminhão nos filtros selecionados.</CardDescription>
                     </CardHeader>
                     <CardContent>
                         {isLoading ? <div className="flex justify-center items-center h-[300px]"><Loader2 className="w-8 h-8 animate-spin"/></div> :
                         <ResponsiveContainer width="100%" height={300}>
-                            <BarChart data={distanceByVehicleChartData} layout="vertical">
+                            <BarChart data={chartData.distanceByVehicle} layout="vertical">
                                 <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                                 <XAxis type="number" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
                                 <YAxis type="category" dataKey="name" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} width={80} />
@@ -522,12 +658,34 @@ const HistoryPage = () => {
                         </ResponsiveContainer>}
                     </CardContent>
                 </Card>
+                 <Card className="lg:col-span-2">
+                    <CardHeader>
+                        <CardTitle>Tempo Ocioso por Caminhão (Horas)</CardTitle>
+                        <CardDescription>Soma do tempo parado entre corridas para cada caminhão (intervalos maiores que 1 minuto).</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        {isLoading ? <div className="flex justify-center items-center h-[300px]"><Loader2 className="w-8 h-8 animate-spin"/></div> :
+                        <ResponsiveContainer width="100%" height={300}>
+                           <BarChart data={chartData.idleTimeByVehicle}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                <XAxis dataKey="name" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
+                                <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} unit="h" />
+                                <Tooltip
+                                    cursor={{fill: 'hsl(var(--muted))'}}
+                                    contentStyle={{backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)'}}
+                                    formatter={(value: number) => `${value.toFixed(1)} horas`}
+                                />
+                                <Bar dataKey="total" fill="hsl(var(--destructive))" radius={[4, 4, 0, 0]} />
+                            </BarChart>
+                        </ResponsiveContainer>}
+                    </CardContent>
+                </Card>
             </div>
 
             <Card>
                 <CardHeader>
                     <CardTitle>Histórico de Corridas</CardTitle>
-                    <CardDescription>Lista de corridas concluídas no período e turno selecionados.</CardDescription>
+                    <CardDescription>Lista de corridas concluídas com os filtros selecionados.</CardDescription>
                 </CardHeader>
                 <CardContent>
                 {isLoading ? <div className="flex justify-center items-center h-[300px]"><Loader2 className="w-8 h-8 animate-spin"/></div> :
@@ -629,7 +787,7 @@ const DateFilter = ({ date, setDate }: { date: DateRange | undefined, setDate: (
           <Button
             id="date"
             variant={"outline"}
-            className="w-full sm:w-[280px] justify-start text-left font-normal"
+            className="w-full sm:w-auto md:w-[260px] justify-start text-left font-normal"
           >
             <CalendarIcon className="mr-2 h-4 w-4" />
             {date?.from ? (
@@ -662,12 +820,54 @@ const DateFilter = ({ date, setDate }: { date: DateRange | undefined, setDate: (
 
 const ShiftFilter = ({ selectedShift, onShiftChange }: { selectedShift: string, onShiftChange: (shift: string) => void }) => (
     <Select value={selectedShift} onValueChange={onShiftChange}>
-        <SelectTrigger className="w-full sm:w-[180px]">
+        <SelectTrigger className="w-full sm:w-auto md:w-[150px]">
             <SelectValue placeholder="Filtrar por turno" />
         </SelectTrigger>
         <SelectContent>
             {Object.values(TURNOS).map(turno => (
                 <SelectItem key={turno} value={turno}>{turno}</SelectItem>
+            ))}
+        </SelectContent>
+    </Select>
+);
+
+const SectorFilter = ({ sectors, selectedSector, onSectorChange }: { sectors: SectorInfo[], selectedSector: string, onSectorChange: (sector: string) => void }) => (
+    <Select value={selectedSector} onValueChange={onSectorChange}>
+        <SelectTrigger className="w-full sm:w-auto md:w-[180px]">
+             <SelectValue placeholder="Filtrar por setor" />
+        </SelectTrigger>
+        <SelectContent>
+            <SelectItem value="all"><Building className="h-4 w-4 inline-block mr-2"/>Todos os Setores</SelectItem>
+            {sectors.map(s => (
+                <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+            ))}
+        </SelectContent>
+    </Select>
+);
+
+const VehicleFilter = ({ vehicles, selectedVehicle, onVehicleChange }: { vehicles: string[], selectedVehicle: string, onVehicleChange: (vehicle: string) => void }) => (
+    <Select value={selectedVehicle} onValueChange={onVehicleChange}>
+        <SelectTrigger className="w-full sm:w-auto md:w-[180px]">
+             <SelectValue placeholder="Filtrar por veículo" />
+        </SelectTrigger>
+        <SelectContent>
+            <SelectItem value="all"><Truck className="h-4 w-4 inline-block mr-2"/>Todos os Veículos</SelectItem>
+            {vehicles.map(v => (
+                <SelectItem key={v} value={v}><Truck className="h-4 w-4 inline-block mr-2"/>{v}</SelectItem>
+            ))}
+        </SelectContent>
+    </Select>
+);
+
+const DriverFilter = ({ drivers, selectedDriver, onDriverChange }: { drivers: FirestoreUser[], selectedDriver: string, onDriverChange: (driver: string) => void }) => (
+    <Select value={selectedDriver} onValueChange={onDriverChange}>
+        <SelectTrigger className="w-full sm:w-auto md:w-[180px]">
+             <SelectValue placeholder="Filtrar por motorista" />
+        </SelectTrigger>
+        <SelectContent>
+            <SelectItem value="all"><User className="h-4 w-4 inline-block mr-2"/>Todos os Motoristas</SelectItem>
+            {drivers.map(d => (
+                <SelectItem key={d.id} value={d.id}><User className="h-4 w-4 inline-block mr-2"/>{d.name}</SelectItem>
             ))}
         </SelectContent>
     </Select>
@@ -872,3 +1072,5 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
 }
 
 export default HistoryPage;
+
+    
