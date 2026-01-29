@@ -593,19 +593,6 @@ const HistoryPage = () => {
                 const stopTime = totalStopTimeSeconds > 0 ? formatDistanceStrict(0, totalStopTimeSeconds * 1000, { locale: ptBR, unit: 'minute' }) : '0 min';
     
                 const observations = run.stops.map(s => s.observation).filter(Boolean).join('; ');
-                
-                let idleTimeBetweenRuns = 'N/A';
-                if (index > 0) {
-                    const previousRun = vehicleRuns[index - 1];
-                    if (previousRun.endTime) {
-                        const idleSeconds = run.startTime.seconds - previousRun.endTime.seconds;
-                        if (idleSeconds > 0) {
-                            idleTimeBetweenRuns = formatDistanceStrict(0, idleSeconds * 1000, { locale: ptBR, unit: 'minute' });
-                        } else {
-                            idleTimeBetweenRuns = '0 min';
-                        }
-                    }
-                }
     
                 return {
                     'Data': format(run.startTime.toDate(), 'dd/MM/yyyy'),
@@ -613,7 +600,6 @@ const HistoryPage = () => {
                     'Horário Final': endTime,
                     'Duração Total': totalDuration,
                     'Tempo Parado (na corrida)': stopTime,
-                    'Tempo Ocioso (entre corridas)': idleTimeBetweenRuns,
                     'Setor': sector?.name || run.sectorId,
                     'Veículo': run.vehicleId,
                     'Motorista': run.driverName,
