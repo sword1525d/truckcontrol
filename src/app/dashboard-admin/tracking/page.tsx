@@ -1,4 +1,3 @@
-
 'use client';
 import { useState, useEffect, useMemo } from 'react';
 import { useFirebase } from '@/firebase';
@@ -29,7 +28,7 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, PlayCircle, CheckCircle, Clock, MapPin, Truck, User, Route, Timer, X, Hourglass, EyeOff, Milestone, Maximize, Minimize, Car, Package } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
-import { format, formatDistanceStrict, isToday } from 'date-fns';
+import { format, formatDistanceStrict, startOfDay, endOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import dynamic from 'next/dynamic';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -301,64 +300,29 @@ const TrackingPage = () => {
     });
 
     const runsCol = collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/runs`);
+    const todayStart = startOfDay(new Date());
+    const todayEnd = endOfDay(new Date());
     
-    const activeRunsQuery = query(runsCol, where('status', '==', 'IN_PROGRESS'));
-    // This query might require an index. We handle the error by falling back to a client-side filter.
-    const completedRunsQuery = query(runsCol, where('status', '==', 'COMPLETED'));
+    const runsTodayQuery = query(runsCol, 
+        where('startTime', '>=', todayStart),
+        where('startTime', '<=', todayEnd)
+    );
 
-    const handleSnapshots = (inProgressRuns: Run[], completedRuns: Run[]) => {
-        const completedToday = completedRuns.filter(run => run.endTime && isToday(run.endTime.toDate()));
-        
-        // Use a map to ensure in-progress runs overwrite completed ones if IDs conflict (shouldn't happen with good data)
-        const allRunsMap = new Map<string, Run>();
-
-        [...completedToday, ...inProgressRuns].forEach(run => {
-            allRunsMap.set(run.id, run);
-        });
-
-        const combinedRuns = Array.from(allRunsMap.values());
-        
-        setAllRuns(combinedRuns);
+    const unsubscribe = onSnapshot(runsTodayQuery, (snapshot) => {
+        const runs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Run));
+        setAllRuns(runs);
         setIsLoading(false);
-    };
-
-    let inProgressRuns: Run[] = [];
-    let completedRuns: Run[] = [];
-
-    const unsubscribeInProgress = onSnapshot(activeRunsQuery, (snapshot) => {
-        inProgressRuns = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Run));
-        handleSnapshots(inProgressRuns, completedRuns);
     }, (error) => {
-        console.error("Error fetching active runs: ", error);
-        toast({ variant: 'destructive', title: 'Erro ao buscar corridas ativas' });
-        setIsLoading(false);
-    });
-
-    const unsubscribeCompleted = onSnapshot(completedRunsQuery, (snapshot) => {
-        completedRuns = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Run));
-        handleSnapshots(inProgressRuns, completedRuns);
-    }, (error) => {
-        // This query can fail if the index is not created. We'll fall back to client-side filtering.
+        console.error("Error fetching today's runs: ", error);
         if (error.code === 'failed-precondition') {
-          console.warn("Firestore index for completed runs query is not created. Filtering on the client.");
-          const allRunsQuery = query(runsCol); // Fetch all runs for the sector
-          const unsubscribeAll = onSnapshot(allRunsQuery, (allDocsSnapshot) => {
-            const allDocs = allDocsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as Run}));
-            inProgressRuns = allDocs.filter(r => r.status === 'IN_PROGRESS');
-            completedRuns = allDocs.filter(r => r.status === 'COMPLETED');
-            handleSnapshots(inProgressRuns, completedRuns);
-          });
-          return unsubscribeAll;
+            toast({ variant: 'destructive', title: 'Índice necessário', description: 'O Firestore precisa de um índice para esta consulta. Crie-o no console do Firebase.' });
         } else {
-          toast({ variant: 'destructive', title: 'Erro ao buscar corridas concluídas' });
+            toast({ variant: 'destructive', title: 'Erro ao buscar corridas' });
         }
         setIsLoading(false);
     });
 
-    return () => {
-        unsubscribeInProgress();
-        unsubscribeCompleted();
-    };
+    return () => unsubscribe();
   }, [firestore, user, toast]);
 
  const aggregatedRuns = useMemo(() => {
