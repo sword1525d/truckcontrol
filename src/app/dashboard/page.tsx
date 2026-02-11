@@ -11,7 +11,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Truck, User, Wrench, PlayCircle, Route, Timer, X, Hourglass, EyeOff, Milestone, Maximize, Car, Package, Warehouse, CheckCircle, Clock, Calendar as CalendarIcon, Fuel, ClipboardCheck, Building, Download, Trash2, MapIcon, FileText } from 'lucide-react';
+import { Loader2, Truck, User, Wrench, PlayCircle, Route, Timer, X, Hourglass, MapPin, Milestone, Maximize, Car, Package, Warehouse, CheckCircle, Clock, Calendar as CalendarIcon, Fuel, ClipboardCheck, Building, Download, Trash2, MapIcon, FileText } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -569,7 +569,7 @@ const RunAccordionItem = ({ run, users, onViewRoute }: { run: AggregatedRun, use
                         <div className="text-sm text-muted-foreground flex items-center gap-2"><Avatar className="h-5 w-5"><AvatarImage src={driver?.photoURL} alt={run.driverName} /><AvatarFallback className="text-xs">{getInitials(run.driverName)}</AvatarFallback></Avatar>{run.driverName}</div>
                     </div>
                     <div className="flex-1 w-full sm:w-auto"><div className="flex justify-between text-sm mb-1"><span className="font-medium">{isCompletedRun ? 'Concluído' : `${completedStops} de ${totalStops}`}</span><span className="font-bold text-primary">{Math.round(progress)}%</span></div><Progress value={progress} className="h-2" /></div>
-                    <div className="flex-none"><Badge variant={isCompletedRun ? 'default' : (currentStop ? "default" : "secondary")} className={`truncate ${isCompletedRun ? 'bg-green-600' : ''}`}><MapIcon className="h-3 w-3 mr-1.5"/>{isCompletedRun ? `Finalizado às ${formatFirebaseTime(run.endTime)}` : (currentStop ? currentStop.name : 'Iniciando...')}</Badge></div>
+                    <div className="flex-none"><Badge variant={isCompletedRun ? 'default' : (currentStop ? "default" : "secondary")} className={`truncate ${isCompletedRun ? 'bg-green-600' : ''}`}><MapPin className="h-3 w-3 mr-1.5"/>{isCompletedRun ? `Finalizado às ${formatFirebaseTime(run.endTime)}` : (currentStop ? currentStop.name : 'Iniciando...')}</Badge></div>
                 </div>
             </AccordionTrigger>
             <AccordionContent className="p-4 pt-0">
@@ -954,8 +954,9 @@ const HistoricoTab = () => {
                     'Duração Total': totalDuration, 
                     'Tempo Parado (na corrida)': stopTime, 
                     'Setor': sector?.name || run.sectorId, 
-                    'Veículo': run.vehicleId, 'Motorista': 
-                    run.driverName, 'Turno': driver?.shift || 'N/A', 
+                    'Veículo': run.vehicleId,
+                    'Motorista': run.driverName,
+                    'Turno': driver?.shift || 'N/A', 
                     'Paradas': run.stops.map(s => s.name).join(', '), 
                     'Ocupação (%)': occupancies,
                     'Observações': observations, 
