@@ -91,7 +91,10 @@ const PREDEFINED_STOP_POINTS: StopPoint[] = [
   "MONT LINHA FAN",
   "PINTURA ABS 2",
   "MOCOM MOTOR 2",
-  "MANUTENÇÃO"
+  "MANUTENÇÃO",
+  "PRENSA 2",
+  "CENTRAL DE RESÍDUOS",
+  "POSTO DE GASOLINA"
 ].sort((a, b) => a.localeCompare(b));
 
 export default function TruckRunPage() {
