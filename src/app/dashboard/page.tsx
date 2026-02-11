@@ -10,7 +10,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Truck, User, Wrench, PlayCircle, Route, Timer, X, Hourglass, EyeOff, Milestone, Maximize, Car, Package, Warehouse, CheckCircle, Clock, Calendar as CalendarIcon, Fuel, ClipboardCheck, Building, Download, Trash2, FileText, MapPin, Map as MapIcon } from 'lucide-react';
+import { Loader2, Truck, User, Wrench, PlayCircle, Route, Timer, X, Hourglass, EyeOff, Milestone, Maximize, Car, Package, Warehouse, CheckCircle, Clock, Calendar as CalendarIcon, Fuel, ClipboardCheck, Building, Download, Trash2, FileText, Map as MapIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -151,6 +151,18 @@ export type LocationPoint = {
   latitude: number;
   longitude: number;
   timestamp: FirebaseTimestamp;
+};
+
+export type Stop = {
+  name: string;
+  status: StopStatus;
+  arrivalTime: FirebaseTimestamp | null;
+  departureTime: FirebaseTimestamp | null;
+  collectedOccupiedCars: number | null;
+  collectedEmptyCars: number | null;
+  mileageAtStop: number | null;
+  occupancy: number | null;
+  observation?: string;
 };
 
 export type Run = {
@@ -932,6 +944,7 @@ const HistoricoTab = () => {
                 const totalStopTimeSeconds = run.stops.reduce((acc, stop) => acc + (stop.arrivalTime && stop.departureTime ? stop.departureTime.seconds - stop.arrivalTime.seconds : 0), 0);
                 const stopTime = totalStopTimeSeconds > 0 ? formatDistanceStrict(0, totalStopTimeSeconds * 1000, { locale: ptBR, unit: 'minute' }) : '0 min';
                 const observations = run.stops.map(s => s.observation).filter(Boolean).join('; ');
+                const occupancies = run.stops.map(s => s.occupancy !== null ? `${s.occupancy}%` : 'N/A').join(', ');
                 
                 return { 
                     'Data': format(run.startTime.toDate(), 'dd/MM/yyyy'), 
@@ -943,6 +956,7 @@ const HistoricoTab = () => {
                     'Veículo': run.vehicleId, 'Motorista': 
                     run.driverName, 'Turno': driver?.shift || 'N/A', 
                     'Paradas': run.stops.map(s => s.name).join(', '), 
+                    'Ocupação (%)': occupancies,
                     'Observações': observations, 
                     'Distância (km)': distance > 0 ? distance.toFixed(1) : '0.0', 
                     'Km Inicial': run.startMileage, 
@@ -1040,7 +1054,7 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
                                         const globalStopIndex = run.stops.findIndex(s => s.arrivalTime?.seconds === stop.arrivalTime?.seconds); const previousStop = globalStopIndex > 0 ? run.stops[globalStopIndex - 1] : null; const segmentStartTime = previousStop?.departureTime ?? originalRun.startTime; const startMileage = previousStop?.mileageAtStop ?? run.startMileage; const segmentDistance = (stop.mileageAtStop && startMileage) ? stop.mileageAtStop - startMileage : null; const segmentId = `segment-${globalStopIndex}`;
                                         return (
                                             <Card key={`${originalRun.id}-${stopIndex}`} className={cn("bg-muted/50 mb-2 cursor-pointer transition-all hover:bg-muted", highlightedSegmentId === segmentId && "ring-2 ring-primary bg-muted")} onClick={() => { setMapRun(run); setIsAggregatedMap(true); setHighlightedSegmentId(segmentId); }}>
-                                                <CardHeader className="pb-3 flex-row items-center justify-between"><CardTitle className="text-base flex items-center gap-2"><Milestone className="h-5 w-5 text-muted-foreground" />{stop.name}</CardTitle><Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); handleViewIndividualRoute(originalRun); }}><MapPin className="h-4 w-4" /></Button></CardHeader>
+                                                <CardHeader className="pb-3 flex-row items-center justify-between"><CardTitle className="text-base flex items-center gap-2"><Milestone className="h-5 w-5 text-muted-foreground" />{stop.name}</CardTitle><Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); handleViewIndividualRoute(originalRun); }}><MapIcon className="h-4 w-4" /></Button></CardHeader>
                                                 <CardContent><div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs"><div className="flex items-center gap-1"><Clock className="h-3 w-3 text-muted-foreground" /><span>{formatFirebaseTime(segmentStartTime)} - {formatFirebaseTime(stop.arrivalTime)}</span></div><div className="flex items-center gap-1"><Route className="h-3 w-3 text-muted-foreground" /><span>{segmentDistance !== null && segmentDistance > 0 ? `${segmentDistance.toFixed(1)} km` : 'N/A'}</span></div><div className="flex items-center gap-1"><Car className="h-3 w-3 text-muted-foreground" /><span>Ocup: {stop.collectedOccupiedCars ?? 'N/A'}</span></div><div className="flex items-center gap-1"><Package className="h-3 w-3 text-muted-foreground" /><span>Vaz: {stop.collectedEmptyCars ?? 'N/A'}</span></div><div className="flex items-center gap-1 col-span-2"><Warehouse className="h-3 w-3 text-muted-foreground" /><span>Lotação: {stop.occupancy ?? 'N/A'}%</span></div>{stop.observation && <div className="col-span-full border-t mt-2 pt-2"><p className="text-xs text-muted-foreground"><strong>Obs:</strong> {stop.observation}</p></div>}</div></CardContent>
                                             </Card>
                                         )
@@ -1255,15 +1269,15 @@ export default function DashboardPage() {
         </TabsContent>
         
         
-        <TabsContent value="analise" className="mt-6">
+        {!isMobile && <TabsContent value="analise" className="mt-6">
             <AnaliseTab />
-        </TabsContent>
-        <TabsContent value="historico" className="mt-6">
+        </TabsContent>}
+        {!isMobile && <TabsContent value="historico" className="mt-6">
             <HistoricoTab />
-        </TabsContent>
-        <TabsContent value="abastecimentos" className="mt-6">
+        </TabsContent>}
+        {!isMobile && <TabsContent value="abastecimentos" className="mt-6">
             <AbastecimentosTab />
-        </TabsContent>
+        </TabsContent>}
         
 
         <TabsContent value="checklists" className="mt-6">

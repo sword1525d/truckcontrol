@@ -592,6 +592,7 @@ const HistoryPage = () => {
                 const stopTime = totalStopTimeSeconds > 0 ? formatDistanceStrict(0, totalStopTimeSeconds * 1000, { locale: ptBR, unit: 'minute' }) : '0 min';
     
                 const observations = run.stops.map(s => s.observation).filter(Boolean).join('; ');
+                const occupancies = run.stops.map(s => s.occupancy !== null ? `${s.occupancy}%` : 'N/A').join(', ');
     
                 return {
                     'Data': format(run.startTime.toDate(), 'dd/MM/yyyy'),
@@ -604,6 +605,7 @@ const HistoryPage = () => {
                     'Motorista': run.driverName,
                     'Turno': driver?.shift || 'N/A',
                     'Paradas': stops,
+                    'Ocupação (%)': occupancies,
                     'Observações': observations,
                     'Distância (km)': distance > 0 ? distance.toFixed(1) : '0.0',
                     'Km Inicial': run.startMileage,
