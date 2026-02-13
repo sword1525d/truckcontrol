@@ -11,7 +11,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Truck, User, Wrench, PlayCircle, Route, Timer, X, Hourglass, MapPin, Milestone, Maximize, Car, Package, Warehouse, CheckCircle, Clock, Calendar as CalendarIcon, Fuel, ClipboardCheck, Building, Download, Trash2, MapIcon, FileText } from 'lucide-react';
+import { Loader2, Truck, User, Wrench, PlayCircle, Route, Timer, X, Hourglass, MapIcon, Milestone, Maximize, Car, Package, Warehouse, CheckCircle, Clock, Calendar as CalendarIcon, Fuel, ClipboardCheck, Building, Download, Trash2, FileText, EyeOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -667,7 +667,7 @@ const AnaliseTab = () => {
     }, [router]);
 
     const fetchInitialData = useCallback(async () => {
-        if (!firestore || !user) return;
+        if (!firestore || !user || !date?.from) return;
         setIsLoading(true);
         try {
             const usersMap = new Map<string, FirestoreUser>();
@@ -685,7 +685,15 @@ const AnaliseTab = () => {
             const runsPromises = sectorRefsToFetch.map(async (sector) => {
                 const usersSnapshot = await getDocs(collection(firestore, `companies/${user.companyId}/sectors/${sector.id}/users`));
                 usersSnapshot.forEach(doc => { if (!usersMap.has(doc.id)) usersMap.set(doc.id, { id: doc.id, ...doc.data() } as FirestoreUser); });
-                const querySnapshot = await getDocs(query(collection(firestore, `companies/${user.companyId}/sectors/${sector.id}/runs`), where('status', '==', 'COMPLETED')));
+                
+                const runsQuery = query(
+                    collection(firestore, `companies/${user.companyId}/sectors/${sector.id}/runs`), 
+                    where('status', '==', 'COMPLETED'),
+                    where('endTime', '>=', startOfDay(date.from)),
+                    where('endTime', '<=', endOfDay(date.to || date.from))
+                );
+
+                const querySnapshot = await getDocs(runsQuery);
                 return querySnapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as Omit<Run, 'id'>), sectorId: sector.id }));
             });
 
@@ -696,25 +704,27 @@ const AnaliseTab = () => {
             setAllRuns(allFetchedRuns.sort((a, b) => (b.endTime?.seconds || 0) - (a.endTime?.seconds || 0)));
         } catch (error) {
             console.error("Error fetching data: ", error);
-            toast({ variant: 'destructive', title: 'Erro ao buscar dados' });
+             if ((error as any).code === 'failed-precondition') {
+                toast({ variant: 'destructive', title: 'Índice necessário no Firestore', description: 'Para otimizar esta consulta, um índice composto é necessário. Por favor, crie-o no console do Firebase.', duration: 8000 });
+            } else {
+                toast({ variant: 'destructive', title: 'Erro ao buscar dados' });
+            }
         } finally {
             setIsLoading(false);
         }
-    }, [firestore, user, toast, isSuperAdmin]);
+    }, [firestore, user, toast, isSuperAdmin, date]);
 
     useEffect(() => { if (user) fetchInitialData(); }, [user, fetchInitialData]);
 
     const { filteredRuns, vehicleList, driverList } = useMemo(() => {
-        const dateFiltered = allRuns.filter(run => {
-            const runDate = run.endTime ? new Date(run.endTime.seconds * 1000) : null;
-            if (!runDate) return false;
-            return date?.from && runDate >= startOfDay(date.from) && runDate <= endOfDay(date.to || date.from);
-        });
+        // Data is already filtered by date in the query, so we only need to filter by other criteria
         const vehicles = new Set<string>();
-        dateFiltered.forEach(run => vehicles.add(run.vehicleId));
+        allRuns.forEach(run => vehicles.add(run.vehicleId));
+
         const drivers = new Map<string, FirestoreUser>();
-        dateFiltered.forEach(run => { if (!drivers.has(run.driverId)) { const driverInfo = users.get(run.driverId); if (driverInfo) drivers.set(run.driverId, driverInfo); } });
-        const finalFiltered = dateFiltered.filter(run => {
+        allRuns.forEach(run => { if (!drivers.has(run.driverId)) { const driverInfo = users.get(run.driverId); if (driverInfo) drivers.set(run.driverId, driverInfo); } });
+        
+        const finalFiltered = allRuns.filter(run => {
             const driver = users.get(run.driverId);
             if (selectedShift !== 'Todos' && driver?.shift !== selectedShift) return false;
             if (isSuperAdmin && selectedSector !== 'all' && run.sectorId !== selectedSector) return false;
@@ -723,7 +733,7 @@ const AnaliseTab = () => {
             return true;
         });
         return { filteredRuns: finalFiltered, vehicleList: Array.from(vehicles).sort(), driverList: Array.from(drivers.values()).sort((a, b) => a.name.localeCompare(b.name)) };
-    }, [allRuns, date, selectedShift, selectedVehicle, selectedDriver, selectedSector, users, isSuperAdmin]);
+    }, [allRuns, selectedShift, selectedVehicle, selectedDriver, selectedSector, users, isSuperAdmin]);
 
     const kpis = useMemo(() => {
         const totalRuns = filteredRuns.length;
@@ -821,7 +831,7 @@ const HistoricoTab = () => {
     }, [router]);
 
     const fetchInitialData = useCallback(async () => {
-        if (!firestore || !user) return;
+        if (!firestore || !user || !date?.from) return;
         setIsLoading(true);
         try {
             const usersMap = new Map<string, FirestoreUser>();
@@ -839,7 +849,15 @@ const HistoricoTab = () => {
             const runsPromises = sectorRefsToFetch.map(async (sector) => {
                 const usersSnapshot = await getDocs(collection(firestore, `companies/${user.companyId}/sectors/${sector.id}/users`));
                 usersSnapshot.forEach(doc => { if (!usersMap.has(doc.id)) usersMap.set(doc.id, { id: doc.id, ...doc.data() } as FirestoreUser); });
-                const querySnapshot = await getDocs(query(collection(firestore, `companies/${user.companyId}/sectors/${sector.id}/runs`), where('status', '==', 'COMPLETED')));
+                
+                const runsQuery = query(
+                    collection(firestore, `companies/${user.companyId}/sectors/${sector.id}/runs`), 
+                    where('status', '==', 'COMPLETED'),
+                    where('endTime', '>=', startOfDay(date.from)),
+                    where('endTime', '<=', endOfDay(date.to || date.from))
+                );
+
+                const querySnapshot = await getDocs(runsQuery);
                 return querySnapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as Omit<Run, 'id'>), sectorId: sector.id }));
             });
 
@@ -850,25 +868,24 @@ const HistoricoTab = () => {
             setAllRuns(allFetchedRuns.sort((a, b) => (b.endTime?.seconds || 0) - (a.endTime?.seconds || 0)));
         } catch (error) {
             console.error("Error fetching data: ", error);
-            toast({ variant: 'destructive', title: 'Erro ao buscar dados' });
+            if ((error as any).code === 'failed-precondition') {
+                toast({ variant: 'destructive', title: 'Índice necessário no Firestore', description: 'Para otimizar esta consulta, um índice composto é necessário. Por favor, crie-o no console do Firebase.', duration: 8000 });
+            } else {
+                toast({ variant: 'destructive', title: 'Erro ao buscar dados' });
+            }
         } finally {
             setIsLoading(false);
         }
-    }, [firestore, user, toast, isSuperAdmin]);
+    }, [firestore, user, toast, isSuperAdmin, date]);
 
     useEffect(() => { if (user) fetchInitialData(); }, [user, fetchInitialData]);
 
     const { filteredRuns, vehicleList, driverList } = useMemo(() => {
-        const dateFiltered = allRuns.filter(run => {
-            const runDate = run.endTime ? new Date(run.endTime.seconds * 1000) : null;
-            if (!runDate) return false;
-            return date?.from && runDate >= startOfDay(date.from) && runDate <= endOfDay(date.to || date.from);
-        });
         const vehicles = new Set<string>();
-        dateFiltered.forEach(run => vehicles.add(run.vehicleId));
+        allRuns.forEach(run => vehicles.add(run.vehicleId));
         const drivers = new Map<string, FirestoreUser>();
-        dateFiltered.forEach(run => { if (!drivers.has(run.driverId)) { const driverInfo = users.get(run.driverId); if (driverInfo) drivers.set(run.driverId, driverInfo); } });
-        const finalFiltered = dateFiltered.filter(run => {
+        allRuns.forEach(run => { if (!drivers.has(run.driverId)) { const driverInfo = users.get(run.driverId); if (driverInfo) drivers.set(run.driverId, driverInfo); } });
+        const finalFiltered = allRuns.filter(run => {
             const driver = users.get(run.driverId);
             if (selectedShift !== 'Todos' && driver?.shift !== selectedShift) return false;
             if (isSuperAdmin && selectedSector !== 'all' && run.sectorId !== selectedSector) return false;
@@ -877,7 +894,7 @@ const HistoricoTab = () => {
             return true;
         });
         return { filteredRuns: finalFiltered, vehicleList: Array.from(vehicles).sort(), driverList: Array.from(drivers.values()).sort((a, b) => a.name.localeCompare(b.name)) };
-    }, [allRuns, date, selectedShift, selectedVehicle, selectedDriver, selectedSector, users, isSuperAdmin]);
+    }, [allRuns, selectedShift, selectedVehicle, selectedDriver, selectedSector, users, isSuperAdmin]);
 
     const aggregatedRunsMap = useMemo(() => {
         const groupedRuns = new Map<string, Run[]>();
@@ -962,7 +979,7 @@ const HistoricoTab = () => {
                     'Observações': observations, 
                     'Distância (km)': distance > 0 ? distance.toFixed(1) : '0.0', 
                     'Km Inicial': run.startMileage, 
-                    'Km Final': run.endMileage || 'N/A' 
+                    'Km Final': run.endMileage || 'N/A',
                 };
             });
             if (dataToExport.length > 0) {

@@ -1,13 +1,14 @@
+
 'use client';
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
-// This page is deprecated and redirects to the admin dashboard.
+// This page is deprecated and redirects to the driver dashboard.
 export default function DashboardDriverPage() {
     const router = useRouter();
 
     useEffect(() => {
-        router.replace('/dashboard-admin');
+        router.replace('/dashboard-truck');
     }, [router]);
 
   return (
