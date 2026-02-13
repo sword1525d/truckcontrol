@@ -688,13 +688,12 @@ const AnaliseTab = () => {
                 
                 const runsQuery = query(
                     collection(firestore, `companies/${user.companyId}/sectors/${sector.id}/runs`), 
-                    where('status', '==', 'COMPLETED'),
                     where('endTime', '>=', startOfDay(date.from!)),
                     where('endTime', '<=', endOfDay(date.to || date.from!))
                 );
 
                 const querySnapshot = await getDocs(runsQuery);
-                return querySnapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as Omit<Run, 'id'>), sectorId: sector.id }));
+                return querySnapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as Omit<Run, 'id'>), sectorId: sector.id })).filter(run => run.status === 'COMPLETED');
             });
 
             const runsBySector = await Promise.all(runsPromises);
@@ -852,13 +851,12 @@ const HistoricoTab = () => {
                 
                 const runsQuery = query(
                     collection(firestore, `companies/${user.companyId}/sectors/${sector.id}/runs`), 
-                    where('status', '==', 'COMPLETED'),
                     where('endTime', '>=', startOfDay(date.from!)),
                     where('endTime', '<=', endOfDay(date.to || date.from!))
                 );
 
                 const querySnapshot = await getDocs(runsQuery);
-                return querySnapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as Omit<Run, 'id'>), sectorId: sector.id }));
+                return querySnapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as Omit<Run, 'id'>), sectorId: sector.id })).filter(run => run.status === 'COMPLETED');
             });
 
             const runsBySector = await Promise.all(runsPromises);
