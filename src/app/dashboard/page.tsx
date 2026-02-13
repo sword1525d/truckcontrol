@@ -11,7 +11,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Truck, User, Wrench, PlayCircle, Route, Timer, X, Hourglass, MapIcon, Milestone, Maximize, Car, Package, Warehouse, CheckCircle, Clock, Calendar as CalendarIcon, Fuel, ClipboardCheck, Building, Download, Trash2, FileText, EyeOff, MapPin } from 'lucide-react';
+import { Loader2, Truck, User, Wrench, PlayCircle, Route, Timer, X, Hourglass, MapIcon, Milestone, Maximize, Car, Package, Warehouse, CheckCircle, Clock, Calendar as CalendarIcon, Fuel, ClipboardCheck, Building, Download, Trash2, FileText, EyeOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -643,12 +643,16 @@ const AnaliseTab = () => {
     const router = useRouter();
     const [user, setUser] = useState<UserData | null>(null);
     const [isSuperAdmin, setIsSuperAdmin] = useState(false);
-    const [allRuns, setAllRuns] = useState<Run[]>([]);
-    const [users, setUsers] = useState<Map<string, FirestoreUser>>(new Map());
-    const [allSectors, setAllSectors] = useState<SectorInfo[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [selectedShift, setSelectedShift] = useState<string>('Todos');
     const [date, setDate] = useState<DateRange | undefined>({ from: startOfDay(subDays(new Date(), 6)), to: endOfDay(new Date()) });
+    
+    // Data states
+    const [allSectors, setAllSectors] = useState<SectorInfo[]>([]);
+    const [users, setUsers] = useState<Map<string, FirestoreUser>>(new Map());
+    const [allRuns, setAllRuns] = useState<Run[]>([]);
+
+    // Filter states
+    const [selectedShift, setSelectedShift] = useState<string>('Todos');
     const [selectedVehicle, setSelectedVehicle] = useState<string>('all');
     const [selectedDriver, setSelectedDriver] = useState<string>('all');
     const [selectedSector, setSelectedSector] = useState<string>('all');
@@ -688,8 +692,8 @@ const AnaliseTab = () => {
                 
                 const runsQuery = query(
                     collection(firestore, `companies/${user.companyId}/sectors/${sector.id}/runs`), 
-                    where('endTime', '>=', startOfDay(date.from!)),
-                    where('endTime', '<=', endOfDay(date.to || date.from!))
+                    where('startTime', '>=', startOfDay(date.from!)),
+                    where('startTime', '<=', endOfDay(date.to || date.from!))
                 );
 
                 const querySnapshot = await getDocs(runsQuery);
@@ -700,7 +704,7 @@ const AnaliseTab = () => {
             const allFetchedRuns = runsBySector.flat();
 
             setUsers(usersMap);
-            setAllRuns(allFetchedRuns.sort((a, b) => (b.endTime?.seconds || 0) - (a.endTime?.seconds || 0)));
+            setAllRuns(allFetchedRuns);
         } catch (error) {
             console.error("Error fetching data: ", error);
              if ((error as any).code === 'failed-precondition') {
@@ -716,7 +720,6 @@ const AnaliseTab = () => {
     useEffect(() => { if (user) fetchInitialData(); }, [user, fetchInitialData]);
 
     const { filteredRuns, vehicleList, driverList } = useMemo(() => {
-        // Data is already filtered by date in the query, so we only need to filter by other criteria
         const vehicles = new Set<string>();
         allRuns.forEach(run => vehicles.add(run.vehicleId));
 
@@ -803,17 +806,22 @@ const HistoricoTab = () => {
     const router = useRouter();
     const [user, setUser] = useState<UserData | null>(null);
     const [isSuperAdmin, setIsSuperAdmin] = useState(false);
-    const [allRuns, setAllRuns] = useState<Run[]>([]);
-    const [users, setUsers] = useState<Map<string, FirestoreUser>>(new Map());
-    const [allSectors, setAllSectors] = useState<SectorInfo[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [selectedShift, setSelectedShift] = useState<string>('Todos');
     const [date, setDate] = useState<DateRange | undefined>({ from: startOfDay(subDays(new Date(), 6)), to: endOfDay(new Date()) });
+    const [selectedRunForDialog, setSelectedRunForDialog] = useState<AggregatedRun | null>(null);
+    const [isClient, setIsClient] = useState(false);
+    
+    // Data states
+    const [allSectors, setAllSectors] = useState<SectorInfo[]>([]);
+    const [users, setUsers] = useState<Map<string, FirestoreUser>>(new Map());
+    const [allRuns, setAllRuns] = useState<Run[]>([]);
+
+    // Filter states
+    const [selectedShift, setSelectedShift] = useState<string>('Todos');
     const [selectedVehicle, setSelectedVehicle] = useState<string>('all');
     const [selectedDriver, setSelectedDriver] = useState<string>('all');
     const [selectedSector, setSelectedSector] = useState<string>('all');
-    const [selectedRunForDialog, setSelectedRunForDialog] = useState<AggregatedRun | null>(null);
-    const [isClient, setIsClient] = useState(false);
+
 
     useEffect(() => setIsClient(true), []);
     useEffect(() => {
@@ -851,8 +859,8 @@ const HistoricoTab = () => {
                 
                 const runsQuery = query(
                     collection(firestore, `companies/${user.companyId}/sectors/${sector.id}/runs`), 
-                    where('endTime', '>=', startOfDay(date.from!)),
-                    where('endTime', '<=', endOfDay(date.to || date.from!))
+                    where('startTime', '>=', startOfDay(date.from!)),
+                    where('startTime', '<=', endOfDay(date.to || date.from!))
                 );
 
                 const querySnapshot = await getDocs(runsQuery);
@@ -951,7 +959,7 @@ const HistoricoTab = () => {
         const workbook = XLSX.utils.book_new();
         for (const vehicleId in runsByVehicle) {
             const vehicleRuns = runsByVehicle[vehicleId].sort((a, b) => a.startTime.seconds - b.startTime.seconds);
-            const dataToExport = vehicleRuns.map((run, index) => {
+            const dataToExport = vehicleRuns.map((run) => {
                 const driver = users.get(run.driverId);
                 const sector = allSectors.find(s => s.id === run.sectorId);
                 const distance = run.endMileage ? run.endMileage - run.startMileage : 0;
@@ -1090,7 +1098,6 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
 const AbastecimentosTab = () => {
     const { firestore } = useFirebase();
     const { toast } = useToast();
-    const router = useRouter();
     const [user, setUser] = useState<UserData | null>(null);
     const [users, setUsers] = useState<Map<string, FirestoreUser>>(new Map());
     const [allRefuels, setAllRefuels] = useState<any[]>([]);
@@ -1161,7 +1168,6 @@ const RefuelTableRow = ({ refuel, driver }: { refuel: any, driver?: FirestoreUse
 const ChecklistsTab = () => {
     const { firestore } = useFirebase();
     const { toast } = useToast();
-    const router = useRouter();
     const [user, setUser] = useState<UserData | null>(null);
     const [users, setUsers] = useState<Map<string, FirestoreUser>>(new Map());
     const [isSuperAdmin, setIsSuperAdmin] = useState(false);
@@ -1173,8 +1179,8 @@ const ChecklistsTab = () => {
 
     useEffect(() => {
         const storedUser = localStorage.getItem('user'); const companyId = localStorage.getItem('companyId'); const sectorId = localStorage.getItem('sectorId'); const matricula = localStorage.getItem('matricula');
-        if (storedUser && companyId && sectorId && matricula) { setUser({ ...JSON.parse(storedUser), companyId, sectorId, matricula }); if (matricula === '801231') setIsSuperAdmin(true); } else router.push('/login');
-    }, [router]);
+        if (storedUser && companyId && sectorId && matricula) { setUser({ ...JSON.parse(storedUser), companyId, sectorId, matricula }); if (matricula === '801231') setIsSuperAdmin(true); } 
+    }, []);
     
     const fetchUsers = useCallback(async () => {
         if (!firestore || !user) return;
@@ -1191,16 +1197,16 @@ const ChecklistsTab = () => {
             const checklistsQuery = query(
                 collectionGroup(firestore, 'checklists'),
                 where('companyId', '==', user.companyId),
-                where('sectorId', '==', user.sectorId)
+                where('sectorId', '==', user.sectorId),
+                orderBy('timestamp', 'desc')
             );
             const querySnapshot = await getDocs(checklistsQuery);
             const checklists = querySnapshot.docs.map(doc => ({ id: doc.id, path: doc.ref.path, ...doc.data() as any }));
-            checklists.sort((a,b) => b.timestamp.seconds - a.timestamp.seconds);
             setAllChecklists(checklists);
         } catch (error) { 
             console.error("Error fetching checklists:", error);
             if ((error as any).code === 'failed-precondition') {
-                toast({ variant: 'destructive', title: 'Índice do Firestore Necessário', description: 'Para carregar os checklists, um índice composto é necessário. Crie-o no console do Firebase.', duration: 8000 });
+                toast({ variant: 'destructive', title: 'Índice do Firestore Necessário', description: 'O índice necessário está sendo criado. Por favor, tente novamente em alguns minutos.', duration: 8000 });
             } else {
                 toast({ variant: 'destructive', title: 'Erro ao buscar checklists' });
             }
@@ -1286,9 +1292,9 @@ export default function DashboardPage() {
         <TabsList className={cn("grid w-full", isMobile ? "grid-cols-2" : "grid-cols-5")}>
             <TabsTrigger value="acompanhamento">Acompanhamento</TabsTrigger>
             
-            {!isMobile && <TabsTrigger value="analise">Análise</TabsTrigger>}
-            {!isMobile && <TabsTrigger value="historico">Histórico</TabsTrigger>}
-            {!isMobile && <TabsTrigger value="abastecimentos">Abastecimentos</TabsTrigger>}
+            <TabsTrigger value="analise">Análise</TabsTrigger>
+            <TabsTrigger value="historico">Histórico</TabsTrigger>
+            <TabsTrigger value="abastecimentos">Abastecimentos</TabsTrigger>
             
             <TabsTrigger value="checklists">Checklists</TabsTrigger>
         </TabsList>
@@ -1298,15 +1304,15 @@ export default function DashboardPage() {
         </TabsContent>
         
         
-        {!isMobile && <TabsContent value="analise" className="mt-6">
+        <TabsContent value="analise" className="mt-6">
             {activeTab === 'analise' && <AnaliseTab />}
-        </TabsContent>}
-        {!isMobile && <TabsContent value="historico" className="mt-6">
+        </TabsContent>
+        <TabsContent value="historico" className="mt-6">
             {activeTab === 'historico' && <HistoricoTab />}
-        </TabsContent>}
-        {!isMobile && <TabsContent value="abastecimentos" className="mt-6">
+        </TabsContent>
+        <TabsContent value="abastecimentos" className="mt-6">
             {activeTab === 'abastecimentos' && <AbastecimentosTab />}
-        </TabsContent>}
+        </TabsContent>
         
 
         <TabsContent value="checklists" className="mt-6">
@@ -1316,3 +1322,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+
