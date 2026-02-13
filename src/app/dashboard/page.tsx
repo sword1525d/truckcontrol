@@ -638,7 +638,6 @@ const RunDetailsContent = ({ run, onSegmentClick, highlightedSegmentId }: { run:
 const AnaliseTab = ({ activeTab }: { activeTab: string }) => {
     const { firestore } = useFirebase();
     const { toast } = useToast();
-    const router = useRouter();
     const [user, setUser] = useState<UserData | null>(null);
     const [isSuperAdmin, setIsSuperAdmin] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
@@ -663,14 +662,12 @@ const AnaliseTab = ({ activeTab }: { activeTab: string }) => {
         if (storedUser && companyId && sectorId && matricula) {
             setUser({ ...JSON.parse(storedUser), companyId, sectorId, matricula });
             if (matricula === '801231') setIsSuperAdmin(true);
-        } else {
-            router.push('/login');
         }
-    }, [router]);
+    }, []);
 
     useEffect(() => {
         const fetchAnalysisData = async () => {
-            if (!firestore || !user || !date?.from) return;
+            if (!firestore || !user || !date?.from || activeTab !== 'analise') return;
             setIsLoading(true);
             try {
                 const usersMap = new Map<string, FirestoreUser>();
@@ -692,8 +689,7 @@ const AnaliseTab = ({ activeTab }: { activeTab: string }) => {
                     const runsQuery = query(
                         collection(firestore, `companies/${user.companyId}/sectors/${sector.id}/runs`), 
                         where('startTime', '>=', startOfDay(date.from!)),
-                        where('startTime', '<=', endOfDay(date.to || date.from!)),
-                        where('status', '==', 'COMPLETED')
+                        where('startTime', '<=', endOfDay(date.to || date.from!))
                     );
 
                     const querySnapshot = await getDocs(runsQuery);
@@ -701,7 +697,7 @@ const AnaliseTab = ({ activeTab }: { activeTab: string }) => {
                 });
 
                 const runsBySector = await Promise.all(runsPromises);
-                const allFetchedRuns = runsBySector.flat();
+                const allFetchedRuns = runsBySector.flat().filter(run => run.status === 'COMPLETED');
 
                 setUsers(usersMap);
                 setAllRuns(allFetchedRuns);
@@ -717,9 +713,7 @@ const AnaliseTab = ({ activeTab }: { activeTab: string }) => {
             }
         };
 
-        if (activeTab === 'analise') {
-            fetchAnalysisData();
-        }
+        fetchAnalysisData();
     }, [firestore, user, toast, isSuperAdmin, date, activeTab]);
 
     const { filteredRuns, vehicleList, driverList } = useMemo(() => {
@@ -842,7 +836,7 @@ const HistoricoTab = ({ activeTab }: { activeTab: string }) => {
 
     useEffect(() => {
         const fetchHistoryData = async () => {
-            if (!firestore || !user || !date?.from) return;
+            if (!firestore || !user || !date?.from || activeTab !== 'historico') return;
             setIsLoading(true);
             try {
                 const usersMap = new Map<string, FirestoreUser>();
@@ -864,8 +858,7 @@ const HistoricoTab = ({ activeTab }: { activeTab: string }) => {
                     const runsQuery = query(
                         collection(firestore, `companies/${user.companyId}/sectors/${sector.id}/runs`), 
                         where('startTime', '>=', startOfDay(date.from!)),
-                        where('startTime', '<=', endOfDay(date.to || date.from!)),
-                        where('status', '==', 'COMPLETED')
+                        where('startTime', '<=', endOfDay(date.to || date.from!))
                     );
 
                     const querySnapshot = await getDocs(runsQuery);
@@ -873,7 +866,7 @@ const HistoricoTab = ({ activeTab }: { activeTab: string }) => {
                 });
 
                 const runsBySector = await Promise.all(runsPromises);
-                const allFetchedRuns = runsBySector.flat();
+                const allFetchedRuns = runsBySector.flat().filter(run => run.status === 'COMPLETED');
 
                 setUsers(usersMap);
                 setAllRuns(allFetchedRuns.sort((a, b) => (b.endTime?.seconds || 0) - (a.endTime?.seconds || 0)));
@@ -889,9 +882,7 @@ const HistoricoTab = ({ activeTab }: { activeTab: string }) => {
             }
         };
         
-        if (activeTab === 'historico') {
-            fetchHistoryData();
-        }
+        fetchHistoryData();
     }, [firestore, user, toast, isSuperAdmin, date, activeTab]);
 
     const { filteredRuns, vehicleList, driverList } = useMemo(() => {
@@ -1059,7 +1050,7 @@ const AbastecimentosTab = ({ activeTab }: { activeTab: string }) => {
     
     useEffect(() => {
         const fetchRefuelData = async () => {
-            if (!firestore || !user) return;
+            if (!firestore || !user || activeTab !== 'abastecimentos') return;
             setIsLoading(true);
             try {
                 const usersSnapshot = await getDocs(collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/users`));
@@ -1073,9 +1064,7 @@ const AbastecimentosTab = ({ activeTab }: { activeTab: string }) => {
             } catch (error) { toast({ variant: 'destructive', title: 'Erro ao buscar abastecimentos' }); } finally { setIsLoading(false); }
         };
 
-        if (activeTab === 'abastecimentos') {
-            fetchRefuelData();
-        }
+        fetchRefuelData();
     }, [firestore, user, toast, activeTab]);
 
     const filteredRefuels = useMemo(() => allRefuels.filter(refuel => {
@@ -1123,8 +1112,7 @@ const ChecklistsTab = ({ activeTab }: { activeTab: string }) => {
     
     useEffect(() => {
         const fetchChecklistData = async () => {
-            if (!firestore || !user) return;
-            if (activeTab !== 'checklists') return; // Lazy loading check
+            if (!firestore || !user || activeTab !== 'checklists') return;
 
             setIsChecklistsLoading(true);
             try {
@@ -1137,8 +1125,9 @@ const ChecklistsTab = ({ activeTab }: { activeTab: string }) => {
                 const querySnapshot = await getDocs(checklistsQuery);
                 const checklists = querySnapshot.docs.map(doc => ({ id: doc.id, path: doc.ref.path, ...doc.data() as any }));
 
+                const companyPath = `companies/${user.companyId}/sectors/${user.sectorId}/`;
                 const filteredAndSorted = checklists
-                    .filter(c => c.companyId === user.companyId && c.sectorId === user.sectorId)
+                    .filter(c => c.path.startsWith(companyPath))
                     .sort((a, b) => b.timestamp.seconds - a.timestamp.seconds);
 
                 setAllChecklists(filteredAndSorted);
@@ -1150,9 +1139,7 @@ const ChecklistsTab = ({ activeTab }: { activeTab: string }) => {
             }
         };
         
-        if (activeTab === 'checklists') {
-            fetchChecklistData();
-        }
+        fetchChecklistData();
     }, [firestore, user, toast, activeTab]);
     
     const handleDelete = async (path: string) => {
@@ -1329,6 +1316,7 @@ export default function DashboardPage() {
     </div>
   );
 }
+
 
 
 
