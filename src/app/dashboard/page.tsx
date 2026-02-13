@@ -239,7 +239,7 @@ const RealTimeMap = dynamic(() => import('./RealTimeMap'), {
 
 
 // --- Componente da Aba: Acompanhamento ---
-const AcompanhamentoTab = () => {
+const AcompanhamentoTab = ({ activeTab }: { activeTab: string }) => {
     const { firestore } = useFirebase();
     const { toast } = useToast();
     const router = useRouter();
@@ -269,31 +269,61 @@ const AcompanhamentoTab = () => {
         if (storedUser && companyId && sectorId && matricula) setUser({ ...JSON.parse(storedUser), companyId, sectorId, matricula });
     }, []);
 
-    // Effect for Overview Data
+    // Effect for Overview and Tracking Data
     useEffect(() => {
-        if (!firestore || !user) return;
+        if (!firestore || !user || activeTab !== 'acompanhamento') return;
+
+        setIsLoading(true);
         setIsOverviewLoading(true);
-        
-        const vehiclesCol = collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/vehicles`);
+
+        const companyId = user.companyId;
+        const sectorId = user.sectorId;
+
+        // Fetch Users
+        const usersCol = collection(firestore, `companies/${companyId}/sectors/${sectorId}/users`);
+        getDocs(usersCol).then(usersSnapshot => {
+            const usersMap = new Map<string, FirestoreUser>();
+            usersSnapshot.forEach(doc => usersMap.set(doc.id, { id: doc.id, ...doc.data() } as FirestoreUser));
+            setUsers(usersMap);
+        });
+
+        // Combined listener for Vehicles and Runs
+        const vehiclesCol = collection(firestore, `companies/${companyId}/sectors/${sectorId}/vehicles`);
         const vehiclesQuery = query(vehiclesCol, where('isTruck', '==', true));
         
         const unsubscribeVehicles = onSnapshot(vehiclesQuery, (vehiclesSnapshot) => {
             const allTrucks = vehiclesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Vehicle));
-            const runsCol = collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/runs`);
-            const activeRunsQuery = query(runsCol, where('status', '==', 'IN_PROGRESS'));
+            
+            const todayStart = startOfDay(new Date());
+            const todayEnd = endOfDay(new Date());
+            const runsCol = collection(firestore, `companies/${companyId}/sectors/${sectorId}/runs`);
+            const runsQuery = query(runsCol, where('startTime', '>=', todayStart), where('startTime', '<=', todayEnd));
 
-            const unsubscribeRuns = onSnapshot(activeRunsQuery, (runsSnapshot) => {
-                const activeRunsMap = new Map(runsSnapshot.docs.map(doc => [doc.data().vehicleId, doc.data().driverName]));
+            const unsubscribeRuns = onSnapshot(runsQuery, (runsSnapshot) => {
+                const activeRunsMap = new Map<string, string>();
+                const runs = runsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Run));
+                
+                runs.forEach(run => {
+                    if (run.status === 'IN_PROGRESS') {
+                        activeRunsMap.set(run.vehicleId, run.driverName);
+                    }
+                });
+
                 const statuses = allTrucks.map(truck => ({
                     ...truck,
                     status: activeRunsMap.has(truck.id) ? 'EM_CORRIDA' : truck.status || 'PARADO',
                     driverName: activeRunsMap.get(truck.id)
                 }));
+
                 setVehicleStatuses(statuses);
+                setAllRuns(runs);
+                setIsLoading(false);
                 setIsOverviewLoading(false);
+
             }, (error) => {
-                console.error("Error fetching active runs: ", error);
+                console.error("Error fetching runs: ", error);
                 toast({ variant: 'destructive', title: 'Erro ao buscar corridas' });
+                setIsLoading(false);
                 setIsOverviewLoading(false);
             });
             
@@ -301,45 +331,13 @@ const AcompanhamentoTab = () => {
         }, (error) => {
             console.error("Error fetching vehicles: ", error);
             toast({ variant: 'destructive', title: 'Erro ao buscar veículos' });
+            setIsLoading(false);
             setIsOverviewLoading(false);
         });
 
         return () => unsubscribeVehicles();
-    }, [firestore, user, toast]);
+    }, [firestore, user, toast, activeTab]);
 
-    // Effect for Tracking Data
-    useEffect(() => {
-        if (!firestore || !user) return;
-        setIsLoading(true);
-        const usersCol = collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/users`);
-        getDocs(usersCol).then(usersSnapshot => {
-            const usersMap = new Map<string, FirestoreUser>();
-            usersSnapshot.forEach(doc => usersMap.set(doc.id, { id: doc.id, ...doc.data() } as FirestoreUser));
-            setUsers(usersMap);
-        });
-
-        const runsCol = collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/runs`);
-        const todayStart = startOfDay(new Date());
-        const todayEnd = endOfDay(new Date());
-
-        const runsQuery = query(runsCol, where('startTime', '>=', Timestamp.fromDate(todayStart)), where('startTime', '<=', Timestamp.fromDate(todayEnd)));
-
-        const unsubscribe = onSnapshot(runsQuery, (snapshot) => {
-            const runs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Run));
-            setAllRuns(runs);
-            setIsLoading(false);
-        }, (error) => {
-            console.error("Error fetching runs: ", error);
-            if (error.code === 'failed-precondition') {
-                toast({ variant: 'destructive', title: 'Índice necessário', description: 'O Firestore precisa de um índice para esta consulta. Crie-o no console do Firebase.' });
-            } else {
-                toast({ variant: 'destructive', title: 'Erro ao buscar corridas' });
-            }
-            setIsLoading(false);
-        });
-
-        return () => unsubscribe();
-    }, [firestore, user, toast]);
 
     const aggregatedRuns = useMemo(() => {
         const groupedRuns = new Map<string, Run[]>();
@@ -637,7 +635,7 @@ const RunDetailsContent = ({ run, onSegmentClick, highlightedSegmentId }: { run:
 
 
 // --- Componente da Aba: Análise ---
-const AnaliseTab = () => {
+const AnaliseTab = ({ activeTab }: { activeTab: string }) => {
     const { firestore } = useFirebase();
     const { toast } = useToast();
     const router = useRouter();
@@ -670,54 +668,59 @@ const AnaliseTab = () => {
         }
     }, [router]);
 
-    const fetchInitialData = useCallback(async () => {
-        if (!firestore || !user || !date?.from) return;
-        setIsLoading(true);
-        try {
-            const usersMap = new Map<string, FirestoreUser>();
-            const sectorRefsToFetch: {id: string, name: string}[] = [];
+    useEffect(() => {
+        const fetchAnalysisData = async () => {
+            if (!firestore || !user || !date?.from) return;
+            setIsLoading(true);
+            try {
+                const usersMap = new Map<string, FirestoreUser>();
+                const sectorRefsToFetch: {id: string, name: string}[] = [];
 
-            if (isSuperAdmin) {
-                const sectorsSnapshot = await getDocs(collection(firestore, `companies/${user.companyId}/sectors`));
-                sectorsSnapshot.docs.forEach(doc => sectorRefsToFetch.push({ id: doc.id, name: doc.data().name as string }));
-            } else {
-                const sectorSnap = await getDoc(doc(firestore, `companies/${user.companyId}/sectors`, user.sectorId));
-                if (sectorSnap.exists()) sectorRefsToFetch.push({ id: sectorSnap.id, name: sectorSnap.data().name as string });
-            }
-            setAllSectors(sectorRefsToFetch);
-            
-            const runsPromises = sectorRefsToFetch.map(async (sector) => {
-                const usersSnapshot = await getDocs(collection(firestore, `companies/${user.companyId}/sectors/${sector.id}/users`));
-                usersSnapshot.forEach(doc => { if (!usersMap.has(doc.id)) usersMap.set(doc.id, { id: doc.id, ...doc.data() } as FirestoreUser); });
+                if (isSuperAdmin) {
+                    const sectorsSnapshot = await getDocs(collection(firestore, `companies/${user.companyId}/sectors`));
+                    sectorsSnapshot.docs.forEach(doc => sectorRefsToFetch.push({ id: doc.id, name: doc.data().name as string }));
+                } else {
+                    const sectorSnap = await getDoc(doc(firestore, `companies/${user.companyId}/sectors`, user.sectorId));
+                    if (sectorSnap.exists()) sectorRefsToFetch.push({ id: sectorSnap.id, name: sectorSnap.data().name as string });
+                }
+                setAllSectors(sectorRefsToFetch);
                 
-                const runsQuery = query(
-                    collection(firestore, `companies/${user.companyId}/sectors/${sector.id}/runs`), 
-                    where('startTime', '>=', startOfDay(date.from!)),
-                    where('startTime', '<=', endOfDay(date.to || date.from!))
-                );
+                const runsPromises = sectorRefsToFetch.map(async (sector) => {
+                    const usersSnapshot = await getDocs(collection(firestore, `companies/${user.companyId}/sectors/${sector.id}/users`));
+                    usersSnapshot.forEach(doc => { if (!usersMap.has(doc.id)) usersMap.set(doc.id, { id: doc.id, ...doc.data() } as FirestoreUser); });
+                    
+                    const runsQuery = query(
+                        collection(firestore, `companies/${user.companyId}/sectors/${sector.id}/runs`), 
+                        where('startTime', '>=', startOfDay(date.from!)),
+                        where('startTime', '<=', endOfDay(date.to || date.from!)),
+                        where('status', '==', 'COMPLETED')
+                    );
 
-                const querySnapshot = await getDocs(runsQuery);
-                return querySnapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as Omit<Run, 'id'>), sectorId: sector.id })).filter(run => run.status === 'COMPLETED');
-            });
+                    const querySnapshot = await getDocs(runsQuery);
+                    return querySnapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as Omit<Run, 'id'>), sectorId: sector.id }));
+                });
 
-            const runsBySector = await Promise.all(runsPromises);
-            const allFetchedRuns = runsBySector.flat();
+                const runsBySector = await Promise.all(runsPromises);
+                const allFetchedRuns = runsBySector.flat();
 
-            setUsers(usersMap);
-            setAllRuns(allFetchedRuns);
-        } catch (error) {
-            console.error("Error fetching data: ", error);
-             if ((error as any).code === 'failed-precondition') {
-                toast({ variant: 'destructive', title: 'Índice necessário no Firestore', description: 'Para otimizar esta consulta, um índice composto é necessário. Por favor, crie-o no console do Firebase.', duration: 8000 });
-            } else {
-                toast({ variant: 'destructive', title: 'Erro ao buscar dados' });
+                setUsers(usersMap);
+                setAllRuns(allFetchedRuns);
+            } catch (error) {
+                console.error("Error fetching data: ", error);
+                 if ((error as any).code === 'failed-precondition') {
+                    toast({ variant: 'destructive', title: 'Índice necessário no Firestore', description: 'Para otimizar esta consulta, um índice composto é necessário. Por favor, crie-o no console do Firebase.', duration: 8000 });
+                } else {
+                    toast({ variant: 'destructive', title: 'Erro ao buscar dados' });
+                }
+            } finally {
+                setIsLoading(false);
             }
-        } finally {
-            setIsLoading(false);
-        }
-    }, [firestore, user, toast, isSuperAdmin, date]);
+        };
 
-    useEffect(() => { if (user) fetchInitialData(); }, [user, fetchInitialData]);
+        if (activeTab === 'analise') {
+            fetchAnalysisData();
+        }
+    }, [firestore, user, toast, isSuperAdmin, date, activeTab]);
 
     const { filteredRuns, vehicleList, driverList } = useMemo(() => {
         const vehicles = new Set<string>();
@@ -800,7 +803,7 @@ const AnaliseTab = () => {
 };
 
 // --- Componente da Aba: Histórico ---
-const HistoricoTab = () => {
+const HistoricoTab = ({ activeTab }: { activeTab: string }) => {
     const { firestore } = useFirebase();
     const { toast } = useToast();
     const router = useRouter();
@@ -837,54 +840,59 @@ const HistoricoTab = () => {
         }
     }, [router]);
 
-    const fetchInitialData = useCallback(async () => {
-        if (!firestore || !user || !date?.from) return;
-        setIsLoading(true);
-        try {
-            const usersMap = new Map<string, FirestoreUser>();
-            const sectorRefsToFetch: {id: string, name: string}[] = [];
+    useEffect(() => {
+        const fetchHistoryData = async () => {
+            if (!firestore || !user || !date?.from) return;
+            setIsLoading(true);
+            try {
+                const usersMap = new Map<string, FirestoreUser>();
+                const sectorRefsToFetch: {id: string, name: string}[] = [];
 
-            if (isSuperAdmin) {
-                const sectorsSnapshot = await getDocs(collection(firestore, `companies/${user.companyId}/sectors`));
-                sectorsSnapshot.docs.forEach(doc => sectorRefsToFetch.push({ id: doc.id, name: doc.data().name as string }));
-            } else {
-                const sectorSnap = await getDoc(doc(firestore, `companies/${user.companyId}/sectors`, user.sectorId));
-                if (sectorSnap.exists()) sectorRefsToFetch.push({ id: sectorSnap.id, name: sectorSnap.data().name as string });
-            }
-            setAllSectors(sectorRefsToFetch);
-            
-            const runsPromises = sectorRefsToFetch.map(async (sector) => {
-                const usersSnapshot = await getDocs(collection(firestore, `companies/${user.companyId}/sectors/${sector.id}/users`));
-                usersSnapshot.forEach(doc => { if (!usersMap.has(doc.id)) usersMap.set(doc.id, { id: doc.id, ...doc.data() } as FirestoreUser); });
+                if (isSuperAdmin) {
+                    const sectorsSnapshot = await getDocs(collection(firestore, `companies/${user.companyId}/sectors`));
+                    sectorsSnapshot.docs.forEach(doc => sectorRefsToFetch.push({ id: doc.id, name: doc.data().name as string }));
+                } else {
+                    const sectorSnap = await getDoc(doc(firestore, `companies/${user.companyId}/sectors`, user.sectorId));
+                    if (sectorSnap.exists()) sectorRefsToFetch.push({ id: sectorSnap.id, name: sectorSnap.data().name as string });
+                }
+                setAllSectors(sectorRefsToFetch);
                 
-                const runsQuery = query(
-                    collection(firestore, `companies/${user.companyId}/sectors/${sector.id}/runs`), 
-                    where('startTime', '>=', startOfDay(date.from!)),
-                    where('startTime', '<=', endOfDay(date.to || date.from!))
-                );
+                const runsPromises = sectorRefsToFetch.map(async (sector) => {
+                    const usersSnapshot = await getDocs(collection(firestore, `companies/${user.companyId}/sectors/${sector.id}/users`));
+                    usersSnapshot.forEach(doc => { if (!usersMap.has(doc.id)) usersMap.set(doc.id, { id: doc.id, ...doc.data() } as FirestoreUser); });
+                    
+                    const runsQuery = query(
+                        collection(firestore, `companies/${user.companyId}/sectors/${sector.id}/runs`), 
+                        where('startTime', '>=', startOfDay(date.from!)),
+                        where('startTime', '<=', endOfDay(date.to || date.from!)),
+                        where('status', '==', 'COMPLETED')
+                    );
 
-                const querySnapshot = await getDocs(runsQuery);
-                return querySnapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as Omit<Run, 'id'>), sectorId: sector.id })).filter(run => run.status === 'COMPLETED');
-            });
+                    const querySnapshot = await getDocs(runsQuery);
+                    return querySnapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as Omit<Run, 'id'>), sectorId: sector.id }));
+                });
 
-            const runsBySector = await Promise.all(runsPromises);
-            const allFetchedRuns = runsBySector.flat();
+                const runsBySector = await Promise.all(runsPromises);
+                const allFetchedRuns = runsBySector.flat();
 
-            setUsers(usersMap);
-            setAllRuns(allFetchedRuns.sort((a, b) => (b.endTime?.seconds || 0) - (a.endTime?.seconds || 0)));
-        } catch (error) {
-            console.error("Error fetching data: ", error);
-            if ((error as any).code === 'failed-precondition') {
-                toast({ variant: 'destructive', title: 'Índice necessário no Firestore', description: 'Para otimizar esta consulta, um índice composto é necessário. Por favor, crie-o no console do Firebase.', duration: 8000 });
-            } else {
-                toast({ variant: 'destructive', title: 'Erro ao buscar dados' });
+                setUsers(usersMap);
+                setAllRuns(allFetchedRuns.sort((a, b) => (b.endTime?.seconds || 0) - (a.endTime?.seconds || 0)));
+            } catch (error) {
+                console.error("Error fetching data: ", error);
+                if ((error as any).code === 'failed-precondition') {
+                    toast({ variant: 'destructive', title: 'Índice necessário no Firestore', description: 'Para otimizar esta consulta, um índice composto é necessário. Por favor, crie-o no console do Firebase.', duration: 8000 });
+                } else {
+                    toast({ variant: 'destructive', title: 'Erro ao buscar dados' });
+                }
+            } finally {
+                setIsLoading(false);
             }
-        } finally {
-            setIsLoading(false);
+        };
+        
+        if (activeTab === 'historico') {
+            fetchHistoryData();
         }
-    }, [firestore, user, toast, isSuperAdmin, date]);
-
-    useEffect(() => { if (user) fetchInitialData(); }, [user, fetchInitialData]);
+    }, [firestore, user, toast, isSuperAdmin, date, activeTab]);
 
     const { filteredRuns, vehicleList, driverList } = useMemo(() => {
         const vehicles = new Set<string>();
@@ -939,7 +947,8 @@ const HistoricoTab = () => {
         try {
             await deleteDoc(doc(firestore, `companies/${user.companyId}/sectors/${runToDelete.sectorId}/runs`, runToDelete.id));
             toast({ title: 'Sucesso', description: 'A corrida foi deletada.' });
-            fetchInitialData();
+            // Re-filter client-side to update UI instantly
+            setAllRuns(prev => prev.filter(r => r.id !== runToDelete.id));
         } catch (error) {
             console.error("Error deleting run:", error);
             toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível deletar a corrida.' });
@@ -1030,6 +1039,164 @@ const HistoricoTab = () => {
     );
 };
 
+// --- Componente da Aba: Abastecimentos ---
+const AbastecimentosTab = ({ activeTab }: { activeTab: string }) => {
+    const { firestore } = useFirebase();
+    const { toast } = useToast();
+    const [user, setUser] = useState<UserData | null>(null);
+    const [users, setUsers] = useState<Map<string, FirestoreUser>>(new Map());
+    const [allRefuels, setAllRefuels] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [date, setDate] = useState<DateRange | undefined>({ from: startOfDay(subDays(new Date(), 6)), to: endOfDay(new Date()) });
+
+    useEffect(() => {
+        const storedUser = localStorage.getItem('user');
+        const companyId = localStorage.getItem('companyId');
+        const sectorId = localStorage.getItem('sectorId');
+        const matricula = localStorage.getItem('matricula');
+        if (storedUser && companyId && sectorId && matricula) setUser({ ...JSON.parse(storedUser), companyId, sectorId, matricula });
+    }, []);
+    
+    useEffect(() => {
+        const fetchRefuelData = async () => {
+            if (!firestore || !user) return;
+            setIsLoading(true);
+            try {
+                const usersSnapshot = await getDocs(collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/users`));
+                const usersMap = new Map<string, FirestoreUser>();
+                usersSnapshot.forEach(doc => usersMap.set(doc.id, { id: doc.id, ...doc.data() } as FirestoreUser));
+                setUsers(usersMap);
+                
+                const refuelsQuery = query(collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/refuels`), orderBy('timestamp', 'desc'));
+                const querySnapshot = await getDocs(refuelsQuery);
+                setAllRefuels(querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            } catch (error) { toast({ variant: 'destructive', title: 'Erro ao buscar abastecimentos' }); } finally { setIsLoading(false); }
+        };
+
+        if (activeTab === 'abastecimentos') {
+            fetchRefuelData();
+        }
+    }, [firestore, user, toast, activeTab]);
+
+    const filteredRefuels = useMemo(() => allRefuels.filter(refuel => {
+        const refuelDate = new Date(refuel.timestamp.seconds * 1000);
+        return date?.from && refuelDate >= startOfDay(date.from) && refuelDate <= endOfDay(date.to || date.from);
+    }), [allRefuels, date]);
+
+    if (isLoading) return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+
+    return (
+        <Card>
+            <CardHeader>
+                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+                    <div>
+                        <CardTitle>Registros de Abastecimento</CardTitle>
+                        <CardDescription>Lista de todos os abastecimentos no período selecionado.</CardDescription>
+                    </div>
+                    <DateFilter date={date} setDate={setDate} />
+                </div>
+            </CardHeader>
+            <CardContent>
+                <div className="overflow-auto max-h-[60vh]"><Table><TableHeader><TableRow><TableHead>Data</TableHead><TableHead>Veículo</TableHead><TableHead>Motorista</TableHead><TableHead>Litros</TableHead><TableHead className="text-right">Valor</TableHead></TableRow></TableHeader><TableBody>{filteredRefuels.length > 0 ? filteredRefuels.map(refuel => <RefuelTableRow key={refuel.id} refuel={refuel} driver={users.get(refuel.driverId)} />) : <TableRow><TableCell colSpan={5} className="text-center h-24">Nenhum abastecimento encontrado</TableCell></TableRow>}</TableBody></Table></div>
+            </CardContent>
+        </Card>
+    );
+};
+
+// --- Componente da Aba: Checklists ---
+const ChecklistsTab = ({ activeTab }: { activeTab: string }) => {
+    const { firestore } = useFirebase();
+    const { toast } = useToast();
+    const [user, setUser] = useState<UserData | null>(null);
+    const [users, setUsers] = useState<Map<string, FirestoreUser>>(new Map());
+    const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+    const [allChecklists, setAllChecklists] = useState<any[]>([]);
+    const [isChecklistsLoading, setIsChecklistsLoading] = useState(true);
+    const [date, setDate] = useState<DateRange | undefined>({ from: startOfDay(subDays(new Date(), 6)), to: endOfDay(new Date()) });
+    const [selectedVehicle, setSelectedVehicle] = useState<string>('all');
+    const [selectedChecklist, setSelectedChecklist] = useState<any | null>(null);
+
+    useEffect(() => {
+        const storedUser = localStorage.getItem('user'); const companyId = localStorage.getItem('companyId'); const sectorId = localStorage.getItem('sectorId'); const matricula = localStorage.getItem('matricula');
+        if (storedUser && companyId && sectorId && matricula) { setUser({ ...JSON.parse(storedUser), companyId, sectorId, matricula }); if (matricula === '801231') setIsSuperAdmin(true); } 
+    }, []);
+    
+    useEffect(() => {
+        const fetchChecklistData = async () => {
+            if (!firestore || !user) return;
+            if (activeTab !== 'checklists') return; // Lazy loading check
+
+            setIsChecklistsLoading(true);
+            try {
+                const usersSnapshot = await getDocs(collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/users`));
+                const usersMap = new Map<string, FirestoreUser>();
+                usersSnapshot.forEach(doc => usersMap.set(doc.id, { id: doc.id, ...doc.data() } as FirestoreUser));
+                setUsers(usersMap);
+                
+                const checklistsQuery = query(collectionGroup(firestore, 'checklists'));
+                const querySnapshot = await getDocs(checklistsQuery);
+                const checklists = querySnapshot.docs.map(doc => ({ id: doc.id, path: doc.ref.path, ...doc.data() as any }));
+
+                const filteredAndSorted = checklists
+                    .filter(c => c.companyId === user.companyId && c.sectorId === user.sectorId)
+                    .sort((a, b) => b.timestamp.seconds - a.timestamp.seconds);
+
+                setAllChecklists(filteredAndSorted);
+            } catch (error) { 
+                console.error("Error fetching checklists:", error);
+                toast({ variant: 'destructive', title: 'Erro ao buscar checklists' });
+            } finally {
+                setIsChecklistsLoading(false);
+            }
+        };
+        
+        if (activeTab === 'checklists') {
+            fetchChecklistData();
+        }
+    }, [firestore, user, toast, activeTab]);
+    
+    const handleDelete = async (path: string) => {
+        if (!firestore || !isSuperAdmin) return;
+        try { await deleteDoc(doc(firestore, path)); toast({ title: 'Sucesso', description: 'Checklist deletado.' }); 
+            setAllChecklists(prev => prev.filter(c => c.path !== path));
+        } catch (error) { toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível deletar.' }); }
+    };
+
+    const { filteredChecklists, vehicleList } = useMemo(() => {
+        const vehicles = new Set<string>(); allChecklists.forEach(c => vehicles.add(c.vehicleId));
+        const filtered = allChecklists.filter(c => {
+            const cDate = new Date(c.timestamp.seconds * 1000);
+            if (!(date?.from && cDate >= startOfDay(date.from) && cDate <= endOfDay(date.to || date.from))) return false;
+            if(selectedVehicle !== 'all' && c.vehicleId !== selectedVehicle) return false;
+            return true;
+        });
+        return { filteredChecklists: filtered, vehicleList: Array.from(vehicles).sort() };
+    }, [allChecklists, date, selectedVehicle]);
+
+    if (isChecklistsLoading) return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+
+    return (
+        <Card>
+            <CardHeader>
+                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+                    <div>
+                        <CardTitle>Registros de Checklist</CardTitle>
+                        <CardDescription>Lista de checklists preenchidos no período.</CardDescription>
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                        <VehicleFilter vehicles={vehicleList} selectedVehicle={selectedVehicle} onVehicleChange={setSelectedVehicle} />
+                        <DateFilter date={date} setDate={setDate} />
+                    </div>
+                </div>
+            </CardHeader>
+            <CardContent>
+                <div className="overflow-auto max-h-[60vh]"><Table><TableHeader><TableRow><TableHead>Data</TableHead><TableHead>Veículo</TableHead><TableHead>Motorista</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader><TableBody>{filteredChecklists.length > 0 ? filteredChecklists.map(c => <ChecklistTableRow key={c.id} checklist={c} driver={users.get(c.driverId)} onViewDetails={() => setSelectedChecklist(c)} isSuperAdmin={isSuperAdmin} onDelete={handleDelete} />) : <TableRow><TableCell colSpan={5} className="text-center h-24">Nenhum checklist encontrado</TableCell></TableRow>}</TableBody></Table></div>
+            </CardContent>
+            <ChecklistDetailsDialog checklist={selectedChecklist} isOpen={selectedChecklist !== null} onClose={() => setSelectedChecklist(null)} />
+        </Card>
+    );
+};
+
 const ChartCard = ({ title, description, children, className }: { title: string, description: string, children: React.ReactNode, className?: string }) => (
     <Card className={className}><CardHeader><CardTitle>{title}</CardTitle><CardDescription>{description}</CardDescription></CardHeader><CardContent><ResponsiveContainer width="100%" height={300}>{children}</ResponsiveContainer></CardContent></Card>
 );
@@ -1045,6 +1212,21 @@ const ShiftFilter = ({ selectedShift, onShiftChange }: { selectedShift: string, 
 const SectorFilter = ({ sectors, selectedSector, onSectorChange }: { sectors: SectorInfo[], selectedSector: string, onSectorChange: (sector: string) => void }) => (<Select value={selectedSector} onValueChange={onSectorChange}><SelectTrigger className="w-full sm:w-auto"><SelectValue placeholder="Filtrar por setor" /></SelectTrigger><SelectContent><SelectItem value="all"><Building className="h-4 w-4 inline-block mr-2"/>Todos os Setores</SelectItem>{sectors.map(s => (<SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>))}</SelectContent></Select>);
 const VehicleFilter = ({ vehicles, selectedVehicle, onVehicleChange }: { vehicles: string[], selectedVehicle: string, onVehicleChange: (vehicle: string) => void }) => (<Select value={selectedVehicle} onValueChange={onVehicleChange}><SelectTrigger className="w-full sm:w-auto"><SelectValue placeholder="Filtrar por veículo" /></SelectTrigger><SelectContent><SelectItem value="all"><Truck className="h-4 w-4 inline-block mr-2"/>Todos os Veículos</SelectItem>{vehicles.map(v => (<SelectItem key={v} value={v}><Truck className="h-4 w-4 inline-block mr-2"/>{v}</SelectItem>))}</SelectContent></Select>);
 const DriverFilter = ({ drivers, selectedDriver, onDriverChange }: { drivers: FirestoreUser[], selectedDriver: string, onDriverChange: (driver: string) => void }) => (<Select value={selectedDriver} onValueChange={onDriverChange}><SelectTrigger className="w-full sm:w-auto"><SelectValue placeholder="Filtrar por motorista" /></SelectTrigger><SelectContent><SelectItem value="all"><User className="h-4 w-4 inline-block mr-2"/>Todos os Motoristas</SelectItem>{drivers.map(d => (<SelectItem key={d.id} value={d.id}><User className="h-4 w-4 inline-block mr-2"/>{d.name}</SelectItem>))}</SelectContent></Select>);
+
+const RefuelTableRow = ({ refuel, driver }: { refuel: any, driver?: FirestoreUser }) => {
+    const getInitials = (name: string) => name.split(' ').map(n => n[0]).slice(0, 2).join('');
+    return (
+        <TableRow><TableCell>{format(new Date(refuel.timestamp.seconds * 1000), 'dd/MM/yy HH:mm')}</TableCell><TableCell><div className="flex items-center gap-2"><Truck className="h-4 w-4 text-muted-foreground"/>{refuel.vehicleId}</div></TableCell><TableCell><div className="font-medium flex items-center gap-2"><Avatar className="h-6 w-6"><AvatarImage src={driver?.photoURL} alt={refuel.driverName} /><AvatarFallback className="text-xs">{getInitials(refuel.driverName)}</AvatarFallback></Avatar>{refuel.driverName}</div></TableCell><TableCell><div className="flex items-center gap-2"><Fuel className="h-4 w-4 text-muted-foreground"/>{refuel.liters.toFixed(2)} L</div></TableCell><TableCell className="text-right font-medium">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(refuel.amount)}</TableCell></TableRow>
+    );
+};
+
+const ChecklistTableRow = ({ checklist, driver, onViewDetails, isSuperAdmin, onDelete }: { checklist: any, driver?: FirestoreUser, onViewDetails: () => void, isSuperAdmin: boolean, onDelete: (path: string) => void }) => {
+    const nonCompliantItems = checklist.items.filter((item:any) => item.status === 'nao_conforme').length;
+    const getInitials = (name: string) => name.split(' ').map(n => n[0]).slice(0, 2).join('');
+    return (
+        <TableRow><TableCell>{format(new Date(checklist.timestamp.seconds * 1000), 'dd/MM/yy HH:mm')}</TableCell><TableCell><div className="flex items-center gap-2"><Truck className="h-4 w-4 text-muted-foreground"/>{checklist.vehicleId}</div></TableCell><TableCell><div className="font-medium flex items-center gap-2"><Avatar className="h-6 w-6"><AvatarImage src={driver?.photoURL} alt={checklist.driverName} /><AvatarFallback className="text-xs">{getInitials(checklist.driverName)}</AvatarFallback></Avatar>{checklist.driverName}</div></TableCell><TableCell>{nonCompliantItems > 0 ? <Badge variant="destructive">{nonCompliantItems} item(ns) não conforme</Badge> : <Badge className="bg-green-600 hover:bg-green-700">Tudo conforme</Badge>}</TableCell><TableCell className="text-right font-medium space-x-2"><Button variant="outline" size="sm" onClick={onViewDetails}><FileText className="h-4 w-4 mr-2" />Ver Detalhes</Button>{isSuperAdmin && (<AlertDialog><AlertDialogTrigger asChild><Button variant="destructive" size="sm"><Trash2 className="h-4 w-4 mr-1" /> Deletar</Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Você tem certeza?</AlertDialogTitle><AlertDialogDescription>Esta ação não pode ser desfeita e irá apagar permanentemente o checklist.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => onDelete(checklist.path)}>Confirmar</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>)}</TableCell></TableRow>
+    );
+};
 
 const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedRun | null, isOpen: boolean, onClose: () => void, isClient: boolean }) => {
     const [mapRun, setMapRun] = useState<AggregatedRun | Run | null>(null);
@@ -1094,175 +1276,6 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
     )
 };
 
-// --- Componente da Aba: Abastecimentos ---
-const AbastecimentosTab = () => {
-    const { firestore } = useFirebase();
-    const { toast } = useToast();
-    const [user, setUser] = useState<UserData | null>(null);
-    const [users, setUsers] = useState<Map<string, FirestoreUser>>(new Map());
-    const [allRefuels, setAllRefuels] = useState<any[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [date, setDate] = useState<DateRange | undefined>({ from: startOfDay(subDays(new Date(), 6)), to: endOfDay(new Date()) });
-
-    useEffect(() => {
-        const storedUser = localStorage.getItem('user');
-        const companyId = localStorage.getItem('companyId');
-        const sectorId = localStorage.getItem('sectorId');
-        const matricula = localStorage.getItem('matricula');
-        if (storedUser && companyId && sectorId && matricula) setUser({ ...JSON.parse(storedUser), companyId, sectorId, matricula });
-    }, []);
-    
-    const fetchUsers = useCallback(async () => {
-        if (!firestore || !user) return;
-        const usersSnapshot = await getDocs(collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/users`));
-        const usersMap = new Map<string, FirestoreUser>();
-        usersSnapshot.forEach(doc => usersMap.set(doc.id, { id: doc.id, ...doc.data() } as FirestoreUser));
-        setUsers(usersMap);
-    }, [firestore, user]);
-
-    const fetchRefuelData = useCallback(async () => {
-        if (!firestore || !user) return;
-        setIsLoading(true);
-        try {
-            const refuelsQuery = query(collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/refuels`), orderBy('timestamp', 'desc'));
-            const querySnapshot = await getDocs(refuelsQuery);
-            setAllRefuels(querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        } catch (error) { toast({ variant: 'destructive', title: 'Erro ao buscar abastecimentos' }); } finally { setIsLoading(false); }
-    }, [firestore, user, toast]);
-
-    useEffect(() => { if(user) { fetchUsers(); fetchRefuelData(); } }, [user, fetchRefuelData, fetchUsers]);
-
-    const filteredRefuels = useMemo(() => allRefuels.filter(refuel => {
-        const refuelDate = new Date(refuel.timestamp.seconds * 1000);
-        return date?.from && refuelDate >= startOfDay(date.from) && refuelDate <= endOfDay(date.to || date.from);
-    }), [allRefuels, date]);
-
-    if (isLoading) return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
-
-    return (
-        <Card>
-            <CardHeader>
-                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
-                    <div>
-                        <CardTitle>Registros de Abastecimento</CardTitle>
-                        <CardDescription>Lista de todos os abastecimentos no período selecionado.</CardDescription>
-                    </div>
-                    <DateFilter date={date} setDate={setDate} />
-                </div>
-            </CardHeader>
-            <CardContent>
-                <div className="overflow-auto max-h-[60vh]"><Table><TableHeader><TableRow><TableHead>Data</TableHead><TableHead>Veículo</TableHead><TableHead>Motorista</TableHead><TableHead>Litros</TableHead><TableHead className="text-right">Valor</TableHead></TableRow></TableHeader><TableBody>{filteredRefuels.length > 0 ? filteredRefuels.map(refuel => <RefuelTableRow key={refuel.id} refuel={refuel} driver={users.get(refuel.driverId)} />) : <TableRow><TableCell colSpan={5} className="text-center h-24">Nenhum abastecimento encontrado</TableCell></TableRow>}</TableBody></Table></div>
-            </CardContent>
-        </Card>
-    );
-};
-
-const RefuelTableRow = ({ refuel, driver }: { refuel: any, driver?: FirestoreUser }) => {
-    const getInitials = (name: string) => name.split(' ').map(n => n[0]).slice(0, 2).join('');
-    return (
-        <TableRow><TableCell>{format(new Date(refuel.timestamp.seconds * 1000), 'dd/MM/yy HH:mm')}</TableCell><TableCell><div className="flex items-center gap-2"><Truck className="h-4 w-4 text-muted-foreground"/>{refuel.vehicleId}</div></TableCell><TableCell><div className="font-medium flex items-center gap-2"><Avatar className="h-6 w-6"><AvatarImage src={driver?.photoURL} alt={refuel.driverName} /><AvatarFallback className="text-xs">{getInitials(refuel.driverName)}</AvatarFallback></Avatar>{refuel.driverName}</div></TableCell><TableCell><div className="flex items-center gap-2"><Fuel className="h-4 w-4 text-muted-foreground"/>{refuel.liters.toFixed(2)} L</div></TableCell><TableCell className="text-right font-medium">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(refuel.amount)}</TableCell></TableRow>
-    );
-};
-
-// --- Componente da Aba: Checklists ---
-const ChecklistsTab = () => {
-    const { firestore } = useFirebase();
-    const { toast } = useToast();
-    const [user, setUser] = useState<UserData | null>(null);
-    const [users, setUsers] = useState<Map<string, FirestoreUser>>(new Map());
-    const [isSuperAdmin, setIsSuperAdmin] = useState(false);
-    const [allChecklists, setAllChecklists] = useState<any[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [date, setDate] = useState<DateRange | undefined>({ from: startOfDay(subDays(new Date(), 6)), to: endOfDay(new Date()) });
-    const [selectedVehicle, setSelectedVehicle] = useState<string>('all');
-    const [selectedChecklist, setSelectedChecklist] = useState<any | null>(null);
-
-    useEffect(() => {
-        const storedUser = localStorage.getItem('user'); const companyId = localStorage.getItem('companyId'); const sectorId = localStorage.getItem('sectorId'); const matricula = localStorage.getItem('matricula');
-        if (storedUser && companyId && sectorId && matricula) { setUser({ ...JSON.parse(storedUser), companyId, sectorId, matricula }); if (matricula === '801231') setIsSuperAdmin(true); } 
-    }, []);
-    
-    const fetchUsers = useCallback(async () => {
-        if (!firestore || !user) return;
-        const usersSnapshot = await getDocs(collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/users`));
-        const usersMap = new Map<string, FirestoreUser>();
-        usersSnapshot.forEach(doc => usersMap.set(doc.id, { id: doc.id, ...doc.data() } as FirestoreUser));
-        setUsers(usersMap);
-    }, [firestore, user]);
-
-    const fetchChecklistData = useCallback(async () => {
-        if (!firestore || !user) return;
-        setIsLoading(true);
-        try {
-            const checklistsQuery = query(
-                collectionGroup(firestore, 'checklists'),
-                where('companyId', '==', user.companyId),
-                where('sectorId', '==', user.sectorId),
-                orderBy('timestamp', 'desc')
-            );
-            const querySnapshot = await getDocs(checklistsQuery);
-            const checklists = querySnapshot.docs.map(doc => ({ id: doc.id, path: doc.ref.path, ...doc.data() as any }));
-            setAllChecklists(checklists);
-        } catch (error) { 
-            console.error("Error fetching checklists:", error);
-            if ((error as any).code === 'failed-precondition') {
-                toast({ variant: 'destructive', title: 'Índice do Firestore Necessário', description: 'O índice necessário está sendo criado. Por favor, tente novamente em alguns minutos.', duration: 8000 });
-            } else {
-                toast({ variant: 'destructive', title: 'Erro ao buscar checklists' });
-            }
-        } finally { setIsLoading(false); }
-    }, [firestore, user, toast]);
-
-    useEffect(() => { if(user) { fetchUsers(); fetchChecklistData(); } }, [user, fetchChecklistData, fetchUsers]);
-    
-    const handleDelete = async (path: string) => {
-        if (!firestore || !isSuperAdmin) return;
-        try { await deleteDoc(doc(firestore, path)); toast({ title: 'Sucesso', description: 'Checklist deletado.' }); fetchChecklistData(); } catch (error) { toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível deletar.' }); }
-    };
-
-    const { filteredChecklists, vehicleList } = useMemo(() => {
-        const vehicles = new Set<string>(); allChecklists.forEach(c => vehicles.add(c.vehicleId));
-        const filtered = allChecklists.filter(c => {
-            const cDate = new Date(c.timestamp.seconds * 1000);
-            if (!(date?.from && cDate >= startOfDay(date.from) && cDate <= endOfDay(date.to || date.from))) return false;
-            if(selectedVehicle !== 'all' && c.vehicleId !== selectedVehicle) return false;
-            return true;
-        });
-        return { filteredChecklists: filtered, vehicleList: Array.from(vehicles).sort() };
-    }, [allChecklists, date, selectedVehicle]);
-
-    if (isLoading) return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
-
-    return (
-        <Card>
-            <CardHeader>
-                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
-                    <div>
-                        <CardTitle>Registros de Checklist</CardTitle>
-                        <CardDescription>Lista de checklists preenchidos no período.</CardDescription>
-                    </div>
-                    <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                        <VehicleFilter vehicles={vehicleList} selectedVehicle={selectedVehicle} onVehicleChange={setSelectedVehicle} />
-                        <DateFilter date={date} setDate={setDate} />
-                    </div>
-                </div>
-            </CardHeader>
-            <CardContent>
-                <div className="overflow-auto max-h-[60vh]"><Table><TableHeader><TableRow><TableHead>Data</TableHead><TableHead>Veículo</TableHead><TableHead>Motorista</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader><TableBody>{filteredChecklists.length > 0 ? filteredChecklists.map(c => <ChecklistTableRow key={c.id} checklist={c} driver={users.get(c.driverId)} onViewDetails={() => setSelectedChecklist(c)} isSuperAdmin={isSuperAdmin} onDelete={handleDelete} />) : <TableRow><TableCell colSpan={5} className="text-center h-24">Nenhum checklist encontrado</TableCell></TableRow>}</TableBody></Table></div>
-            </CardContent>
-            <ChecklistDetailsDialog checklist={selectedChecklist} isOpen={selectedChecklist !== null} onClose={() => setSelectedChecklist(null)} />
-        </Card>
-    );
-};
-
-const ChecklistTableRow = ({ checklist, driver, onViewDetails, isSuperAdmin, onDelete }: { checklist: any, driver?: FirestoreUser, onViewDetails: () => void, isSuperAdmin: boolean, onDelete: (path: string) => void }) => {
-    const nonCompliantItems = checklist.items.filter((item:any) => item.status === 'nao_conforme').length;
-    const getInitials = (name: string) => name.split(' ').map(n => n[0]).slice(0, 2).join('');
-    return (
-        <TableRow><TableCell>{format(new Date(checklist.timestamp.seconds * 1000), 'dd/MM/yy HH:mm')}</TableCell><TableCell><div className="flex items-center gap-2"><Truck className="h-4 w-4 text-muted-foreground"/>{checklist.vehicleId}</div></TableCell><TableCell><div className="font-medium flex items-center gap-2"><Avatar className="h-6 w-6"><AvatarImage src={driver?.photoURL} alt={checklist.driverName} /><AvatarFallback className="text-xs">{getInitials(checklist.driverName)}</AvatarFallback></Avatar>{checklist.driverName}</div></TableCell><TableCell>{nonCompliantItems > 0 ? <Badge variant="destructive">{nonCompliantItems} item(ns) não conforme</Badge> : <Badge className="bg-green-600 hover:bg-green-700">Tudo conforme</Badge>}</TableCell><TableCell className="text-right font-medium space-x-2"><Button variant="outline" size="sm" onClick={onViewDetails}><FileText className="h-4 w-4 mr-2" />Ver Detalhes</Button>{isSuperAdmin && (<AlertDialog><AlertDialogTrigger asChild><Button variant="destructive" size="sm"><Trash2 className="h-4 w-4 mr-1" /> Deletar</Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Você tem certeza?</AlertDialogTitle><AlertDialogDescription>Esta ação não pode ser desfeita e irá apagar permanentemente o checklist.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => onDelete(checklist.path)}>Confirmar</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>)}</TableCell></TableRow>
-    );
-};
-
 const ChecklistDetailsDialog = ({ checklist, isOpen, onClose }: { checklist: any | null, isOpen: boolean, onClose: () => void }) => {
     if (!checklist) return null;
     const getStatusBadge = (status: string) => {
@@ -1291,36 +1304,31 @@ export default function DashboardPage() {
        <Tabs defaultValue="acompanhamento" className="w-full" onValueChange={setActiveTab}>
         <TabsList className={cn("grid w-full", isMobile ? "grid-cols-2" : "grid-cols-5")}>
             <TabsTrigger value="acompanhamento">Acompanhamento</TabsTrigger>
-            
             <TabsTrigger value="analise">Análise</TabsTrigger>
             <TabsTrigger value="historico">Histórico</TabsTrigger>
             <TabsTrigger value="abastecimentos">Abastecimentos</TabsTrigger>
-            
             <TabsTrigger value="checklists">Checklists</TabsTrigger>
         </TabsList>
 
         <TabsContent value="acompanhamento" className="mt-6">
-            {activeTab === 'acompanhamento' && <AcompanhamentoTab />}
+            <AcompanhamentoTab activeTab={activeTab} />
         </TabsContent>
-        
-        
         <TabsContent value="analise" className="mt-6">
-            {activeTab === 'analise' && <AnaliseTab />}
+            <AnaliseTab activeTab={activeTab} />
         </TabsContent>
         <TabsContent value="historico" className="mt-6">
-            {activeTab === 'historico' && <HistoricoTab />}
+            <HistoricoTab activeTab={activeTab} />
         </TabsContent>
         <TabsContent value="abastecimentos" className="mt-6">
-            {activeTab === 'abastecimentos' && <AbastecimentosTab />}
+            <AbastecimentosTab activeTab={activeTab} />
         </TabsContent>
-        
-
         <TabsContent value="checklists" className="mt-6">
-            {activeTab === 'checklists' && <ChecklistsTab />}
+            <ChecklistsTab activeTab={activeTab} />
         </TabsContent>
        </Tabs>
     </div>
   );
 }
+
 
 
