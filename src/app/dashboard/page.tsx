@@ -177,8 +177,8 @@ export type Run = {
   endMileage?: number | null;
   status: 'IN_PROGRESS' | 'COMPLETED';
   stops: Stop[];
-  locationHistory?: LocationPoint[];
   sectorId?: string;
+  locationHistory?: LocationPoint[];
 };
 
 export type AggregatedRun = {
@@ -1193,11 +1193,11 @@ const ChecklistsTab = () => {
             const checklistsQuery = query(
                 collectionGroup(firestore, 'checklists'),
                 where('companyId', '==', user.companyId),
-                where('sectorId', '==', user.sectorId),
-                orderBy('timestamp', 'desc')
+                where('sectorId', '==', user.sectorId)
             );
             const querySnapshot = await getDocs(checklistsQuery);
-            const checklists = querySnapshot.docs.map(doc => ({ id: doc.id, path: doc.ref.path, ...doc.data() }));
+            const checklists = querySnapshot.docs.map(doc => ({ id: doc.id, path: doc.ref.path, ...doc.data() as any }));
+            checklists.sort((a,b) => b.timestamp.seconds - a.timestamp.seconds);
             setAllChecklists(checklists);
         } catch (error) { 
             console.error("Error fetching checklists:", error);
