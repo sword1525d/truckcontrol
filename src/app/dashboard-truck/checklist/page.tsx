@@ -159,6 +159,8 @@ export default function ChecklistPage() {
               driverName: user.name,
               timestamp: serverTimestamp(),
               items: checklist,
+              companyId: user.companyId,
+              sectorId: user.sectorId,
           });
 
           toast({ title: 'Sucesso!', description: 'Checklist salvo com sucesso.' });
@@ -286,5 +288,3 @@ export default function ChecklistPage() {
     </div>
   );
 }
-
-    

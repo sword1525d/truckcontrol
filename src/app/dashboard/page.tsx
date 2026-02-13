@@ -11,7 +11,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Truck, User, Wrench, PlayCircle, Route, Timer, X, Hourglass, MapIcon, Milestone, Maximize, Car, Package, Warehouse, CheckCircle, Clock, Calendar as CalendarIcon, Fuel, ClipboardCheck, Building, Download, Trash2, FileText, EyeOff } from 'lucide-react';
+import { Loader2, Truck, User, Wrench, PlayCircle, Route, Timer, X, Hourglass, MapIcon, Milestone, Maximize, Car, Package, Warehouse, CheckCircle, Clock, Calendar as CalendarIcon, Fuel, ClipboardCheck, Building, Download, Trash2, FileText, EyeOff, MapPin } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -689,8 +689,8 @@ const AnaliseTab = () => {
                 const runsQuery = query(
                     collection(firestore, `companies/${user.companyId}/sectors/${sector.id}/runs`), 
                     where('status', '==', 'COMPLETED'),
-                    where('endTime', '>=', startOfDay(date.from)),
-                    where('endTime', '<=', endOfDay(date.to || date.from))
+                    where('endTime', '>=', startOfDay(date.from!)),
+                    where('endTime', '<=', endOfDay(date.to || date.from!))
                 );
 
                 const querySnapshot = await getDocs(runsQuery);
@@ -853,8 +853,8 @@ const HistoricoTab = () => {
                 const runsQuery = query(
                     collection(firestore, `companies/${user.companyId}/sectors/${sector.id}/runs`), 
                     where('status', '==', 'COMPLETED'),
-                    where('endTime', '>=', startOfDay(date.from)),
-                    where('endTime', '<=', endOfDay(date.to || date.from))
+                    where('endTime', '>=', startOfDay(date.from!)),
+                    where('endTime', '<=', endOfDay(date.to || date.from!))
                 );
 
                 const querySnapshot = await getDocs(runsQuery);
@@ -1190,12 +1190,23 @@ const ChecklistsTab = () => {
         if (!firestore || !user) return;
         setIsLoading(true);
         try {
-            const checklistsQuery = query(collectionGroup(firestore, 'checklists'));
+            const checklistsQuery = query(
+                collectionGroup(firestore, 'checklists'),
+                where('companyId', '==', user.companyId),
+                where('sectorId', '==', user.sectorId),
+                orderBy('timestamp', 'desc')
+            );
             const querySnapshot = await getDocs(checklistsQuery);
             const checklists = querySnapshot.docs.map(doc => ({ id: doc.id, path: doc.ref.path, ...doc.data() }));
-            const filtered = checklists.filter(c => c.path.startsWith(`companies/${user.companyId}/sectors/${user.sectorId}/`)).sort((a,b) => b.timestamp.seconds - a.timestamp.seconds);
-            setAllChecklists(filtered);
-        } catch (error) { toast({ variant: 'destructive', title: 'Erro ao buscar checklists' }); } finally { setIsLoading(false); }
+            setAllChecklists(checklists);
+        } catch (error) { 
+            console.error("Error fetching checklists:", error);
+            if ((error as any).code === 'failed-precondition') {
+                toast({ variant: 'destructive', title: 'Índice do Firestore Necessário', description: 'Para carregar os checklists, um índice composto é necessário. Crie-o no console do Firebase.', duration: 8000 });
+            } else {
+                toast({ variant: 'destructive', title: 'Erro ao buscar checklists' });
+            }
+        } finally { setIsLoading(false); }
     }, [firestore, user, toast]);
 
     useEffect(() => { if(user) { fetchUsers(); fetchChecklistData(); } }, [user, fetchChecklistData, fetchUsers]);
@@ -1264,6 +1275,7 @@ const ChecklistDetailsDialog = ({ checklist, isOpen, onClose }: { checklist: any
 // --- Componente Principal da Página ---
 export default function DashboardPage() {
   const isMobile = useIsMobile();
+  const [activeTab, setActiveTab] = useState('acompanhamento');
 
   return (
     <div className="flex flex-col gap-6">
@@ -1272,7 +1284,7 @@ export default function DashboardPage() {
         <p className="text-muted-foreground">Visão geral do sistema Frotacontrol.</p>
        </div>
        
-       <Tabs defaultValue="acompanhamento" className="w-full">
+       <Tabs defaultValue="acompanhamento" className="w-full" onValueChange={setActiveTab}>
         <TabsList className={cn("grid w-full", isMobile ? "grid-cols-2" : "grid-cols-5")}>
             <TabsTrigger value="acompanhamento">Acompanhamento</TabsTrigger>
             
@@ -1284,23 +1296,23 @@ export default function DashboardPage() {
         </TabsList>
 
         <TabsContent value="acompanhamento" className="mt-6">
-            <AcompanhamentoTab />
+            {activeTab === 'acompanhamento' && <AcompanhamentoTab />}
         </TabsContent>
         
         
         {!isMobile && <TabsContent value="analise" className="mt-6">
-            <AnaliseTab />
+            {activeTab === 'analise' && <AnaliseTab />}
         </TabsContent>}
         {!isMobile && <TabsContent value="historico" className="mt-6">
-            <HistoricoTab />
+            {activeTab === 'historico' && <HistoricoTab />}
         </TabsContent>}
         {!isMobile && <TabsContent value="abastecimentos" className="mt-6">
-            <AbastecimentosTab />
+            {activeTab === 'abastecimentos' && <AbastecimentosTab />}
         </TabsContent>}
         
 
         <TabsContent value="checklists" className="mt-6">
-            <ChecklistsTab />
+            {activeTab === 'checklists' && <ChecklistsTab />}
         </TabsContent>
        </Tabs>
     </div>
