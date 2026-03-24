@@ -270,6 +270,15 @@ function ActiveRunContent() {
       const finalEmpty = Number(empty);
       const finalMileage = Number(mileage);
 
+      if (finalMileage <= run.startMileage) {
+          toast({ 
+              variant: 'destructive', 
+              title: 'KM Inválido', 
+              description: `A quilometragem deve ser superior à inicial (${run.startMileage} km).` 
+          });
+          return;
+      }
+
       const updatedStops = [...run.stops];
       updatedStops[0] = {
         ...updatedStops[0],
@@ -329,6 +338,12 @@ function ActiveRunContent() {
             status: 'COMPLETED',
             endTime: new Date(),
             endMileage: stop.mileageAtStop
+        });
+
+        // Update vehicle's last mileage
+        const vehicleRef = doc(firestore, `companies/${companyId}/sectors/${sectorId}/vehicles`, run.vehicleId);
+        await updateDoc(vehicleRef, {
+            lastMileage: stop.mileageAtStop
         });
 
         toast({ title: 'Trajeto Finalizado!', description: 'Sua rota foi concluída com sucesso.' });
@@ -407,8 +422,10 @@ function ActiveRunContent() {
                                       onChange={(e) => handleStopDataChange('empty', e.target.value)}
                                   />
                               </div>
-                              <div className="space-y-1">
-                                  <Label htmlFor={`mileage-${stopNameIdentifier}`} className="text-sm">Km atual</Label>
+                               <div className="space-y-1">
+                                  <Label htmlFor={`mileage-${stopNameIdentifier}`} className="text-sm">
+                                      Km atual (Inicial: {run.startMileage})
+                                  </Label>
                                   <Input id={`mileage-${stopNameIdentifier}`} type="number" placeholder="Quilometragem"
                                       value={stopData.mileage}
                                       onChange={(e) => handleStopDataChange('mileage', e.target.value)}

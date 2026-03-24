@@ -34,6 +34,7 @@ export type FirestoreVehicle = {
   model: string;
   isTruck: boolean;
   status: VehicleStatusEnum;
+  lastMileage?: number;
 };
 
 export type MaintenanceRecord = {

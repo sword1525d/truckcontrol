@@ -242,8 +242,9 @@ export const VehicleManagement = ({ vehicles, activeRuns, onDelete, onUpdate, se
             <TableRow>
               <TableHead>Placa</TableHead>
               <TableHead>Modelo</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Ações</TableHead>
+               <TableHead>Status</TableHead>
+               <TableHead>KM Total</TableHead>
+               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -251,8 +252,9 @@ export const VehicleManagement = ({ vehicles, activeRuns, onDelete, onUpdate, se
               <TableRow key={vehicle.id}>
                 <TableCell className="font-medium">{vehicle.id}</TableCell>
                 <TableCell>{vehicle.model}</TableCell>
-                <TableCell>{getStatusBadge(vehicle.status, vehicle.id)}</TableCell>
-                <TableCell className="text-right space-x-1 sm:space-x-2">
+                 <TableCell>{getStatusBadge(vehicle.status, vehicle.id)}</TableCell>
+                 <TableCell>{vehicle.lastMileage ? `${vehicle.lastMileage.toFixed(1)} km` : 'N/A'}</TableCell>
+                 <TableCell className="text-right space-x-1 sm:space-x-2">
                     <Button variant="outline" size="sm" onClick={() => handleHistoryClick(vehicle)}>
                         <History className="h-4 w-4 sm:mr-1" /> <span className="hidden sm:inline">Histórico</span>
                     </Button>

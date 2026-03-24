@@ -30,6 +30,7 @@ type UserData = {
 type Vehicle = {
   id: string;
   model: string;
+  lastMileage?: number;
 };
 
 type StopPoint = string;
@@ -135,7 +136,7 @@ export default function TruckRunPage() {
         const vehiclesList = querySnapshot.docs
           .map(doc => ({ id: doc.id, ...(doc.data() as any) }))
           .filter(v => v.isTruck)
-          .map(v => ({ id: v.id, model: v.model }));
+          .map(v => ({ id: v.id, model: v.model, lastMileage: v.lastMileage }));
         setVehicles(vehiclesList);
       } catch (error) {
         toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível carregar os veículos.' });
@@ -146,10 +147,31 @@ export default function TruckRunPage() {
     fetchVehicles();
   }, [firestore, user, toast]);
 
+  useEffect(() => {
+    if (selectedVehicle) {
+      const v = vehicles.find(v => v.id === selectedVehicle);
+      if (v && v.lastMileage !== undefined) {
+        setMileage(v.lastMileage.toString());
+      }
+    }
+  }, [selectedVehicle, vehicles]);
+
   const handleStartRun = async () => {
     if(!firestore || !user || !selectedVehicle || !mileage || !stopPoint){
        toast({ variant: 'destructive', title: 'Erro', description: 'Preencha todos os campos para iniciar a corrida.' });
        return;
+    }
+
+    const currentMileage = Number(mileage);
+    const chosenVehicle = vehicles.find(v => v.id === selectedVehicle);
+    
+    if (chosenVehicle && chosenVehicle.lastMileage !== undefined && currentMileage < chosenVehicle.lastMileage) {
+        toast({ 
+            variant: 'destructive', 
+            title: 'KM Inválido', 
+            description: `A quilometragem não pode ser inferior à última registrada (${chosenVehicle.lastMileage} km).` 
+        });
+        return;
     }
     setIsSubmitting(true);
     try {
