@@ -1,11 +1,12 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Truck, LogOut, Shield, User as UserIcon, Settings, LayoutDashboard } from 'lucide-react';
+import { Truck, LogOut, Shield, User as UserIcon, Settings, LayoutDashboard, RefreshCcw, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
 import { useFirebase } from '@/firebase';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,6 +15,18 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+  } from "@/components/ui/alert-dialog"
+import { collection, getDocs, doc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Skeleton } from './ui/skeleton';
 
@@ -22,9 +35,14 @@ export function Header() {
   const router = useRouter();
   const [dashboardPath, setDashboardPath] = useState('#');
   const [userIsAdmin, setUserIsAdmin] = useState(false);
-
+  const [matricula, setMatricula] = useState<string | null>(null);
+  const [isResetting, setIsResetting] = useState(false);
+  const [showResetDialog, setShowResetDialog] = useState(false);
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
+    const storedMatricula = localStorage.getItem('matricula');
+    setMatricula(storedMatricula);
+
     if (storedUser) {
         try {
             const userData = JSON.parse(storedUser);
@@ -40,11 +58,48 @@ export function Header() {
             setDashboardPath('/dashboard-truck');
         }
     } else {
-        // Fallback for cases where localStorage is not set but user might be on a page
         setUserIsAdmin(false);
         setDashboardPath('/dashboard-truck');
     }
   }, []);
+
+  const { firestore } = useFirebase();
+
+  const handleResetApp = async () => {
+    const companyId = localStorage.getItem('companyId');
+    if (!companyId || !firestore) return;
+
+    setIsResetting(true);
+    try {
+        const sectorsSnapshot = await getDocs(collection(firestore, `companies/${companyId}/sectors`));
+        let totalDeleted = 0;
+
+        for (const sectorDoc of sectorsSnapshot.docs) {
+            const runsSnapshot = await getDocs(collection(firestore, `companies/${companyId}/sectors/${sectorDoc.id}/runs`));
+            
+            // Delete in batches of 400 to be safe (Firestore limit is 500)
+            const docs = runsSnapshot.docs;
+            for (let i = 0; i < docs.length; i += 400) {
+                const batch = writeBatch(firestore);
+                const chunk = docs.slice(i, i + 400);
+                chunk.forEach(runDoc => {
+                    batch.delete(runDoc.ref);
+                    totalDeleted++;
+                });
+                await batch.commit();
+            }
+        }
+
+        alert(`Sucesso! ${totalDeleted} corridas foram apagadas de todos os setores.`);
+        setShowResetDialog(false);
+        window.location.reload();
+    } catch (error) {
+        console.error("Erro ao resetar app:", error);
+        alert("Erro ao resetar: " + (error as any).message);
+    } finally {
+        setIsResetting(false);
+    }
+  };
 
   const handleLogout = () => {
     if (auth) {
@@ -123,9 +178,50 @@ export function Header() {
                       <LogOut className="mr-2 h-4 w-4" />
                       <span>Sair</span>
                     </DropdownMenuItem>
+
+                    {matricula === '801231' && (
+                        <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem 
+                                className="text-destructive focus:text-destructive focus:bg-destructive/10 cursor-pointer"
+                                onSelect={(e) => {
+                                    e.preventDefault();
+                                    setShowResetDialog(true);
+                                }}
+                            >
+                                <RefreshCcw className={cn("mr-2 h-4 w-4", isResetting && "animate-spin")} />
+                                <span>Reiniciar App (Secret)</span>
+                            </DropdownMenuItem>
+                        </>
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
             )}
+
+            <AlertDialog open={showResetDialog} onOpenChange={setShowResetDialog}>
+                <AlertDialogContent className="border-destructive">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+                            <AlertTriangle className="h-5 w-5" />
+                            Ação Crítica e Irreversível
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Isso irá apagar <strong>TODAS as corridas</strong> de todos os setores e motoristas da empresa. 
+                            Tem certeza que deseja reiniciar o banco de dados de corridas?
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isResetting}>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction 
+                            onClick={handleResetApp} 
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            disabled={isResetting}
+                        >
+                            {isResetting ? "Apagando..." : "Sim, apagar TUDO"}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
           </div>
         </div>
       </div>
