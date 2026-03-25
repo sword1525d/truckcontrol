@@ -77,11 +77,12 @@ export function Header() {
         for (const sectorDoc of sectorsSnapshot.docs) {
             const runsSnapshot = await getDocs(collection(firestore, `companies/${companyId}/sectors/${sectorDoc.id}/runs`));
             
-            // Delete in batches of 400 to be safe (Firestore limit is 500)
+            // Delete in VERY small batches of 5 to avoid 'Transaction too big' error
+            // Each run can have thousands of location points (up to 1MB per doc)
             const docs = runsSnapshot.docs;
-            for (let i = 0; i < docs.length; i += 400) {
+            for (let i = 0; i < docs.length; i += 5) {
                 const batch = writeBatch(firestore);
-                const chunk = docs.slice(i, i + 400);
+                const chunk = docs.slice(i, i + 5);
                 chunk.forEach(runDoc => {
                     batch.delete(runDoc.ref);
                     totalDeleted++;

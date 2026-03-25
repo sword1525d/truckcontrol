@@ -7,28 +7,34 @@ import { getFirestore } from 'firebase/firestore'
 
 // IMPORTANT: DO NOT MODIFY THIS FUNCTION
 export function initializeFirebase() {
-  if (!getApps().length) {
-    let firebaseApp;
-    // When in development, always use the config object.
-    // In production, try to initialize with App Hosting env vars first.
-    if (process.env.NODE_ENV !== 'production') {
-      firebaseApp = initializeApp(firebaseConfig);
-    } else {
-      try {
-        // Important! initializeApp() is called without any arguments because Firebase App Hosting
-        // integrates with the initializeApp() function to provide the environment variables needed to
-        // populate the FirebaseOptions in production.
-        firebaseApp = initializeApp();
-      } catch (e) {
-        console.warn('Automatic initialization failed. Falling back to firebase config object.', e);
-        firebaseApp = initializeApp(firebaseConfig);
-      }
-    }
-    return getSdks(firebaseApp);
+  const apps = getApps();
+  if (apps.length > 0) {
+    return getSdks(apps[0]);
   }
 
-  // If already initialized, return the SDKs with the already initialized App
-  return getSdks(getApp());
+  let firebaseApp;
+  try {
+    // In production, try to initialize with App Hosting env vars first.
+    if (process.env.NODE_ENV === 'production') {
+      try {
+        firebaseApp = initializeApp();
+      } catch (e) {
+        // Only warn if it's not the expected 'no-options' error when running outside of App Hosting
+        if (!(e as any)?.code?.includes('no-options')) {
+          console.warn('Automatic initialization failed. Falling back to firebase config object.', e);
+        }
+        firebaseApp = initializeApp(firebaseConfig);
+      }
+    } else {
+      firebaseApp = initializeApp(firebaseConfig);
+    }
+  } catch (e) {
+    // In case of any concurrent initialization or remaining app instance
+    const apps = getApps();
+    firebaseApp = apps.length > 0 ? apps[0] : initializeApp(firebaseConfig);
+  }
+
+  return getSdks(firebaseApp);
 }
 
 export function getSdks(firebaseApp: FirebaseApp) {

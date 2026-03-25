@@ -1242,22 +1242,25 @@ const RoteirizacaoTab = () => {
       setIsSaving(true);
       try {
         const datesToSave = [format(selectedDate, 'yyyy-MM-dd'), ...selectedAdditionalDates];
-        const batch = writeBatch(firestore);
-
-        for (const dateStr of datesToSave) {
-          const routeId = isEditing && dateStr === format(selectedDate, 'yyyy-MM-dd') 
-            ? editingRouteId! 
-            : `${dateStr}_${newRouteVehicle}_${Math.random().toString(36).substr(2, 5)}`;
+        // Save in batches of 5 dates to avoid 'Transaction too big' error
+        for (let i = 0; i < datesToSave.length; i += 5) {
+          const batch = writeBatch(firestore);
+          const chunk = datesToSave.slice(i, i + 5);
           
-          const routeRef = doc(firestore, `companies/${companyId}/sectors/${sectorId}/routes`, routeId);
-          batch.set(routeRef, {
-            vehicleId: newRouteVehicle,
-            date: dateStr,
-            trips: newTrips
-          });
+          for (const dateStr of chunk) {
+            const routeId = isEditing && dateStr === format(selectedDate, 'yyyy-MM-dd') 
+              ? editingRouteId! 
+              : `${dateStr}_${newRouteVehicle}_${Math.random().toString(36).substr(2, 5)}`;
+            
+            const routeRef = doc(firestore, `companies/${companyId}/sectors/${sectorId}/routes`, routeId);
+            batch.set(routeRef, {
+              vehicleId: newRouteVehicle,
+              date: dateStr,
+              trips: newTrips
+            });
+          }
+          await batch.commit();
         }
-
-        await batch.commit();
 
         toast({ title: 'Sucesso', description: isEditing ? 'Rota atualizada!' : 'Rota(s) salva(s) com sucesso!' });
         resetForm();
