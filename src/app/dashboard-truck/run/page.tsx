@@ -79,7 +79,14 @@ const PREDEFINED_STOP_POINTS: StopPoint[] = [
   "DEPOSITO D",
   "MOTOR",
   "HCA",
+  "POSTO DE GASOLINA",
+  "PRENSA 2",
   "FAB ASSENTO",
+  "REFEITÓRIO 1",
+  "REFEITÓRIO 2",
+  "REFEITÓRIO 3",
+  "REFEITÓRIO 4",
+  "REFEITÓRIO 5",
   "SOLDA ESCAPAMENTO",
   "MOCOM 3",
   "SOLDA CHASSI",
@@ -125,7 +132,7 @@ export default function TruckRunPage() {
       router.push('/login');
     }
   }, [router, toast, authUser, isLoading]);
-  
+
   useEffect(() => {
     if (!firestore || !user) return;
 
@@ -157,21 +164,21 @@ export default function TruckRunPage() {
   }, [selectedVehicle, vehicles]);
 
   const handleStartRun = async () => {
-    if(!firestore || !user || !selectedVehicle || !mileage || !stopPoint){
-       toast({ variant: 'destructive', title: 'Erro', description: 'Preencha todos os campos para iniciar a corrida.' });
-       return;
+    if (!firestore || !user || !selectedVehicle || !mileage || !stopPoint) {
+      toast({ variant: 'destructive', title: 'Erro', description: 'Preencha todos os campos para iniciar a corrida.' });
+      return;
     }
 
     const currentMileage = Number(mileage);
     const chosenVehicle = vehicles.find(v => v.id === selectedVehicle);
-    
+
     if (chosenVehicle && chosenVehicle.lastMileage !== undefined && currentMileage < chosenVehicle.lastMileage) {
-        toast({ 
-            variant: 'destructive', 
-            title: 'KM Inválido', 
-            description: `A quilometragem não pode ser inferior à última registrada (${chosenVehicle.lastMileage} km).` 
-        });
-        return;
+      toast({
+        variant: 'destructive',
+        title: 'KM Inválido',
+        description: `A quilometragem não pode ser inferior à última registrada (${chosenVehicle.lastMileage} km).`
+      });
+      return;
     }
     setIsSubmitting(true);
     try {
@@ -180,8 +187,8 @@ export default function TruckRunPage() {
       const todayEnd = endOfDay(new Date());
 
       const checklistCol = collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/vehicles/${selectedVehicle}/checklists`);
-      const q = query(checklistCol, 
-        where('timestamp', '>=', todayStart), 
+      const q = query(checklistCol,
+        where('timestamp', '>=', todayStart),
         where('timestamp', '<=', todayEnd)
       );
 
@@ -220,18 +227,18 @@ export default function TruckRunPage() {
         endTime: null,
         endMileage: null,
       };
-      
+
       const docRef = await addDoc(runsCol, newRun);
 
       toast({ title: 'Sucesso', description: 'Trajeto iniciado! Redirecionando...' });
-      
+
       router.push(`/dashboard-truck/active-run?id=${docRef.id}`);
 
-    } catch(error) {
-       console.error("Erro ao iniciar corrida: ", error);
-       toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível iniciar o trajeto.' });
+    } catch (error) {
+      console.error("Erro ao iniciar corrida: ", error);
+      toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível iniciar o trajeto.' });
     } finally {
-        setIsSubmitting(false);
+      setIsSubmitting(false);
     }
   }
 
@@ -246,14 +253,14 @@ export default function TruckRunPage() {
   return (
     <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-black">
       <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 overflow-y-auto container mx-auto max-w-2xl">
-        
+
         <div className="flex items-center gap-4">
           <Button variant="outline" size="icon" onClick={() => router.push('/dashboard-truck')}>
             <ArrowLeft />
           </Button>
           <h1 className="text-2xl font-bold">Iniciar Trajeto</h1>
         </div>
-        
+
         <section>
           <h2 className="text-xl font-semibold text-foreground mb-4">Informações da Corrida</h2>
           <div className="space-y-4">
@@ -278,37 +285,37 @@ export default function TruckRunPage() {
         <Separator />
 
         <section>
-           <h2 className="text-xl font-semibold text-foreground mb-4">Destino</h2>
-            <div className="space-y-4">
-                <div className="space-y-1">
-                  <Label htmlFor="stop-point">Ponto de Parada</Label>
-                  <Select value={stopPoint} onValueChange={setStopPoint}>
-                    <SelectTrigger id="stop-point">
-                      <SelectValue placeholder="Selecione o destino da corrida" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {PREDEFINED_STOP_POINTS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
+          <h2 className="text-xl font-semibold text-foreground mb-4">Destino</h2>
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <Label htmlFor="stop-point">Ponto de Parada</Label>
+              <Select value={stopPoint} onValueChange={setStopPoint}>
+                <SelectTrigger id="stop-point">
+                  <SelectValue placeholder="Selecione o destino da corrida" />
+                </SelectTrigger>
+                <SelectContent>
+                  {PREDEFINED_STOP_POINTS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
+          </div>
         </section>
 
         <div className="h-24"></div>
       </main>
 
-        <footer className="fixed bottom-0 left-0 right-0 p-4 bg-background/80 backdrop-blur-sm border-t">
-           <div className="container mx-auto max-w-2xl">
-              <Button 
-                className="w-full text-lg h-14" 
-                onClick={handleStartRun}
-                disabled={!selectedVehicle || !mileage || !stopPoint || isSubmitting}
-              >
-                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                INICIAR TRAJETO
-              </Button>
-           </div>
-        </footer>
+      <footer className="fixed bottom-0 left-0 right-0 p-4 bg-background/80 backdrop-blur-sm border-t">
+        <div className="container mx-auto max-w-2xl">
+          <Button
+            className="w-full text-lg h-14"
+            onClick={handleStartRun}
+            disabled={!selectedVehicle || !mileage || !stopPoint || isSubmitting}
+          >
+            {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            INICIAR TRAJETO
+          </Button>
+        </div>
+      </footer>
     </div>
   );
 }
