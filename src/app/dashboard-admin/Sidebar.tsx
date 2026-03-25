@@ -25,11 +25,18 @@ import {
 import { useRouter, usePathname } from 'next/navigation';
 import { useFirebase } from '@/firebase';
 
+import { useEffect, useState } from 'react';
+
 export function AdminSidebar() {
   const { auth } = useFirebase();
   const router = useRouter();
   const pathname = usePathname();
   const { toggleSidebar, state } = useSidebar();
+  const [sectorId, setSectorId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSectorId(localStorage.getItem('sectorId'));
+  }, []);
   
   const handleLogout = () => {
     if (auth && confirm('Tem certeza que deseja sair da conta?')) {
@@ -46,7 +53,7 @@ export function AdminSidebar() {
     { href: '/dashboard-admin/refueling', label: 'Abastecimentos', icon: Fuel },
     { href: '/dashboard-admin/checklists', label: 'Checklists', icon: ClipboardCheck },
     { href: '/dashboard-admin/manage', label: 'Gerenciamento', icon: Users },
-    ...(localStorage.getItem('sectorId') === 'MILKRUN INTERNO' 
+    ...(sectorId === 'MILKRUN INTERNO' 
       ? [{ href: '/dashboard-admin/routing', label: 'Roteirização', icon: Milestone }] 
       : []),
     { href: '/dashboard-admin/settings', label: 'Configurações', icon: Settings },

@@ -162,7 +162,7 @@ export default function LoginPage() {
   }
   
   // Only block the whole screen if we are still determining auth state AND have a user to redirect
-  if (isUserLoading || (user && localStorage.getItem('user'))) {
+  if (isUserLoading || (user && typeof window !== 'undefined' && localStorage.getItem('user'))) {
     return (
         <div className="flex flex-col items-center justify-center h-screen bg-background gap-4">
             <Loader2 className="h-12 w-12 animate-spin text-primary" />
