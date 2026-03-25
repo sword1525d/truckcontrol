@@ -4,8 +4,7 @@ import { Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useFirebase } from '@/firebase';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
-import { ref, update } from 'firebase/database';
+import { doc, getDoc, updateDoc, arrayUnion } from 'firebase/firestore';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -52,7 +51,7 @@ type Stop = {
 type LocationPoint = {
   latitude: number;
   longitude: number;
-  timestamp: number; // Using number for RTDB compatibility
+  timestamp: any;
 }
 
 type Run = {
@@ -65,42 +64,40 @@ type Run = {
   stops: Stop[];
   endTime: any;
   endMileage: number | null;
+  locationHistory?: LocationPoint[];
 };
 
 // Custom hook for location tracking with batching
 const useLocationTracking = (runId: string | null, isActive: boolean) => {
-  const { database } = useFirebase();
+  const { firestore } = useFirebase();
   const { toast } = useToast();
   const watchIdRef = useRef<number | null>(null);
   const locationBatchRef = useRef<LocationPoint[]>([]);
 
   const flushLocationBatch = useCallback(() => {
-    if (locationBatchRef.current.length === 0 || !runId || !database) {
+    if (locationBatchRef.current.length === 0 || !runId || !firestore) {
       return;
     }
+
+    const companyId = localStorage.getItem('companyId');
+    const sectorId = localStorage.getItem('sectorId');
+    if (!companyId || !sectorId) return;
     
-    const updates: { [key: string]: any } = {};
+    const runRef = doc(firestore, `companies/${companyId}/sectors/${sectorId}/runs`, runId);
     const batchToFlush = [...locationBatchRef.current];
     locationBatchRef.current = [];
 
-    batchToFlush.forEach(location => {
-      const timestamp = new Date(location.timestamp).toISOString();
-      updates[`/locations/${runId}/${timestamp}`] = {
-        lat: location.latitude,
-        lng: location.longitude,
-      };
-    });
-
-    update(ref(database), updates).catch(error => {
-      console.error("Erro ao salvar lote de localização no RTDB: ", error);
+    updateDoc(runRef, {
+      locationHistory: arrayUnion(...batchToFlush)
+    }).catch(error => {
+      console.error("Erro ao salvar lote de localização: ", error);
       // If flushing fails, add the batch back to be retried later
       locationBatchRef.current = [...batchToFlush, ...locationBatchRef.current];
     });
-
-  }, [runId, database]);
+  }, [runId, firestore]);
 
   useEffect(() => {
-    if (!runId || !isActive || !database) {
+    if (!runId || !isActive || !firestore) {
       if (watchIdRef.current !== null) {
         navigator.geolocation.clearWatch(watchIdRef.current);
         watchIdRef.current = null;
@@ -113,7 +110,7 @@ const useLocationTracking = (runId: string | null, isActive: boolean) => {
       const newLocation: LocationPoint = {
         latitude,
         longitude,
-        timestamp: Date.now(),
+        timestamp: new Date(),
       };
       locationBatchRef.current.push(newLocation);
     };
@@ -148,7 +145,7 @@ const useLocationTracking = (runId: string | null, isActive: boolean) => {
         navigator.geolocation.clearWatch(watchIdRef.current);
       }
     };
-  }, [runId, isActive, database, toast, flushLocationBatch]);
+  }, [runId, isActive, firestore, toast, flushLocationBatch]);
 };
 
 
@@ -191,7 +188,7 @@ function ActiveRunContent() {
           setStopData({
             occupied: stop.collectedOccupiedCars?.toString() || '',
             empty: stop.collectedEmptyCars?.toString() || '',
-            mileage: stop.mileageAtStop?.toString() || '',
+            mileage: stop.mileageAtStop?.toString() || transformedRunData.startMileage.toString(),
             occupancy: stop.occupancy ?? 0
           });
           setObservation(stop.observation || '');
@@ -258,6 +255,16 @@ function ActiveRunContent() {
       toast({ variant: 'destructive', title: 'Campos obrigatórios', description: 'Preencha todos os campos para finalizar a parada.' });
       return;
     }
+
+    const finalMileage = Number(mileage);
+    if (finalMileage < run.startMileage) {
+      toast({ 
+        variant: 'destructive', 
+        title: 'KM Inválido', 
+        description: `A quilometragem não pode ser inferior à inicial (${run.startMileage} km).` 
+      });
+      return;
+    }
     
     const departureTime = new Date();
 
@@ -269,15 +276,6 @@ function ActiveRunContent() {
       const finalOccupied = Number(occupied);
       const finalEmpty = Number(empty);
       const finalMileage = Number(mileage);
-
-      if (finalMileage <= run.startMileage) {
-          toast({ 
-              variant: 'destructive', 
-              title: 'KM Inválido', 
-              description: `A quilometragem deve ser superior à inicial (${run.startMileage} km).` 
-          });
-          return;
-      }
 
       const updatedStops = [...run.stops];
       updatedStops[0] = {
@@ -338,12 +336,6 @@ function ActiveRunContent() {
             status: 'COMPLETED',
             endTime: new Date(),
             endMileage: stop.mileageAtStop
-        });
-
-        // Update vehicle's last mileage
-        const vehicleRef = doc(firestore, `companies/${companyId}/sectors/${sectorId}/vehicles`, run.vehicleId);
-        await updateDoc(vehicleRef, {
-            lastMileage: stop.mileageAtStop
         });
 
         toast({ title: 'Trajeto Finalizado!', description: 'Sua rota foi concluída com sucesso.' });
@@ -410,23 +402,21 @@ function ActiveRunContent() {
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                               <div className="space-y-1">
                                   <Label htmlFor={`occupied-${stopNameIdentifier}`} className="text-sm">Carros ocupados</Label>
-                                  <Input id={`occupied-${stopNameIdentifier}`} type="number" placeholder="Qtd." 
+                                  <Input id={`occupied-${stopNameIdentifier}`} type="number" inputMode="numeric" placeholder="Qtd." 
                                       value={stopData.occupied}
                                       onChange={(e) => handleStopDataChange('occupied', e.target.value)}
                                   />
                               </div>
                               <div className="space-y-1">
                                   <Label htmlFor={`empty-${stopNameIdentifier}`} className="text-sm">Carros vazios</Label>
-                                  <Input id={`empty-${stopNameIdentifier}`} type="number" placeholder="Qtd." 
+                                  <Input id={`empty-${stopNameIdentifier}`} type="number" inputMode="numeric" placeholder="Qtd." 
                                       value={stopData.empty}
                                       onChange={(e) => handleStopDataChange('empty', e.target.value)}
                                   />
                               </div>
-                               <div className="space-y-1">
-                                  <Label htmlFor={`mileage-${stopNameIdentifier}`} className="text-sm">
-                                      Km atual (Inicial: {run.startMileage})
-                                  </Label>
-                                  <Input id={`mileage-${stopNameIdentifier}`} type="number" placeholder="Quilometragem"
+                              <div className="space-y-1">
+                                  <Label htmlFor={`mileage-${stopNameIdentifier}`} className="text-sm">Km atual</Label>
+                                  <Input id={`mileage-${stopNameIdentifier}`} type="number" inputMode="numeric" placeholder="Quilometragem"
                                       value={stopData.mileage}
                                       onChange={(e) => handleStopDataChange('mileage', e.target.value)}
                                   />

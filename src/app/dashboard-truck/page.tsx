@@ -2,15 +2,16 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useFirebase } from '@/firebase';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 
-import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { LogOut, Fuel, Loader2, PlayCircle, ClipboardCheck } from 'lucide-react';
+import { Card, CardContent, CardTitle } from '@/components/ui/card';
+import { Loader2, PlayCircle, ClipboardCheck, Fuel } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { Header } from '@/components/header';
+import { Footer } from '@/components/footer';
 
-// Tipos para os dados do Firebase
 type UserData = {
   id: string;
   name: string;
@@ -21,63 +22,29 @@ type UserData = {
   matricula: string;
 };
 
-type Vehicle = {
-  id: string;
-  model: string;
-  isTruck: boolean;
-  imageUrl?: string;
-  status?: 'PARADO' | 'EM CORRIDA' | 'EM TRAJETO';
-  driverName?: string;
-};
-
-// Componente para o Card de Veículo
-const VehicleCard = ({ vehicle }: { vehicle: Vehicle }) => {
-    const getStatusColorClass = () => {
-        switch (vehicle.status) {
-            case 'EM CORRIDA': return 'bg-red-500';
-            case 'EM TRAJETO': return 'bg-orange-500';
-            case 'PARADO':
-            default:
-                return 'bg-green-500';
-        }
-    }
-
-    const getCardBgColorClass = () => {
-        switch (vehicle.status) {
-            case 'EM CORRIDA': return 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800';
-            case 'EM TRAJETO': return 'bg-orange-50 border-orange-200 dark:bg-orange-900/20 dark:border-orange-800';
-            case 'PARADO':
-            default:
-                return 'bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800';
-        }
-    }
-
-    return (
-        <Card className={`text-center shadow-md ${getCardBgColorClass()}`}>
-            <CardContent className="p-3">
-                <p className="font-bold text-card-foreground">{vehicle.id}</p>
-                <p className="text-xs text-muted-foreground mb-1">{vehicle.model}</p>
-                <span className={`whitespace-nowrap text-white text-[10px] font-semibold px-2 py-0.5 rounded-full ${getStatusColorClass()}`}>
-                    {vehicle.status}
-                </span>
-                {vehicle.driverName && <p className="text-xs text-muted-foreground mt-1 italic">{vehicle.driverName}</p>}
-            </CardContent>
-        </Card>
-    )
-}
-
-// Componente da Página Principal
 export default function DashboardTruckPage() {
   const router = useRouter();
   const { toast } = useToast();
-  const { firestore, auth, user: authUser } = useFirebase();
+  const { firestore, auth, user: authUser, isUserLoading } = useFirebase();
   const [user, setUser] = useState<UserData | null>(null);
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isCheckingRun, setIsCheckingRun] = useState(true);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
 
-  // Recupera dados do usuário do localStorage
   useEffect(() => {
+    if (isUserLoading) {
+      return; // Aguardar o estado de autenticação ser resolvido
+    }
+
+    if (!authUser) {
+      toast({
+        variant: 'destructive',
+        title: 'Sessão Expirada',
+        description: 'Por favor, faça login novamente.',
+      });
+      router.push('/login');
+      return;
+    }
+
     const storedUser = localStorage.getItem('user');
     const companyId = localStorage.getItem('companyId');
     const sectorId = localStorage.getItem('sectorId');
@@ -85,153 +52,111 @@ export default function DashboardTruckPage() {
 
     if (storedUser && companyId && sectorId && matricula) {
         const parsedUser = JSON.parse(storedUser);
-      setUser({ ...parsedUser, companyId, sectorId, matricula });
+      setUser({ ...parsedUser, id: authUser.uid, companyId, sectorId, matricula });
     } else {
       toast({
         variant: 'destructive',
-        title: 'Erro',
-        description: 'Sessão inválida. Por favor, faça login novamente.',
+        title: 'Erro de Sessão',
+        description: 'Dados da sessão não encontrados. Por favor, faça login novamente.',
       });
+      auth.signOut();
+      localStorage.clear();
       router.push('/login');
     }
-  }, [router, toast]);
+  }, [isUserLoading, authUser, router, toast, auth]);
   
-  // Busca os veículos e corridas ativas
   useEffect(() => {
     if (!firestore || !user || !authUser) return;
     
-    const fetchData = async () => {
-      setIsLoading(true);
+    const checkForActiveRun = async () => {
+      setIsCheckingRun(true);
       try {
-        // Fetch Vehicles
-        const vehiclesCol = collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/vehicles`);
-        const vehiclesSnapshot = await getDocs(vehiclesCol);
-        const vehiclesList: Vehicle[] = vehiclesSnapshot.docs
-            .map(doc => ({ id: doc.id, ...(doc.data() as Omit<Vehicle, 'id'>) }))
-            .filter(v => v.isTruck)
-            .map(v => ({ ...v, status: 'PARADO' })); // Default status
-
-        // Fetch active runs to update vehicle status and find user's active run
         const runsCol = collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/runs`);
-        const activeRunsQuery = query(runsCol, where('status', '==', 'IN_PROGRESS'));
+        const activeRunsQuery = query(runsCol, 
+            where('status', '==', 'IN_PROGRESS'),
+            where('driverId', '==', authUser.uid)
+        );
         const activeRunsSnapshot = await getDocs(activeRunsQuery);
 
-        const activeRunsData: { [vehicleId: string]: string } = {};
-        let userActiveRunId: string | null = null;
-        
-        activeRunsSnapshot.forEach(doc => {
-            const run = doc.data();
-            activeRunsData[run.vehicleId] = run.driverName;
-            if (run.driverId === authUser.uid) {
-                userActiveRunId = doc.id;
-            }
-        });
-
-        setActiveRunId(userActiveRunId);
-
-        // Update vehicle status based on active runs
-        const updatedVehiclesList = vehiclesList.map(vehicle => {
-            if (activeRunsData[vehicle.id]) {
-                return {
-                    ...vehicle,
-                    status: 'EM CORRIDA' as const,
-                    driverName: activeRunsData[vehicle.id]
-                };
-            }
-            return vehicle;
-        });
-        
-        setVehicles(updatedVehiclesList);
+        if (!activeRunsSnapshot.empty) {
+          setActiveRunId(activeRunsSnapshot.docs[0].id);
+        } else {
+          setActiveRunId(null);
+        }
 
       } catch (error) {
-        console.error("Erro ao buscar dados:", error);
+        console.error("Erro ao buscar corridas ativas:", error);
         toast({
           variant: 'destructive',
           title: 'Erro de Rede',
-          description: 'Não foi possível carregar os dados do dashboard.',
+          description: 'Não foi possível verificar se há uma corrida ativa.',
         });
       } finally {
-        setIsLoading(false);
+        setIsCheckingRun(false);
       }
     };
 
-    fetchData();
-    const interval = setInterval(fetchData, 30000); // Atualiza a cada 30 segundos
-    return () => clearInterval(interval);
-
+    checkForActiveRun();
   }, [firestore, user, authUser, toast]);
 
-  const handleLogout = () => {
-    if (confirm('Tem certeza que deseja sair da conta?')) {
-      auth?.signOut();
-      localStorage.clear();
-      router.push('/login');
-      toast({ title: 'Desconectado', description: 'Você saiu da sua conta.' });
-    }
-  };
 
-  const handleStartOrContinueRun = () => {
-    if (activeRunId) {
-      router.push(`/dashboard-truck/active-run?id=${activeRunId}`);
-    } else {
-      router.push('/dashboard-truck/run');
-    }
-  };
-
-  if (!user || isLoading) {
+  if (isUserLoading || !user || isCheckingRun) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-background">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
+        <div className="flex flex-col flex-grow">
+            <Header />
+            <div className="flex-grow flex items-center justify-center bg-background">
+                <Loader2 className="h-12 w-12 animate-spin text-primary" />
+            </div>
+            <Footer />
+        </div>
     );
   }
 
-  return (
-    <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-black">
-      <main className="flex-1 p-4 sm:p-6 lg:p-8 container mx-auto max-w-md">
-        <header className="flex justify-between items-center mb-8">
-            <div className="text-left">
-                <p className="text-lg font-semibold text-foreground">{user.name}</p>
-                <p className="text-sm text-muted-foreground">Matrícula: {user.matricula}</p>
-            </div>
-            <Button variant="ghost" size="icon" onClick={handleLogout}>
-              <LogOut className="h-5 w-5 text-muted-foreground" />
-              <span className="sr-only">Sair</span>
-            </Button>
-        </header>
+  const navItems = [
+      {
+          href: activeRunId ? `/dashboard-truck/active-run?id=${activeRunId}` : '/dashboard-truck/run',
+          icon: PlayCircle,
+          title: activeRunId ? 'Continuar Trajeto' : 'Iniciar Trajeto',
+          colSpan: 'sm:col-span-2'
+      },
+      {
+          href: '/dashboard-truck/checklist',
+          icon: ClipboardCheck,
+          title: 'Checklist Diário',
+      },
+      {
+          href: '/dashboard-truck/refuel',
+          icon: Fuel,
+          title: 'Registrar Abastecimento',
+      }
+  ]
 
-        <section className="space-y-4">
-            <Button className="w-full h-16 text-lg" onClick={handleStartOrContinueRun}>
-                <PlayCircle className="mr-3 h-6 w-6"/>
-                {activeRunId ? 'Continuar Trajeto' : 'Iniciar Trajeto'}
-            </Button>
-             <Button className="w-full h-16 text-lg" variant="secondary" onClick={() => router.push('/dashboard-truck/checklist')}>
-                <ClipboardCheck className="mr-3 h-6 w-6"/>
-                Checklist Diário
-            </Button>
-            <Button className="w-full h-16 text-lg" variant="outline" onClick={() => router.push('/dashboard-truck/refuel')}>
-                <Fuel className="mr-3 h-6 w-6"/>
-                Registrar Abastecimento
-            </Button>
-        </section>
-        
-        <section className="mt-8">
-          <h2 className="text-lg font-semibold text-center mb-2 text-muted-foreground">Status da Frota</h2>
-          <div className="bg-card rounded-xl p-4 shadow-sm border mt-2">
-              {isLoading ? (
-                  <div className="text-center text-muted-foreground flex items-center justify-center p-4">
-                      <Loader2 className="w-5 h-5 mr-2 animate-spin"/> Carregando...
-                  </div>
-              ) : vehicles.length === 0 ? (
-                  <p className="text-center text-muted-foreground p-4">Nenhum caminhão encontrado.</p>
-              ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                      {vehicles.map(v => <VehicleCard key={v.id} vehicle={v} />)}
-                  </div>
-              )}
-          </div>
-        </section>
+  return (
+    <div className="bg-background flex flex-col flex-grow">
+      <Header />
+      <main className="flex-grow container mx-auto p-4 sm:p-6 lg:p-8 flex flex-col">
+        <div className="max-w-4xl w-full mx-auto flex-grow flex flex-col sm:justify-center">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6 flex-grow sm:flex-grow-0">
+                
+                {navItems.map((item) => {
+                    const Icon = item.icon;
+                    return (
+                        <Link key={item.href} href={item.href} className={`block h-full ${item.colSpan ? item.colSpan : ''}`}>
+                            <Card className="hover:border-primary/80 hover:bg-accent/50 transition-all h-full sm:h-auto sm:aspect-square flex flex-col">
+                                <CardContent className="p-6 flex flex-col flex-grow items-center justify-center text-center gap-4">
+                                <div className="bg-primary/10 p-4 sm:p-5 rounded-full">
+                                    <Icon className="h-8 w-8 sm:h-10 sm:w-10 text-primary" />
+                                </div>
+                                <CardTitle className="text-xl sm:text-2xl font-semibold">{item.title}</CardTitle>
+                                </CardContent>
+                            </Card>
+                        </Link>
+                    )
+                })}
+            </div>
+        </div>
       </main>
+      <Footer />
     </div>
   );
 }

@@ -1,19 +1,19 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
-import Splash from './splash/page';
+import { useRouter } from 'next/navigation';
+import { Loader2 } from 'lucide-react';
 
 export default function HomePage() {
   const router = useRouter();
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      router.push('/login');
-    }, 3000);
-
-    return () => clearTimeout(timer);
+    router.replace('/login');
   }, [router]);
 
-  return <Splash />;
+  return (
+    <div className="flex h-screen items-center justify-center">
+      <Loader2 className="h-12 w-12 animate-spin text-primary" />
+    </div>
+  );
 }

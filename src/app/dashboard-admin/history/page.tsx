@@ -2,8 +2,7 @@
 'use client';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useFirebase } from '@/firebase';
-import { collection, query, where, getDocs, Timestamp, doc, deleteDoc } from 'firebase/firestore';
-import { ref, get, child } from 'firebase/database';
+import { collection, query, where, getDocs, Timestamp, doc, deleteDoc, getDoc } from 'firebase/firestore';
 import {
   Card,
   CardContent,
@@ -37,7 +36,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Button } from '@/components/ui/button';
-import { Loader2, Calendar as CalendarIcon, Route, Truck, User, Clock, Car, Package, Warehouse, Milestone, Hourglass, MapIcon, EyeOff, Maximize, Minimize, Trash2 } from 'lucide-react';
+import { Loader2, Calendar as CalendarIcon, Route, Truck, User, Clock, Car, Package, Warehouse, Milestone, Hourglass, MapIcon, EyeOff, Maximize, Minimize, Trash2, Building, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -51,6 +50,8 @@ import dynamic from 'next/dynamic';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import * as XLSX from 'xlsx';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 
 // --- Constantes ---
@@ -104,6 +105,8 @@ export type Run = {
   endTime: FirebaseTimestamp | null;
   status: 'COMPLETED';
   stops: Stop[];
+  locationHistory?: LocationPoint[];
+  sectorId: string;
 };
 
 export type AggregatedRun = {
@@ -146,6 +149,11 @@ type UserData = {
   companyId: string;
   sectorId: string;
 };
+
+type SectorInfo = {
+    id: string;
+    name: string;
+}
 
 const RealTimeMap = dynamic(() => import('../RealTimeMap'), {
   ssr: false,
@@ -255,7 +263,7 @@ const processRunSegments = (run: AggregatedRun | Run | null, isAggregated: boole
 }
 
 const HistoryPage = () => {
-    const { firestore, database } = useFirebase();
+    const { firestore } = useFirebase();
     const { toast } = useToast();
     const router = useRouter();
 
@@ -263,12 +271,20 @@ const HistoryPage = () => {
     const [isSuperAdmin, setIsSuperAdmin] = useState(false);
     const [allRuns, setAllRuns] = useState<Run[]>([]);
     const [users, setUsers] = useState<Map<string, FirestoreUser>>(new Map());
+    const [allSectors, setAllSectors] = useState<SectorInfo[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    
+    // Filter states
     const [selectedShift, setSelectedShift] = useState<string>(TURNOS.TODOS);
     const [date, setDate] = useState<DateRange | undefined>({
       from: startOfDay(subDays(new Date(), 6)),
       to: endOfDay(new Date()),
     });
+    const [selectedVehicle, setSelectedVehicle] = useState<string>('all');
+    const [selectedDriver, setSelectedDriver] = useState<string>('all');
+    const [selectedSector, setSelectedSector] = useState<string>('all');
+
+
     const [selectedRunForDialog, setSelectedRunForDialog] = useState<AggregatedRun | null>(null);
     const [isClient, setIsClient] = useState(false);
 
@@ -293,44 +309,50 @@ const HistoryPage = () => {
     }, [router]);
 
     const fetchInitialData = useCallback(async () => {
-        if (!firestore || !user || !database) return;
+        if (!firestore || !user) return;
         setIsLoading(true);
 
         try {
-            // Fetch Users
-            const usersCol = collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/users`);
-            const usersSnapshot = await getDocs(usersCol);
             const usersMap = new Map<string, FirestoreUser>();
-            usersSnapshot.forEach(doc => {
-                usersMap.set(doc.id, { id: doc.id, ...doc.data() } as FirestoreUser);
-            });
-            setUsers(usersMap);
+            const sectorsList: SectorInfo[] = [];
+            let runs: Run[] = [];
+            const sectorRefsToFetch: {id: string, name: string}[] = [];
 
-            // Fetch Completed Runs from Firestore
-            const runsQuery = query(
-                collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/runs`),
-                where('status', '==', 'COMPLETED')
-            );
-            const querySnapshot = await getDocs(runsQuery);
-            const runs = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Run));
-
-            // Fetch location data from Realtime Database for each run
-            const runsWithLocation = await Promise.all(runs.map(async (run) => {
-                const locationsRef = ref(database, `/locations/${run.id}`);
-                const snapshot = await get(locationsRef);
-                let locationHistory: LocationPoint[] = [];
-                if (snapshot.exists()) {
-                    const data = snapshot.val();
-                    locationHistory = Object.entries(data).map(([ts, coords]: [string, any]) => ({
-                        latitude: coords.lat,
-                        longitude: coords.lng,
-                        timestamp: Timestamp.fromDate(new Date(ts))
-                    }));
+            // 1. Determine which sectors to fetch
+            if (isSuperAdmin) {
+                const sectorsRef = collection(firestore, `companies/${user.companyId}/sectors`);
+                const sectorsSnapshot = await getDocs(sectorsRef);
+                sectorsSnapshot.docs.forEach(doc => sectorRefsToFetch.push({ id: doc.id, name: doc.data().name as string }));
+            } else {
+                const sectorRef = doc(firestore, `companies/${user.companyId}/sectors`, user.sectorId);
+                const sectorSnap = await getDoc(sectorRef);
+                if (sectorSnap.exists()) {
+                    sectorRefsToFetch.push({ id: sectorSnap.id, name: sectorSnap.data().name as string });
                 }
-                return { ...run, locationHistory };
-            }));
+            }
+            setAllSectors(sectorRefsToFetch);
+            
+            // 2. Fetch users and runs for all relevant sectors
+            for (const sector of sectorRefsToFetch) {
+                // Fetch users
+                const usersCol = collection(firestore, `companies/${user.companyId}/sectors/${sector.id}/users`);
+                const usersSnapshot = await getDocs(usersCol);
+                usersSnapshot.forEach(doc => {
+                    if (!usersMap.has(doc.id)) {
+                        usersMap.set(doc.id, { id: doc.id, ...doc.data() } as FirestoreUser);
+                    }
+                });
 
-            setAllRuns(runsWithLocation.sort((a, b) => (b.endTime?.seconds || 0) - (a.endTime?.seconds || 0)));
+                // Fetch runs
+                const runsQuery = query(collection(firestore, `companies/${user.companyId}/sectors/${sector.id}/runs`), where('status', '==', 'COMPLETED'));
+                const querySnapshot = await getDocs(runsQuery);
+                querySnapshot.docs.forEach(doc => {
+                    runs.push({ id: doc.id, ...(doc.data() as Omit<Run, 'id'>), sectorId: sector.id });
+                });
+            }
+
+            setUsers(usersMap);
+            setAllRuns(runs.sort((a, b) => (b.endTime?.seconds || 0) - (a.endTime?.seconds || 0)));
 
         } catch (error) {
             console.error("Error fetching data: ", error);
@@ -338,7 +360,8 @@ const HistoryPage = () => {
         } finally {
             setIsLoading(false);
         }
-    }, [firestore, user, database, toast]);
+    }, [firestore, user, toast, isSuperAdmin]);
+
 
     useEffect(() => {
         if(user) {
@@ -346,20 +369,42 @@ const HistoryPage = () => {
         }
     }, [user, fetchInitialData]);
 
-    const filteredRuns = useMemo(() => {
-        return allRuns.filter(run => {
+    const { filteredRuns, vehicleList, driverList } = useMemo(() => {
+        const dateFiltered = allRuns.filter(run => {
             const runDate = run.endTime ? new Date(run.endTime.seconds * 1000) : null;
             if (!runDate) return false;
+            return date?.from && runDate >= startOfDay(date.from) && runDate <= endOfDay(date.to || date.from);
+        });
 
-            const isWithinDateRange = date?.from && runDate >= startOfDay(date.from) && runDate <= endOfDay(date.to || date.from);
-            if (!isWithinDateRange) return false;
+        const vehicles = new Set<string>();
+        dateFiltered.forEach(run => vehicles.add(run.vehicleId));
 
+        const drivers = new Map<string, FirestoreUser>();
+        dateFiltered.forEach(run => {
+            if (!drivers.has(run.driverId)) {
+                const driverInfo = users.get(run.driverId);
+                if (driverInfo) {
+                    drivers.set(run.driverId, driverInfo);
+                }
+            }
+        });
+        
+        const finalFiltered = dateFiltered.filter(run => {
             const driver = users.get(run.driverId);
             if (selectedShift !== TURNOS.TODOS && driver?.shift !== selectedShift) return false;
-
+            if (isSuperAdmin && selectedSector !== 'all' && run.sectorId !== selectedSector) return false;
+            if (selectedVehicle !== 'all' && run.vehicleId !== selectedVehicle) return false;
+            if (selectedDriver !== 'all' && run.driverId !== selectedDriver) return false;
             return true;
         });
-    }, [allRuns, date, selectedShift, users]);
+
+        return {
+            filteredRuns: finalFiltered,
+            vehicleList: Array.from(vehicles).sort(),
+            driverList: Array.from(drivers.values()).sort((a, b) => a.name.localeCompare(b.name)),
+        };
+    }, [allRuns, date, selectedShift, selectedVehicle, selectedDriver, selectedSector, users, isSuperAdmin]);
+
 
     const aggregatedRunsMap = useMemo(() => {
         const groupedRuns = new Map<string, Run[]>();
@@ -423,9 +468,11 @@ const HistoryPage = () => {
 
       return { totalRuns, totalDistance, avgDurationMinutes, totalStops };
     }, [filteredRuns]);
-
-    const runsByDayChartData = useMemo(() => {
-        if (!date || !date.from) return [];
+    
+    const chartData = useMemo(() => {
+        if (!date || !date.from) return { runsByDay: [], distanceByVehicle: [], stoppedTimeByVehicle: [] };
+        
+        // Runs by Day
         const from = startOfDay(date.from);
         const to = endOfDay(date.to || date.from);
 
@@ -440,11 +487,8 @@ const HistoryPage = () => {
                 dateMap.set(day, (dateMap.get(day) || 0) + 1);
             }
         });
-
-        return Array.from(dateMap, ([name, total]) => ({ name, total }));
-    }, [filteredRuns, date]);
-
-    const distanceByVehicleChartData = useMemo(() => {
+        
+        // Distance by Vehicle
         const distanceMap = new Map<string, number>();
         filteredRuns.forEach(run => {
             const distance = (run.endMileage || run.startMileage) - run.startMileage;
@@ -453,8 +497,36 @@ const HistoryPage = () => {
             }
         });
 
-        return Array.from(distanceMap, ([vehicleId, distance]) => ({ name: vehicleId, total: Math.round(distance) }));
-    }, [filteredRuns]);
+        // Stopped Time by Vehicle (during runs)
+        const stoppedTimeMap = new Map<string, number>();
+        filteredRuns.forEach(run => {
+            let runStopTimeSeconds = 0;
+            run.stops.forEach(stop => {
+                if (stop.arrivalTime && stop.departureTime) {
+                    const stopSeconds = stop.departureTime.seconds - stop.arrivalTime.seconds;
+                    if (stopSeconds > 0) {
+                        runStopTimeSeconds += stopSeconds;
+                    }
+                }
+            });
+            if (runStopTimeSeconds > 0) {
+                const currentTotal = stoppedTimeMap.get(run.vehicleId) || 0;
+                stoppedTimeMap.set(run.vehicleId, currentTotal + runStopTimeSeconds);
+            }
+        });
+
+        const stoppedTimes = Array.from(stoppedTimeMap.entries()).map(([name, totalSeconds]) => ({
+            name,
+            total: parseFloat((totalSeconds / 3600).toFixed(1)) // to hours
+        })).sort((a,b) => b.total - a.total);
+
+
+        return {
+            runsByDay: Array.from(dateMap, ([name, total]) => ({ name, total })),
+            distanceByVehicle: Array.from(distanceMap, ([name, total]) => ({ name, total: Math.round(total) })).sort((a,b) => b.total - a.total),
+            stoppedTimeByVehicle: stoppedTimes,
+        };
+    }, [filteredRuns, date]);
 
     const handleViewDetails = (run: Run) => {
         const driver = users.get(run.driverId);
@@ -469,7 +541,7 @@ const HistoryPage = () => {
     const handleDelete = async (runToDelete: Run) => {
         if (!firestore || !user || !isSuperAdmin) return;
         try {
-            const runRef = doc(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/runs`, runToDelete.id);
+            const runRef = doc(firestore, `companies/${user.companyId}/sectors/${runToDelete.sectorId}/runs`, runToDelete.id);
             await deleteDoc(runRef);
 
             toast({ title: 'Sucesso', description: 'A corrida foi deletada.' });
@@ -479,6 +551,81 @@ const HistoryPage = () => {
             toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível deletar a corrida.' });
         }
     };
+    
+    const handleExport = () => {
+        if (!filteredRuns.length) {
+            toast({ variant: 'destructive', title: 'Nenhum dado', description: 'Não há dados para exportar com os filtros atuais.' });
+            return;
+        }
+    
+        const runsByVehicle = filteredRuns.reduce((acc, run) => {
+            const vehicleId = run.vehicleId;
+            if (!acc[vehicleId]) {
+                acc[vehicleId] = [];
+            }
+            acc[vehicleId].push(run);
+            return acc;
+        }, {} as Record<string, Run[]>);
+    
+        const workbook = XLSX.utils.book_new();
+    
+        for (const vehicleId in runsByVehicle) {
+            const vehicleRuns = runsByVehicle[vehicleId].sort((a, b) => a.startTime.seconds - b.startTime.seconds);
+    
+            const dataToExport = vehicleRuns.map((run, index) => {
+                const driver = users.get(run.driverId);
+                const sector = allSectors.find(s => s.id === run.sectorId);
+                const distance = run.endMileage ? run.endMileage - run.startMileage : 0;
+                const durationSeconds = run.endTime ? run.endTime.seconds - run.startTime.seconds : 0;
+                const totalDuration = durationSeconds > 0 ? formatDistanceStrict(0, durationSeconds * 1000, { locale: ptBR }) : 'N/A';
+                const stops = run.stops.map(s => s.name).join(', ');
+    
+                const startTime = format(run.startTime.toDate(), 'HH:mm');
+                const endTime = run.endTime ? format(run.endTime.toDate(), 'HH:mm') : 'N/A';
+    
+                const totalStopTimeSeconds = run.stops.reduce((acc, stop) => {
+                    if (stop.arrivalTime && stop.departureTime) {
+                        return acc + (stop.departureTime.seconds - stop.arrivalTime.seconds);
+                    }
+                    return acc;
+                }, 0);
+                const stopTime = totalStopTimeSeconds > 0 ? formatDistanceStrict(0, totalStopTimeSeconds * 1000, { locale: ptBR, unit: 'minute' }) : '0 min';
+    
+                const observations = run.stops.map(s => s.observation).filter(Boolean).join('; ');
+                const occupancies = run.stops.map(s => s.occupancy !== null ? `${s.occupancy}%` : 'N/A').join(', ');
+    
+                return {
+                    'Data': format(run.startTime.toDate(), 'dd/MM/yyyy'),
+                    'Horário Inicial': startTime,
+                    'Horário Final': endTime,
+                    'Duração Total': totalDuration,
+                    'Tempo Parado (na corrida)': stopTime,
+                    'Setor': sector?.name || run.sectorId,
+                    'Veículo': run.vehicleId,
+                    'Motorista': run.driverName,
+                    'Turno': driver?.shift || 'N/A',
+                    'Paradas': stops,
+                    'Ocupação (%)': occupancies,
+                    'Observações': observations,
+                    'Distância (km)': distance > 0 ? distance.toFixed(1) : '0.0',
+                    'Km Inicial': run.startMileage,
+                    'Km Final': run.endMileage || 'N/A'
+                };
+            });
+            
+            if (dataToExport.length > 0) {
+                const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+                 // Auto-size columns
+                const objectMaxLength = Object.keys(dataToExport[0]).map(key => ({
+                    wch: Math.max(...dataToExport.map(obj => (obj[key as keyof typeof obj] ?? '').toString().length), key.length)
+                }));
+                worksheet['!cols'] = objectMaxLength;
+                XLSX.utils.book_append_sheet(workbook, worksheet, vehicleId);
+            }
+        }
+    
+        XLSX.writeFile(workbook, `Historico_Frotacontrol_Por_Veiculo_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+    };
 
     if (isLoading || !user) {
         return <div className="flex justify-center items-center h-full"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
@@ -486,88 +633,131 @@ const HistoryPage = () => {
 
     return (
         <div className="flex-1 space-y-6">
-            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
-                <h2 className="text-3xl font-bold tracking-tight">Histórico e Análise</h2>
-                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                    <ShiftFilter selectedShift={selectedShift} onShiftChange={setSelectedShift} />
+            <div className="space-y-4">
+                <h1 className="text-3xl font-bold tracking-tight">Histórico e Análise</h1>
+                <div className="flex w-full flex-wrap items-center justify-start gap-2">
                     <DateFilter date={date} setDate={setDate} />
+                    {isSuperAdmin && <SectorFilter sectors={allSectors} selectedSector={selectedSector} onSectorChange={setSelectedSector} />}
+                    <ShiftFilter selectedShift={selectedShift} onShiftChange={setSelectedShift} />
+                    <VehicleFilter vehicles={vehicleList} selectedVehicle={selectedVehicle} onVehicleChange={setSelectedVehicle} />
+                    <DriverFilter drivers={driverList} selectedDriver={selectedDriver} onDriverChange={setSelectedDriver} />
                 </div>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                <KpiCard title="Corridas Concluídas" value={kpis.totalRuns.toString()} />
-                <KpiCard title="Paradas Totais" value={kpis.totalStops.toString()} />
-                <KpiCard title="Distância Total" value={`${kpis.totalDistance.toFixed(1)} km`} />
-                <KpiCard title="Duração Média" value={`${kpis.avgDurationMinutes.toFixed(0)} min`} />
-            </div>
+            <Tabs defaultValue="analysis" className="w-full">
+                <div className="flex justify-center border-b">
+                    <TabsList className="grid w-full max-w-md grid-cols-2">
+                        <TabsTrigger value="analysis">Análise Gráfica</TabsTrigger>
+                        <TabsTrigger value="history">Histórico de Corridas</TabsTrigger>
+                    </TabsList>
+                </div>
+                
+                <TabsContent value="analysis" className="py-6 space-y-4">
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                        <KpiCard title="Corridas Concluídas" value={kpis.totalRuns.toString()} />
+                        <KpiCard title="Paradas Totais" value={kpis.totalStops.toString()} />
+                        <KpiCard title="Distância Total" value={`${kpis.totalDistance.toFixed(1)} km`} />
+                        <KpiCard title="Duração Média" value={`${kpis.avgDurationMinutes.toFixed(0)} min`} />
+                    </div>
 
-            <div className="grid gap-6 lg:grid-cols-2">
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Corridas por Dia</CardTitle>
-                        <CardDescription>Total de corridas concluídas por dia no período e turno selecionados.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
+                    <div className="grid gap-6 lg:grid-cols-2">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Corridas por Dia</CardTitle>
+                                <CardDescription>Total de corridas concluídas por dia no período e filtros selecionados.</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                {isLoading ? <div className="flex justify-center items-center h-[300px]"><Loader2 className="w-8 h-8 animate-spin"/></div> :
+                                <ResponsiveContainer width="100%" height={300}>
+                                    <BarChart data={chartData.runsByDay}>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                        <XAxis dataKey="name" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
+                                        <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} allowDecimals={false} />
+                                        <Tooltip cursor={{fill: 'hsl(var(--muted))'}} contentStyle={{backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)'}}/>
+                                        <Bar dataKey="total" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                                    </BarChart>
+                                </ResponsiveContainer>}
+                            </CardContent>
+                        </Card>
+
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Km Rodados por Caminhão</CardTitle>
+                                <CardDescription>Distância total percorrida por cada caminhão nos filtros selecionados.</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                {isLoading ? <div className="flex justify-center items-center h-[300px]"><Loader2 className="w-8 h-8 animate-spin"/></div> :
+                                <ResponsiveContainer width="100%" height={300}>
+                                    <BarChart data={chartData.distanceByVehicle} layout="vertical">
+                                        <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                                        <XAxis type="number" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
+                                        <YAxis type="category" dataKey="name" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} width={80} />
+                                        <Tooltip cursor={{fill: 'hsl(var(--muted))'}} contentStyle={{backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)'}} formatter={(value) => `${value} km`}/>
+                                        <Bar dataKey="total" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
+                                    </BarChart>
+                                </ResponsiveContainer>}
+                            </CardContent>
+                        </Card>
+                        <Card className="lg:col-span-2">
+                            <CardHeader>
+                                <CardTitle>Tempo Parado por Caminhão (Horas)</CardTitle>
+                                <CardDescription>Soma do tempo em que o veículo ficou parado nas paradas (coletas/entregas).</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                {isLoading ? <div className="flex justify-center items-center h-[300px]"><Loader2 className="w-8 h-8 animate-spin"/></div> :
+                                <ResponsiveContainer width="100%" height={300}>
+                                <BarChart data={chartData.stoppedTimeByVehicle}>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                        <XAxis dataKey="name" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
+                                        <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} unit="h" />
+                                        <Tooltip
+                                            cursor={{fill: 'hsl(var(--muted))'}}
+                                            contentStyle={{backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)'}}
+                                            formatter={(value: number) => `${value.toFixed(1)} horas`}
+                                        />
+                                        <Bar dataKey="total" fill="hsl(var(--destructive))" radius={[4, 4, 0, 0]} />
+                                    </BarChart>
+                                </ResponsiveContainer>}
+                            </CardContent>
+                        </Card>
+                    </div>
+                </TabsContent>
+                <TabsContent value="history" className="py-6">
+                    <Card>
+                        <CardHeader>
+                            <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-4">
+                                <div>
+                                    <CardTitle>Histórico de Corridas</CardTitle>
+                                    <CardDescription>Lista de corridas concluídas com os filtros selecionados.</CardDescription>
+                                </div>
+                                <Button variant="outline" onClick={handleExport}><Download className="mr-2 h-4 w-4" />Exportar para Excel</Button>
+                            </div>
+                        </CardHeader>
+                        <CardContent>
                         {isLoading ? <div className="flex justify-center items-center h-[300px]"><Loader2 className="w-8 h-8 animate-spin"/></div> :
-                        <ResponsiveContainer width="100%" height={300}>
-                            <BarChart data={runsByDayChartData}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                <XAxis dataKey="name" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
-                                <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} allowDecimals={false} />
-                                <Tooltip cursor={{fill: 'hsl(var(--muted))'}} contentStyle={{backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)'}}/>
-                                <Bar dataKey="total" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                            </BarChart>
-                        </ResponsiveContainer>}
-                    </CardContent>
-                </Card>
+                            <div className="overflow-auto max-h-[400px]">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Veículo</TableHead>
+                                            <TableHead>Motorista</TableHead>
+                                            <TableHead>Turno</TableHead>
+                                            <TableHead>Destino</TableHead>
+                                            <TableHead>Distância</TableHead>
+                                            <TableHead>Data</TableHead>
+                                            <TableHead className="text-right">Ação</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {filteredRuns.length > 0 ? filteredRuns.map(run => <HistoryTableRow key={run.id} run={run} users={users} onViewDetails={() => handleViewDetails(run)} isSuperAdmin={isSuperAdmin} onDelete={() => handleDelete(run)} />) : <TableRow><TableCell colSpan={7} className="text-center h-24">Nenhuma corrida encontrada</TableCell></TableRow>}
+                                    </TableBody>
+                                </Table>
+                            </div>}
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+            </Tabs>
 
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Km Rodados por Caminhão</CardTitle>
-                        <CardDescription>Distância total percorrida por cada caminhão no período e turno.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        {isLoading ? <div className="flex justify-center items-center h-[300px]"><Loader2 className="w-8 h-8 animate-spin"/></div> :
-                        <ResponsiveContainer width="100%" height={300}>
-                            <BarChart data={distanceByVehicleChartData} layout="vertical">
-                                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                                <XAxis type="number" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
-                                <YAxis type="category" dataKey="name" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} width={80} />
-                                <Tooltip cursor={{fill: 'hsl(var(--muted))'}} contentStyle={{backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)'}} formatter={(value) => `${value} km`}/>
-                                <Bar dataKey="total" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
-                            </BarChart>
-                        </ResponsiveContainer>}
-                    </CardContent>
-                </Card>
-            </div>
-
-            <Card>
-                <CardHeader>
-                    <CardTitle>Histórico de Corridas</CardTitle>
-                    <CardDescription>Lista de corridas concluídas no período e turno selecionados.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                {isLoading ? <div className="flex justify-center items-center h-[300px]"><Loader2 className="w-8 h-8 animate-spin"/></div> :
-                    <div className="overflow-auto max-h-[400px]">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Veículo</TableHead>
-                                    <TableHead>Motorista</TableHead>
-                                    <TableHead>Turno</TableHead>
-                                    <TableHead>Destino</TableHead>
-                                    <TableHead>Distância</TableHead>
-                                    <TableHead>Data</TableHead>
-                                    <TableHead className="text-right">Ação</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {filteredRuns.length > 0 ? filteredRuns.map(run => <HistoryTableRow key={run.id} run={run} users={users} onViewDetails={() => handleViewDetails(run)} isSuperAdmin={isSuperAdmin} onDelete={() => handleDelete(run)} />) : <TableRow><TableCell colSpan={7} className="text-center h-24">Nenhuma corrida encontrada</TableCell></TableRow>}
-                            </TableBody>
-                        </Table>
-                    </div>}
-                </CardContent>
-            </Card>
 
              <RunDetailsDialog run={selectedRunForDialog} isOpen={selectedRunForDialog !== null} onClose={() => setSelectedRunForDialog(null)} isClient={isClient} />
         </div>
@@ -611,7 +801,7 @@ const HistoryTableRow = ({ run, users, onViewDetails, isSuperAdmin, onDelete }: 
             <TableCell>{format(run.startTime.toDate(), 'dd/MM/yyyy')}</TableCell>
             <TableCell className="text-right space-x-2">
                 <Button variant="outline" size="sm" onClick={onViewDetails}>
-                    <Route className="h-4 w-4 mr-2" />
+                    <Route className="mr-2 h-4 w-4" />
                     Ver Detalhes
                 </Button>
                 {isSuperAdmin && (
@@ -646,7 +836,7 @@ const DateFilter = ({ date, setDate }: { date: DateRange | undefined, setDate: (
           <Button
             id="date"
             variant={"outline"}
-            className="w-full sm:w-[280px] justify-start text-left font-normal"
+            className="w-full justify-start text-left font-normal sm:w-auto"
           >
             <CalendarIcon className="mr-2 h-4 w-4" />
             {date?.from ? (
@@ -679,12 +869,54 @@ const DateFilter = ({ date, setDate }: { date: DateRange | undefined, setDate: (
 
 const ShiftFilter = ({ selectedShift, onShiftChange }: { selectedShift: string, onShiftChange: (shift: string) => void }) => (
     <Select value={selectedShift} onValueChange={onShiftChange}>
-        <SelectTrigger className="w-full sm:w-[180px]">
+        <SelectTrigger className="w-full sm:w-auto">
             <SelectValue placeholder="Filtrar por turno" />
         </SelectTrigger>
         <SelectContent>
             {Object.values(TURNOS).map(turno => (
                 <SelectItem key={turno} value={turno}>{turno}</SelectItem>
+            ))}
+        </SelectContent>
+    </Select>
+);
+
+const SectorFilter = ({ sectors, selectedSector, onSectorChange }: { sectors: SectorInfo[], selectedSector: string, onSectorChange: (sector: string) => void }) => (
+    <Select value={selectedSector} onValueChange={onSectorChange}>
+        <SelectTrigger className="w-full sm:w-auto">
+             <SelectValue placeholder="Filtrar por setor" />
+        </SelectTrigger>
+        <SelectContent>
+            <SelectItem value="all"><Building className="h-4 w-4 inline-block mr-2"/>Todos os Setores</SelectItem>
+            {sectors.map(s => (
+                <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+            ))}
+        </SelectContent>
+    </Select>
+);
+
+const VehicleFilter = ({ vehicles, selectedVehicle, onVehicleChange }: { vehicles: string[], selectedVehicle: string, onVehicleChange: (vehicle: string) => void }) => (
+    <Select value={selectedVehicle} onValueChange={onVehicleChange}>
+        <SelectTrigger className="w-full sm:w-auto">
+             <SelectValue placeholder="Filtrar por veículo" />
+        </SelectTrigger>
+        <SelectContent>
+            <SelectItem value="all"><Truck className="h-4 w-4 inline-block mr-2"/>Todos os Veículos</SelectItem>
+            {vehicles.map(v => (
+                <SelectItem key={v} value={v}><Truck className="h-4 w-4 inline-block mr-2"/>{v}</SelectItem>
+            ))}
+        </SelectContent>
+    </Select>
+);
+
+const DriverFilter = ({ drivers, selectedDriver, onDriverChange }: { drivers: FirestoreUser[], selectedDriver: string, onDriverChange: (driver: string) => void }) => (
+    <Select value={selectedDriver} onValueChange={onDriverChange}>
+        <SelectTrigger className="w-full sm:w-auto">
+             <SelectValue placeholder="Filtrar por motorista" />
+        </SelectTrigger>
+        <SelectContent>
+            <SelectItem value="all"><User className="h-4 w-4 inline-block mr-2"/>Todos os Motoristas</SelectItem>
+            {drivers.map(d => (
+                <SelectItem key={d.id} value={d.id}><User className="h-4 w-4 inline-block mr-2"/>{d.name}</SelectItem>
             ))}
         </SelectContent>
     </Select>
@@ -721,14 +953,14 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
         }));
     }, [mapSegments, highlightedSegmentId]);
     
-     const handleViewFullscreen = () => {
+    if (!run) return null;
+    
+    const handleViewFullscreen = () => {
       if (run) {
         // We'll pass the key of the aggregated run to the map view page
         router.push(`/dashboard-admin/map-view/${run.key}`);
       }
     };
-    
-    if (!run) return null;
     
     const fullLocationHistory = mapRun?.locationHistory?.map(p => ({ latitude: p.latitude, longitude: p.longitude })) || [];
 

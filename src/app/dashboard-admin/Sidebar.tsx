@@ -20,6 +20,7 @@ import {
   Fuel,
   ClipboardCheck,
   Settings,
+  Milestone,
 } from 'lucide-react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useFirebase } from '@/firebase';
@@ -45,6 +46,9 @@ export function AdminSidebar() {
     { href: '/dashboard-admin/refueling', label: 'Abastecimentos', icon: Fuel },
     { href: '/dashboard-admin/checklists', label: 'Checklists', icon: ClipboardCheck },
     { href: '/dashboard-admin/manage', label: 'Gerenciamento', icon: Users },
+    ...(localStorage.getItem('sectorId') === 'MILKRUN INTERNO' 
+      ? [{ href: '/dashboard-admin/routing', label: 'Roteirização', icon: Milestone }] 
+      : []),
     { href: '/dashboard-admin/settings', label: 'Configurações', icon: Settings },
   ];
 
