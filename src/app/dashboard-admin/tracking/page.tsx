@@ -516,11 +516,11 @@ const RunAccordionItem = ({ run, users, onViewRoute }: { run: AggregatedRun, use
               </div>
           </div>
           <div className="flex-1 w-full sm:w-auto">
-              <div className="flex justify-between text-sm mb-1">
-                  <span className="font-medium">{isCompletedRun ? 'Concluído' : `${completedStops} de ${totalStops}`}</span>
+              <div className="flex justify-between text-xs mb-1">
+                  <span className="text-muted-foreground">{run.totalDistance.toFixed(1)} km rodados</span>
                   <span className="font-bold text-primary">{Math.round(progress)}%</span>
               </div>
-              <Progress value={progress} className="h-2" />
+              <Progress value={progress} className="h-1.5" />
           </div>
           <div className="flex-none">
                <Badge variant={isCompletedRun ? 'default' : (currentStop ? "default" : "secondary")} className={`truncate ${isCompletedRun ? 'bg-green-600' : ''}`}>

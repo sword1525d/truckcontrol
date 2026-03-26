@@ -40,7 +40,7 @@ import { Loader2, Calendar as CalendarIcon, Route, Truck, User, Clock, Car, Pack
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
+import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, LabelList } from 'recharts';
 import { format, subDays, startOfDay, endOfDay, formatDistanceStrict } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -124,6 +124,7 @@ export type AggregatedRun = {
     locationHistory: LocationPoint[];
     originalRuns: Run[];
     startMileage: number;
+    endMileage: number | null;
 };
 
 export type FirestoreUser = {
@@ -449,7 +450,8 @@ const HistoryPage = () => {
                 stops: allStops,
                 locationHistory: allLocations,
                 originalRuns: runs,
-                startMileage
+                startMileage: firstRun.startMileage,
+                endMileage: lastRun.endMileage
             });
         });
 
@@ -693,7 +695,9 @@ const HistoryPage = () => {
                                         <XAxis type="number" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
                                         <YAxis type="category" dataKey="name" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} width={80} />
                                         <Tooltip cursor={{fill: 'hsl(var(--muted))'}} contentStyle={{backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)'}} formatter={(value) => `${value} km`}/>
-                                        <Bar dataKey="total" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
+                                        <Bar dataKey="total" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]}>
+                                            <LabelList dataKey="total" position="right" formatter={(v: number) => `${v.toFixed(1)} km`} style={{ fontSize: '10px', fill: 'hsl(var(--foreground))' }} />
+                                        </Bar>
                                     </BarChart>
                                 </ResponsiveContainer>}
                             </CardContent>
@@ -743,7 +747,9 @@ const HistoryPage = () => {
                                             <TableHead>Motorista</TableHead>
                                             <TableHead>Turno</TableHead>
                                             <TableHead>Destino</TableHead>
-                                            <TableHead>Distância</TableHead>
+                                            <TableHead>Km Inicial</TableHead>
+                                            <TableHead>Km Final</TableHead>
+                                            <TableHead>Km Rodado</TableHead>
                                             <TableHead>Data</TableHead>
                                             <TableHead className="text-right">Ação</TableHead>
                                         </TableRow>
@@ -797,7 +803,9 @@ const HistoryTableRow = ({ run, users, onViewDetails, isSuperAdmin, onDelete }: 
             </TableCell>
             <TableCell>{driver?.shift || 'N/A'}</TableCell>
             <TableCell>{run.stops.map(s => s.name).join(', ')}</TableCell>
-            <TableCell>{distance > 0 ? `${distance.toFixed(1)} km` : '0.0 km'}</TableCell>
+            <TableCell className="font-medium">{run.startMileage}</TableCell>
+            <TableCell className="font-medium text-blue-600">{run.endMileage || 'N/A'}</TableCell>
+            <TableCell className="font-bold">{distance > 0 ? `${distance.toFixed(1)} km` : '0.0 km'}</TableCell>
             <TableCell>{format(run.startTime.toDate(), 'dd/MM/yyyy')}</TableCell>
             <TableCell className="text-right space-x-2">
                 <Button variant="outline" size="sm" onClick={onViewDetails}>
