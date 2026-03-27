@@ -159,6 +159,7 @@ function ActiveRunContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [observation, setObservation] = useState('');
   const [stopData, setStopData] = useState<{ occupied: string; empty: string; mileage: string, occupancy: number; }>({ occupied: '', empty: '', mileage: '', occupancy: 0 });
+  const [currentStopIndex, setCurrentStopIndex] = useState(0);
   
   const runId = searchParams.get('id');
 
@@ -183,15 +184,24 @@ function ActiveRunContent() {
         const transformedRunData: Run = { id: runSnap.id, ...runData };
         setRun(transformedRunData);
         
-        const stop = transformedRunData.stops[0];
+        // Find the first non-completed stop index
+        const firstIncompleteIdx = transformedRunData.stops.findIndex(s => s.status !== 'COMPLETED');
+        const activeIdx = firstIncompleteIdx === -1 ? transformedRunData.stops.length - 1 : firstIncompleteIdx;
+        setCurrentStopIndex(activeIdx);
+
+        const stop = transformedRunData.stops[activeIdx];
         if (stop && (stop.status === 'IN_PROGRESS' || stop.status === 'COMPLETED')) {
           setStopData({
             occupied: stop.collectedOccupiedCars?.toString() || '',
             empty: stop.collectedEmptyCars?.toString() || '',
-            mileage: stop.mileageAtStop?.toString() || transformedRunData.startMileage.toString(),
+            mileage: stop.mileageAtStop?.toString() || (activeIdx > 0 ? (transformedRunData.stops[activeIdx-1].mileageAtStop?.toString() || transformedRunData.startMileage.toString()) : transformedRunData.startMileage.toString()),
             occupancy: stop.occupancy ?? 0
           });
           setObservation(stop.observation || '');
+        } else {
+           // If pending, use previous stop's mileage or start mileage as default
+           const previousMileage = activeIdx > 0 ? (transformedRunData.stops[activeIdx-1].mileageAtStop?.toString() || transformedRunData.startMileage.toString()) : transformedRunData.startMileage.toString();
+           setStopData(prev => ({ ...prev, mileage: previousMileage }));
         }
       } else {
         toast({ variant: 'destructive', title: 'Erro', description: 'Trajeto não encontrado.' });
@@ -209,10 +219,10 @@ function ActiveRunContent() {
     fetchRun();
   }, [fetchRun]);
 
- const handleRegisterArrival = async () => {
-    if (!run || !firestore || !runId || run.stops.length === 0) return;
+  const handleRegisterArrival = async () => {
+    if (!run || !firestore || !runId || run.stops.length <= currentStopIndex) return;
     
-    const stop = run.stops[0];
+    const stop = run.stops[currentStopIndex];
     if (stop.status !== 'PENDING') return;
     
     const arrivalTime = new Date();
@@ -223,9 +233,12 @@ function ActiveRunContent() {
       const runRef = doc(firestore, `companies/${companyId}/sectors/${sectorId}/runs`, runId);
       
       const updatedStops = [...run.stops];
-      updatedStops[0].status = 'IN_PROGRESS';
-      updatedStops[0].arrivalTime = arrivalTime;
-      updatedStops[0].observation = observation || '';
+      updatedStops[currentStopIndex] = {
+          ...updatedStops[currentStopIndex],
+          status: 'IN_PROGRESS',
+          arrivalTime: arrivalTime,
+          observation: observation || ''
+      };
 
       await updateDoc(runRef, {
         stops: updatedStops,
@@ -234,7 +247,7 @@ function ActiveRunContent() {
       setRun(prevRun => {
           if (!prevRun) return null;
           const newStops = [...prevRun.stops];
-          newStops[0] = { ...newStops[0], status: 'IN_PROGRESS', arrivalTime, observation: observation || '' };
+          newStops[currentStopIndex] = { ...newStops[currentStopIndex], status: 'IN_PROGRESS', arrivalTime, observation: observation || '' };
           return { ...prevRun, stops: newStops };
       });
       
@@ -246,9 +259,9 @@ function ActiveRunContent() {
   };
 
   const handleFinishStop = async () => {
-    if (!run || !firestore || !runId || run.stops.length === 0) return;
+    if (!run || !firestore || !runId || run.stops.length <= currentStopIndex) return;
     
-    const stop = run.stops[0];
+    const stop = run.stops[currentStopIndex];
     const { occupied, empty, mileage, occupancy } = stopData;
 
     if (!occupied || !empty || !mileage) {
@@ -257,11 +270,13 @@ function ActiveRunContent() {
     }
 
     const finalMileage = Number(mileage);
-    if (finalMileage < run.startMileage) {
+    const previousMileage = currentStopIndex > 0 ? (run.stops[currentStopIndex - 1].mileageAtStop || run.startMileage) : run.startMileage;
+
+    if (finalMileage < previousMileage) {
       toast({ 
         variant: 'destructive', 
         title: 'KM Inválido', 
-        description: `A quilometragem não pode ser inferior à inicial (${run.startMileage} km).` 
+        description: `A quilometragem não pode ser inferior à última registrada (${previousMileage} km).` 
       });
       return;
     }
@@ -275,11 +290,10 @@ function ActiveRunContent() {
 
       const finalOccupied = Number(occupied);
       const finalEmpty = Number(empty);
-      const finalMileage = Number(mileage);
 
       const updatedStops = [...run.stops];
-      updatedStops[0] = {
-        ...updatedStops[0],
+      updatedStops[currentStopIndex] = {
+        ...updatedStops[currentStopIndex],
         status: 'COMPLETED',
         departureTime: departureTime,
         collectedOccupiedCars: finalOccupied,
@@ -295,8 +309,8 @@ function ActiveRunContent() {
       setRun(prevRun => {
           if (!prevRun) return null;
           const newStops = [...prevRun.stops];
-          newStops[0] = {
-              ...newStops[0],
+          newStops[currentStopIndex] = {
+              ...newStops[currentStopIndex],
               status: 'COMPLETED',
               departureTime,
               collectedOccupiedCars: finalOccupied,
@@ -308,6 +322,20 @@ function ActiveRunContent() {
       });
       
       toast({ title: 'Parada finalizada!', description: `Parada em ${stop.name} concluída.` });
+
+      // After finishing, advance to next or prepare summary
+      if (currentStopIndex < run.stops.length - 1) {
+          const nextIdx = currentStopIndex + 1;
+          setCurrentStopIndex(nextIdx);
+          setStopData({
+              occupied: '',
+              empty: '',
+              mileage: finalMileage.toString(),
+              occupancy: 0
+          });
+          setObservation('');
+      }
+
     } catch (error) {
        console.error("Erro ao finalizar parada: ", error);
        toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível finalizar a parada.' });
@@ -321,9 +349,9 @@ function ActiveRunContent() {
   const handleFinishRun = async () => {
     if (!run || !firestore || !runId || run.stops.length === 0) return;
     
-    const stop = run.stops[0];
-    if (stop.status !== 'COMPLETED' || !stop.mileageAtStop) {
-        toast({ variant: 'destructive', title: 'Erro', description: 'A quilometragem da parada finalizada é necessária para concluir a corrida.' });
+    const lastStop = run.stops[run.stops.length - 1];
+    if (lastStop.status !== 'COMPLETED' || !lastStop.mileageAtStop) {
+        toast({ variant: 'destructive', title: 'Erro', description: 'Todas as paradas devem estar concluídas para finalizar a corrida.' });
         return;
     }
 
@@ -335,7 +363,7 @@ function ActiveRunContent() {
         await updateDoc(runRef, {
             status: 'COMPLETED',
             endTime: new Date(),
-            endMileage: stop.mileageAtStop
+            endMileage: lastStop.mileageAtStop
         });
 
         toast({ title: 'Trajeto Finalizado!', description: 'Sua rota foi concluída com sucesso.' });
@@ -355,7 +383,7 @@ function ActiveRunContent() {
     );
   }
   
-  const stop = run.stops[0];
+  const stop = run.stops[currentStopIndex];
   const stopNameIdentifier = stop.name.replace(/\s+/g, '-');
   const isPending = stop.status === 'PENDING';
   const isInProgress = stop.status === 'IN_PROGRESS';
@@ -437,7 +465,7 @@ function ActiveRunContent() {
               
               {isCompleted && (
                  <CardContent className="space-y-4 pt-0 text-sm text-muted-foreground">
-                      <OccupancySelector initialValue={stop.occupancy ?? 0} disabled />
+                        <OccupancySelector initialValue={stop.occupancy ?? 0} onValueChange={() => {}} disabled />
                        {stop.observation && (
                           <div className="border-t pt-4">
                               <p className="font-semibold text-card-foreground">Observação:</p>

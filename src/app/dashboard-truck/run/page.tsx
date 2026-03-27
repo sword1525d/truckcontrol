@@ -27,6 +27,7 @@ type UserData = {
   name: string;
   companyId: string;
   sectorId: string;
+  sectorName?: string;
 };
 
 type Vehicle = {
@@ -147,7 +148,8 @@ export default function TruckRunPage() {
 
     if (storedUser && companyId && sectorId && authUser) {
       const parsedUser = JSON.parse(storedUser);
-      setUser({ ...parsedUser, id: authUser.uid, companyId, sectorId });
+      const sectorName = localStorage.getItem('sectorName') || '';
+      setUser({ ...parsedUser, id: authUser.uid, companyId, sectorId, sectorName });
       
       const saved = localStorage.getItem(`recent_stops_${parsedUser.id}`);
       if (saved) setRecentStops(JSON.parse(saved));
@@ -183,7 +185,10 @@ export default function TruckRunPage() {
   }, [firestore, user, toast]);
 
   useEffect(() => {
-    if (!firestore || !user || user.sectorId !== 'MILKRUN INTERNO') return;
+    const isMilkrun = user?.sectorName?.toUpperCase().includes('MILKRUN');
+    const isMilkrunAstec = user?.sectorName?.toUpperCase() === 'MILKRUN ASTEC';
+
+    if (!firestore || !user || !isMilkrun || isMilkrunAstec) return;
 
     const todayStr = format(new Date(), 'yyyy-MM-dd');
     const routesCol = collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/routes`);
@@ -335,11 +340,11 @@ export default function TruckRunPage() {
           </Button>
           <div>
             <h1 className="text-2xl font-bold">Iniciar Trajeto</h1>
-            {user?.sectorId === 'MILKRUN INTERNO' && <p className="text-sm text-primary font-medium">Setor: Milkrun Interno</p>}
+            {user?.sectorName && <p className="text-sm text-primary font-medium">Setor: {user.sectorName}</p>}
           </div>
         </div>
 
-        {user?.sectorId === 'MILKRUN INTERNO' && (
+        {user?.sectorName?.toUpperCase().includes('MILKRUN') && user?.sectorName?.toUpperCase() !== 'MILKRUN ASTEC' && (
           <section className="space-y-4">
             <h2 className="text-lg font-bold flex items-center gap-2 text-primary">
               <Milestone className="w-5 h-5" /> HOJE: Roteirização Programada
@@ -380,8 +385,18 @@ export default function TruckRunPage() {
                             </div>
                             <Button 
                               className="w-full h-10 gap-2" 
-                              onClick={() => handleStartRun(trip, route.vehicleId)}
-                              disabled={isSubmitting || (selectedVehicle !== '' && selectedVehicle !== route.vehicleId)}
+                              onClick={() => {
+                                if (selectedVehicle !== route.vehicleId) {
+                                  setSelectedVehicle(route.vehicleId);
+                                  toast({
+                                    title: "Veículo Selecionado",
+                                    description: `O veículo ${route.vehicleId} foi selecionado. Por favor, confirme a quilometragem abaixo antes de iniciar.`
+                                  });
+                                } else {
+                                  handleStartRun(trip, route.vehicleId);
+                                }
+                              }}
+                              disabled={isSubmitting}
                             >
                               <Play className="w-4 h-4 fill-current" /> INICIAR ESTA VIAGEM
                             </Button>
@@ -401,8 +416,8 @@ export default function TruckRunPage() {
           </section>
         )}
         
-        <section className={user?.sectorId === 'MILKRUN INTERNO' ? 'opacity-80' : ''}>
-          <h2 className="text-xl font-semibold text-foreground mb-4">Informações da Corrida {user?.sectorId === 'MILKRUN INTERNO' ? 'Manual' : ''}</h2>
+        <section className={user?.sectorName?.toUpperCase().includes('MILKRUN') && user?.sectorName?.toUpperCase() !== 'MILKRUN ASTEC' ? 'opacity-80' : ''}>
+          <h2 className="text-xl font-semibold text-foreground mb-4">Informações da Corrida {user?.sectorName?.toUpperCase().includes('MILKRUN') && user?.sectorName?.toUpperCase() !== 'MILKRUN ASTEC' ? 'Manual' : ''}</h2>
           <div className="space-y-4">
             <div className="space-y-1">
               <Label htmlFor="veiculo">Veículo</Label>
@@ -431,7 +446,7 @@ export default function TruckRunPage() {
 
         <Separator />
 
-        <section className={user?.sectorId === 'MILKRUN INTERNO' ? 'opacity-80' : ''}>
+        <section className={user?.sectorName?.toUpperCase().includes('MILKRUN') && user?.sectorName?.toUpperCase() !== 'MILKRUN ASTEC' ? 'opacity-80' : ''}>
            <h2 className="text-xl font-semibold text-foreground mb-4">Destino</h2>
             <div className="space-y-4">
                 {recentStops.length > 0 && (

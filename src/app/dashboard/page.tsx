@@ -4,11 +4,11 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useFirebase } from '@/firebase';
 import { collection, onSnapshot, query, where, Timestamp, getDocs, getDoc, doc, setDoc, deleteDoc, collectionGroup, orderBy, writeBatch } from 'firebase/firestore';
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
+    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, Truck, User, Wrench, PlayCircle, Route, Timer, X, Hourglass, MapIcon, Milestone, Maximize, Car, Package, Warehouse, CheckCircle, Clock, Calendar as CalendarIcon, Fuel, ClipboardCheck, Building, Download, Trash2, FileText, EyeOff, MapPin, Plus, ArrowLeft, ArrowRight, Edit, Check } from 'lucide-react';
@@ -75,7 +75,7 @@ const formatTimeDiff = (start: Date, end: Date) => {
 
 const processRunSegments = (run: AggregatedRun | Run | null, isAggregated: boolean = true): Segment[] => {
     if (!run || !run.locationHistory || run.locationHistory.length === 0) return [];
-    
+
     const sortedAndFilteredLocations = filterLocationOutliers([...run.locationHistory].sort((a, b) => a.timestamp.seconds - b.timestamp.seconds));
     const sortedStops = [...run.stops].filter(s => s.status === 'COMPLETED' || s.status === 'IN_PROGRESS').sort((a, b) => (a.arrivalTime?.seconds || Infinity) - (b.arrivalTime?.seconds || Infinity));
     const segments: Segment[] = [];
@@ -152,36 +152,36 @@ type StopStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELED';
 type FirebaseTimestamp = Timestamp;
 
 export type LocationPoint = {
-  latitude: number;
-  longitude: number;
-  timestamp: FirebaseTimestamp;
+    latitude: number;
+    longitude: number;
+    timestamp: FirebaseTimestamp;
 };
 
 export type Stop = {
-  name: string;
-  status: StopStatus;
-  arrivalTime: FirebaseTimestamp | null;
-  departureTime: FirebaseTimestamp | null;
-  collectedOccupiedCars: number | null;
-  collectedEmptyCars: number | null;
-  mileageAtStop: number | null;
-  occupancy: number | null;
-  observation?: string;
+    name: string;
+    status: StopStatus;
+    arrivalTime: FirebaseTimestamp | null;
+    departureTime: FirebaseTimestamp | null;
+    collectedOccupiedCars: number | null;
+    collectedEmptyCars: number | null;
+    mileageAtStop: number | null;
+    occupancy: number | null;
+    observation?: string;
 };
 
 export type Run = {
-  id: string;
-  driverId: string;
-  driverName: string;
-  vehicleId: string;
-  startMileage: number;
-  startTime: FirebaseTimestamp;
-  endTime?: FirebaseTimestamp | null;
-  endMileage?: number | null;
-  status: 'IN_PROGRESS' | 'COMPLETED';
-  stops: Stop[];
-  sectorId?: string;
-  locationHistory?: LocationPoint[];
+    id: string;
+    driverId: string;
+    driverName: string;
+    vehicleId: string;
+    startMileage: number;
+    startTime: FirebaseTimestamp;
+    endTime?: FirebaseTimestamp | null;
+    endMileage?: number | null;
+    status: 'IN_PROGRESS' | 'COMPLETED';
+    stops: Stop[];
+    sectorId?: string;
+    locationHistory?: LocationPoint[];
 };
 
 export type AggregatedRun = {
@@ -204,31 +204,31 @@ export type AggregatedRun = {
 
 // --- Tipos para Roteirização ---
 type PlannedStop = {
-  name: string;
-  plannedArrival: string;
-  plannedDeparture: string;
+    name: string;
+    plannedArrival: string;
+    plannedDeparture: string;
 };
 
 type PlannedTrip = {
-  id: string;
-  name: string;
-  stops: PlannedStop[];
+    id: string;
+    name: string;
+    stops: PlannedStop[];
 };
 
 type PlannedRoute = {
-  id: string;
-  vehicleId: string;
-  trips: PlannedTrip[];
-  date: string; // ISO YYYY-MM-DD
+    id: string;
+    vehicleId: string;
+    trips: PlannedTrip[];
+    date: string; // ISO YYYY-MM-DD
 };
 
 export type FirestoreUser = {
-  id: string;
-  name:string;
-  shift?: string;
-  photoURL?: string;
-  isAdmin?: boolean;
-  truck?: boolean;
+    id: string;
+    name: string;
+    shift?: string;
+    photoURL?: string;
+    isAdmin?: boolean;
+    truck?: boolean;
 }
 
 export type Segment = {
@@ -243,11 +243,11 @@ export type Segment = {
 }
 
 type UserData = {
-  name: string;
-  isAdmin: boolean;
-  companyId: string;
-  sectorId: string;
-  matricula: string;
+    name: string;
+    isAdmin: boolean;
+    companyId: string;
+    sectorId: string;
+    matricula: string;
 };
 
 type SectorInfo = {
@@ -256,8 +256,8 @@ type SectorInfo = {
 }
 
 const RealTimeMap = dynamic(() => import('./RealTimeMap'), {
-  ssr: false,
-  loading: () => <div className="flex justify-center items-center h-full"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+    ssr: false,
+    loading: () => <div className="flex justify-center items-center h-full"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
 });
 
 
@@ -273,7 +273,7 @@ const AcompanhamentoTab = ({ activeTab }: { activeTab: string }) => {
     const [selectedRunKeyForMap, setSelectedRunKeyForMap] = useState<string | null>(null);
     const [highlightedSegmentId, setHighlightedSegmentId] = useState<string | null>(null);
     const [isClient, setIsClient] = useState(false);
-    
+
     // From VisaoGeral
     type Vehicle = { id: string; model: string; isTruck: boolean; status: 'PARADO' | 'EM_CORRIDA' | 'EM_MANUTENCAO'; };
     const [vehicleStatuses, setVehicleStatuses] = useState<(Vehicle & { driverName?: string })[]>([]);
@@ -313,10 +313,10 @@ const AcompanhamentoTab = ({ activeTab }: { activeTab: string }) => {
         // Combined listener for Vehicles and Runs
         const vehiclesCol = collection(firestore, `companies/${companyId}/sectors/${sectorId}/vehicles`);
         const vehiclesQuery = query(vehiclesCol, where('isTruck', '==', true));
-        
+
         const unsubscribeVehicles = onSnapshot(vehiclesQuery, (vehiclesSnapshot) => {
             const allTrucks = vehiclesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Vehicle));
-            
+
             const todayStart = startOfDay(new Date());
             const todayEnd = endOfDay(new Date());
             const runsCol = collection(firestore, `companies/${companyId}/sectors/${sectorId}/runs`);
@@ -325,7 +325,7 @@ const AcompanhamentoTab = ({ activeTab }: { activeTab: string }) => {
             const unsubscribeRuns = onSnapshot(runsQuery, (runsSnapshot) => {
                 const activeRunsMap = new Map<string, string>();
                 const runs = runsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Run));
-                
+
                 runs.forEach(run => {
                     if (run.status === 'IN_PROGRESS') {
                         activeRunsMap.set(run.vehicleId, run.driverName);
@@ -349,7 +349,7 @@ const AcompanhamentoTab = ({ activeTab }: { activeTab: string }) => {
                 setIsLoading(false);
                 setIsOverviewLoading(false);
             });
-            
+
             return () => unsubscribeRuns();
         }, (error) => {
             console.error("Error fetching vehicles: ", error);
@@ -374,11 +374,11 @@ const AcompanhamentoTab = ({ activeTab }: { activeTab: string }) => {
 
         const aggregated: AggregatedRun[] = [];
         groupedRuns.forEach((runs, key) => {
-            runs.sort((a,b) => a.startTime.seconds - b.startTime.seconds);
+            runs.sort((a, b) => a.startTime.seconds - b.startTime.seconds);
             const firstRun = runs[0];
             const lastRun = runs[runs.length - 1];
             const driver = users.get(firstRun.driverId);
-            const allStops = runs.flatMap(r => r.stops).sort((a,b) => (a.arrivalTime?.seconds || 0) - (b.arrivalTime?.seconds || 0));
+            const allStops = runs.flatMap(r => r.stops).sort((a, b) => (a.arrivalTime?.seconds || 0) - (b.arrivalTime?.seconds || 0));
             const allLocations = runs.flatMap(r => r.locationHistory || []).sort((a, b) => a.timestamp.seconds - b.timestamp.seconds);
             const startMileage = firstRun.startMileage;
             const endMileage = lastRun.endMileage ?? allStops.filter(s => s.mileageAtStop).slice(-1)[0]?.mileageAtStop ?? null;
@@ -387,14 +387,14 @@ const AcompanhamentoTab = ({ activeTab }: { activeTab: string }) => {
 
             aggregated.push({ key, driverId: firstRun.driverId, driverName: firstRun.driverName, vehicleId: firstRun.vehicleId, shift: driver?.shift || 'N/A', date: format(firstRun.startTime.toDate(), 'dd/MM/yyyy'), startTime: firstRun.startTime, endTime: lastRun.endTime, totalDistance, stops: allStops, locationHistory: allLocations, originalRuns: runs, startMileage, status });
         });
-        
+
         return aggregated.sort((a, b) => {
             if (a.status === 'IN_PROGRESS' && b.status !== 'IN_PROGRESS') return -1;
             if (a.status !== 'IN_PROGRESS' && b.status === 'IN_PROGRESS') return 1;
             return b.startTime.seconds - a.startTime.seconds;
         });
     }, [allRuns, users]);
-    
+
     useEffect(() => {
         const inProgressRuns = aggregatedRuns.filter(run => run.status === 'IN_PROGRESS');
         const truckLocations = inProgressRuns.flatMap(run => {
@@ -437,7 +437,7 @@ const AcompanhamentoTab = ({ activeTab }: { activeTab: string }) => {
         if (!highlightedSegmentId) return segments.map(s => ({ ...s, opacity: 0.9 }));
         return segments.map(s => ({ ...s, opacity: s.id === highlightedSegmentId ? 1.0 : 0.3 }));
     }, [selectedRunForMap, highlightedSegmentId]);
-    
+
     const kpis = {
         total: vehicleStatuses.length,
         emCorrida: vehicleStatuses.filter(v => v.status === 'EM_CORRIDA').length,
@@ -447,7 +447,7 @@ const AcompanhamentoTab = ({ activeTab }: { activeTab: string }) => {
 
     return (
         <div className="space-y-6">
-             {isOverviewLoading ? (
+            {isOverviewLoading ? (
                 <div className="space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                         {[1, 2, 3, 4].map((i) => (
@@ -468,7 +468,7 @@ const AcompanhamentoTab = ({ activeTab }: { activeTab: string }) => {
                         <CardHeader>
                             <div className="flex justify-between items-center">
                                 <div>
-                                    <CardTitle className="flex items-center gap-2"><Truck className="h-6 w-6"/> Status da Frota</CardTitle>
+                                    <CardTitle className="flex items-center gap-2"><Truck className="h-6 w-6" /> Status da Frota</CardTitle>
                                     <CardDescription>Visão geral de todos os caminhões do setor.</CardDescription>
                                 </div>
                                 <Button variant="outline" size="icon" onClick={() => setIsFleetMapOpen(true)} disabled={activeTrucks.length === 0}>
@@ -492,15 +492,15 @@ const AcompanhamentoTab = ({ activeTab }: { activeTab: string }) => {
 
             {isLoading ? (
                 <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
-            ): (
+            ) : (
                 <div className='mt-6'>
-                {aggregatedRuns.length === 0 ? (
-                    <Card className="text-center p-8 mt-6"><CardHeader><CardTitle>Nenhuma atividade hoje</CardTitle><CardDescription>Não há motoristas em rota ou corridas finalizadas hoje.</CardDescription></CardHeader></Card>
-                ) : (
-                    <Accordion type="single" collapsible className="w-full space-y-4" defaultValue={aggregatedRuns.find(r => r.status === 'IN_PROGRESS')?.key || aggregatedRuns[0]?.key}>
-                        {aggregatedRuns.map(run => <RunAccordionItem key={run.key} run={run} users={users} onViewRoute={() => handleViewRoute(run.key)} />)}
-                    </Accordion>
-                )}
+                    {aggregatedRuns.length === 0 ? (
+                        <Card className="text-center p-8 mt-6"><CardHeader><CardTitle>Nenhuma atividade hoje</CardTitle><CardDescription>Não há motoristas em rota ou corridas finalizadas hoje.</CardDescription></CardHeader></Card>
+                    ) : (
+                        <Accordion type="single" collapsible className="w-full space-y-4" defaultValue={aggregatedRuns.find(r => r.status === 'IN_PROGRESS')?.key || aggregatedRuns[0]?.key}>
+                            {aggregatedRuns.map(run => <RunAccordionItem key={run.key} run={run} users={users} onViewRoute={() => handleViewRoute(run.key)} />)}
+                        </Accordion>
+                    )}
                 </div>
             )}
             <Dialog open={selectedRunForMap !== null} onOpenChange={(isOpen) => !isOpen && handleCloseDialog()}>
@@ -521,7 +521,7 @@ const AcompanhamentoTab = ({ activeTab }: { activeTab: string }) => {
                                 <div className="lg:col-span-1 flex flex-col min-h-0">
                                     <div className="flex items-center justify-between mb-2">
                                         <h4 className="font-semibold">Detalhes da Rota</h4>
-                                        {highlightedSegmentId && <Button variant="ghost" size="sm" onClick={() => setHighlightedSegmentId(null)}><EyeOff className="mr-2 h-4 w-4"/> Limpar</Button>}
+                                        {highlightedSegmentId && <Button variant="ghost" size="sm" onClick={() => setHighlightedSegmentId(null)}><EyeOff className="mr-2 h-4 w-4" /> Limpar</Button>}
                                     </div>
                                     <ScrollArea className="flex-1 -mr-6 pr-6"><RunDetailsContent run={selectedRunForMap} onSegmentClick={setHighlightedSegmentId} highlightedSegmentId={highlightedSegmentId} /></ScrollArea>
                                 </div>
@@ -558,24 +558,24 @@ const KpiCard = ({ title, value, icon: Icon }: { title: string; value: string | 
 );
 
 const VehicleStatusCard = ({ vehicle }: { vehicle: any }) => {
-  const getStatusDetails = (status: string | undefined) => {
-    switch (status) {
-      case 'EM_CORRIDA': return { text: 'EM CORRIDA', badgeClass: 'bg-blue-600', cardClass: 'bg-blue-50 dark:bg-blue-900/30' };
-      case 'EM_MANUTENCAO': return { text: 'MANUTENÇÃO', badgeClass: 'bg-yellow-500', cardClass: 'bg-yellow-50 dark:bg-yellow-900/30' };
-      case 'PARADO': default: return { text: 'PARADO', badgeClass: 'bg-green-600', cardClass: 'bg-green-50 dark:bg-green-800/30' };
-    }
-  };
-  const { text, badgeClass, cardClass } = getStatusDetails(vehicle.status);
-  return (
-    <Card className={`flex flex-col items-center justify-center p-4 text-center ${cardClass}`}>
-        <p className="font-bold text-lg">{vehicle.id}</p>
-        <p className="text-xs text-muted-foreground -mt-1 mb-2">{vehicle.model}</p>
-        <Badge variant={'default'} className={`${badgeClass} hover:${badgeClass}`}>{text}</Badge>
-        {vehicle.status === 'EM_CORRIDA' && vehicle.driverName && (
-            <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1"><User className="h-3 w-3"/>{vehicle.driverName}</p>
-        )}
-    </Card>
-  )
+    const getStatusDetails = (status: string | undefined) => {
+        switch (status) {
+            case 'EM_CORRIDA': return { text: 'EM CORRIDA', badgeClass: 'bg-blue-600', cardClass: 'bg-blue-50 dark:bg-blue-900/30' };
+            case 'EM_MANUTENCAO': return { text: 'MANUTENÇÃO', badgeClass: 'bg-yellow-500', cardClass: 'bg-yellow-50 dark:bg-yellow-900/30' };
+            case 'PARADO': default: return { text: 'PARADO', badgeClass: 'bg-green-600', cardClass: 'bg-green-50 dark:bg-green-800/30' };
+        }
+    };
+    const { text, badgeClass, cardClass } = getStatusDetails(vehicle.status);
+    return (
+        <Card className={`flex flex-col items-center justify-center p-4 text-center ${cardClass}`}>
+            <p className="font-bold text-lg">{vehicle.id}</p>
+            <p className="text-xs text-muted-foreground -mt-1 mb-2">{vehicle.model}</p>
+            <Badge variant={'default'} className={`${badgeClass} hover:${badgeClass}`}>{text}</Badge>
+            {vehicle.status === 'EM_CORRIDA' && vehicle.driverName && (
+                <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1"><User className="h-3 w-3" />{vehicle.driverName}</p>
+            )}
+        </Card>
+    )
 };
 
 const RunAccordionItem = ({ run, users, onViewRoute }: { run: AggregatedRun, users: Map<string, FirestoreUser>, onViewRoute: () => void }) => {
@@ -587,7 +587,7 @@ const RunAccordionItem = ({ run, users, onViewRoute }: { run: AggregatedRun, use
     const driver = users.get(run.driverId);
     const formatFirebaseTime = (ts: FirebaseTimestamp | null | undefined) => ts ? format(new Date(ts.seconds * 1000), 'HH:mm') : '--:--';
     const getInitials = (name: string) => name.split(' ').map(n => n[0]).slice(0, 2).join('');
-  
+
     return (
         <AccordionItem value={run.key} className="bg-card border rounded-lg shadow-sm">
             <AccordionTrigger className="p-4 hover:no-underline">
@@ -597,12 +597,12 @@ const RunAccordionItem = ({ run, users, onViewRoute }: { run: AggregatedRun, use
                         <div className="text-sm text-muted-foreground flex items-center gap-2"><Avatar className="h-5 w-5"><AvatarImage src={driver?.photoURL} alt={run.driverName} /><AvatarFallback className="text-xs">{getInitials(run.driverName)}</AvatarFallback></Avatar>{run.driverName}</div>
                     </div>
                     <div className="flex-1 w-full sm:w-auto"><div className="flex justify-between text-sm mb-1"><span className="font-medium">{isCompletedRun ? 'Concluído' : `${completedStops} de ${totalStops}`}</span><span className="font-bold text-primary">{Math.round(progress)}%</span></div><Progress value={progress} className="h-2" /></div>
-                    <div className="flex-none"><Badge variant={isCompletedRun ? 'default' : (currentStop ? "default" : "secondary")} className={`truncate ${isCompletedRun ? 'bg-green-600' : ''}`}><MapPin className="h-3 w-3 mr-1.5"/>{isCompletedRun ? `Finalizado às ${formatFirebaseTime(run.endTime)}` : (currentStop ? currentStop.name : 'Iniciando...')}</Badge></div>
+                    <div className="flex-none"><Badge variant={isCompletedRun ? 'default' : (currentStop ? "default" : "secondary")} className={`truncate ${isCompletedRun ? 'bg-green-600' : ''}`}><MapPin className="h-3 w-3 mr-1.5" />{isCompletedRun ? `Finalizado às ${formatFirebaseTime(run.endTime)}` : (currentStop ? currentStop.name : 'Iniciando...')}</Badge></div>
                 </div>
             </AccordionTrigger>
             <AccordionContent className="p-4 pt-0">
                 <div className="space-y-4 mt-4">
-                    <div className="flex justify-between items-center mb-2"><h4 className="font-semibold">Detalhes da Rota</h4><Button variant="outline" size="sm" onClick={onViewRoute}><Route className="mr-2 h-4 w-4"/> Ver Acompanhamento</Button></div>
+                    <div className="flex justify-between items-center mb-2"><h4 className="font-semibold">Detalhes da Rota</h4><Button variant="outline" size="sm" onClick={onViewRoute}><Route className="mr-2 h-4 w-4" /> Ver Acompanhamento</Button></div>
                     <RunDetailsContent run={run} />
                 </div>
             </AccordionContent>
@@ -634,8 +634,8 @@ const RunDetailsContent = ({ run, onSegmentClick, highlightedSegmentId }: { run:
                             const arrivalTime = stop.arrivalTime ? new Date(stop.arrivalTime.seconds * 1000) : null;
                             const departureTime = stop.departureTime ? new Date(stop.departureTime.seconds * 1000) : null;
                             const travelStartTime = lastDepartureTime;
-                            const stopTime = arrivalTime && departureTime ? formatDistanceStrict(arrivalTime, departureTime, { locale: ptBR, unit: 'minute'}) : null;
-                            const segmentDistance = (stop.mileageAtStop && lastMileage) ? stop.mileageAtStop - lastMileage : null;
+                            const stopTime = arrivalTime && departureTime ? formatDistanceStrict(arrivalTime, departureTime, { locale: ptBR, unit: 'minute' }) : null;
+                             const segmentDistance = (stop.mileageAtStop !== null && stop.mileageAtStop !== undefined && lastMileage !== null && lastMileage !== undefined) ? stop.mileageAtStop - lastMileage : null;
                             if (stop.departureTime) lastDepartureTime = stop.departureTime!;
                             if (stop.mileageAtStop) lastMileage = stop.mileageAtStop;
                             const segmentId = stop.status !== 'PENDING' ? `segment-${segmentCounter++}` : ``;
@@ -645,11 +645,11 @@ const RunDetailsContent = ({ run, onSegmentClick, highlightedSegmentId }: { run:
                                     <div className="flex-1">
                                         <p className="font-medium">{stop.name}</p><p className={`text-xs ${isCompletedStop ? 'text-muted-foreground' : color}`}>{label}</p>
                                         <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground mt-1">
-                                            {stop.arrivalTime && <span className='flex items-center gap-1'><Route className="h-3 w-3 text-gray-400"/> Viagem: <strong>{formatFirebaseTime(travelStartTime)} - {formatFirebaseTime(stop.arrivalTime)}</strong></span>}
-                                            {stopTime && <span className='flex items-center gap-1'><Timer className="h-3 w-3 text-gray-400"/> Parada: <strong>{stopTime}</strong></span>}
-                                            {segmentDistance !== null && <span className='flex items-center gap-1'><Milestone className="h-3 w-3 text-gray-400"/> Distância: <strong>{segmentDistance.toFixed(1)} km</strong></span>}
-                                            {stop.collectedOccupiedCars !== null && <span className='flex items-center gap-1'><Car className="h-3 w-3 text-gray-400"/> Ocupados: <strong>{stop.collectedOccupiedCars}</strong></span>}
-                                            {stop.collectedEmptyCars !== null && <span className='flex items-center gap-1'><Package className="h-3 w-3 text-gray-400"/> Vazios: <strong>{stop.collectedEmptyCars}</strong></span>}
+                                            {stop.arrivalTime && <span className='flex items-center gap-1'><Route className="h-3 w-3 text-gray-400" /> Viagem: <strong>{formatFirebaseTime(travelStartTime)} - {formatFirebaseTime(stop.arrivalTime)}</strong></span>}
+                                            {stopTime && <span className='flex items-center gap-1'><Timer className="h-3 w-3 text-gray-400" /> Parada: <strong>{stopTime}</strong></span>}
+                                            {segmentDistance !== null && <span className='flex items-center gap-1'><Milestone className="h-3 w-3 text-gray-400" /> Distância: <strong>{segmentDistance.toFixed(1)} km</strong></span>}
+                                            {stop.collectedOccupiedCars !== null && <span className='flex items-center gap-1'><Car className="h-3 w-3 text-gray-400" /> Ocupados: <strong>{stop.collectedOccupiedCars}</strong></span>}
+                                            {stop.collectedEmptyCars !== null && <span className='flex items-center gap-1'><Package className="h-3 w-3 text-gray-400" /> Vazios: <strong>{stop.collectedEmptyCars}</strong></span>}
                                         </div>
                                         {stop.observation && <div className="border-t mt-2 pt-2"><p className="text-xs text-muted-foreground"><strong>Obs:</strong> {stop.observation}</p></div>}
                                     </div>
@@ -672,7 +672,7 @@ const AnaliseTab = ({ activeTab }: { activeTab: string }) => {
     const [isSuperAdmin, setIsSuperAdmin] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [date, setDate] = useState<DateRange | undefined>({ from: startOfDay(subDays(new Date(), 6)), to: endOfDay(new Date()) });
-    
+
     // Data states
     const [allSectors, setAllSectors] = useState<SectorInfo[]>([]);
     const [users, setUsers] = useState<Map<string, FirestoreUser>>(new Map());
@@ -683,7 +683,7 @@ const AnaliseTab = ({ activeTab }: { activeTab: string }) => {
     const [selectedVehicle, setSelectedVehicle] = useState<string>('all');
     const [selectedDriver, setSelectedDriver] = useState<string>('all');
     const [selectedSector, setSelectedSector] = useState<string>('all');
-    
+
     useEffect(() => {
         const storedUser = localStorage.getItem('user');
         const companyId = localStorage.getItem('companyId');
@@ -701,7 +701,7 @@ const AnaliseTab = ({ activeTab }: { activeTab: string }) => {
             setIsLoading(true);
             try {
                 const usersMap = new Map<string, FirestoreUser>();
-                const sectorRefsToFetch: {id: string, name: string}[] = [];
+                const sectorRefsToFetch: { id: string, name: string }[] = [];
 
                 if (isSuperAdmin) {
                     const sectorsSnapshot = await getDocs(collection(firestore, `companies/${user.companyId}/sectors`));
@@ -711,13 +711,13 @@ const AnaliseTab = ({ activeTab }: { activeTab: string }) => {
                     if (sectorSnap.exists()) sectorRefsToFetch.push({ id: sectorSnap.id, name: sectorSnap.data().name as string });
                 }
                 setAllSectors(sectorRefsToFetch);
-                
+
                 const runsPromises = sectorRefsToFetch.map(async (sector) => {
                     const usersSnapshot = await getDocs(collection(firestore, `companies/${user.companyId}/sectors/${sector.id}/users`));
                     usersSnapshot.forEach(doc => { if (!usersMap.has(doc.id)) usersMap.set(doc.id, { id: doc.id, ...doc.data() } as FirestoreUser); });
-                    
+
                     const runsQuery = query(
-                        collection(firestore, `companies/${user.companyId}/sectors/${sector.id}/runs`), 
+                        collection(firestore, `companies/${user.companyId}/sectors/${sector.id}/runs`),
                         where('startTime', '>=', startOfDay(date.from!)),
                         where('startTime', '<=', endOfDay(date.to || date.from!))
                     );
@@ -733,7 +733,7 @@ const AnaliseTab = ({ activeTab }: { activeTab: string }) => {
                 setAllRuns(allFetchedRuns);
             } catch (error) {
                 console.error("Error fetching data: ", error);
-                 if ((error as any).code === 'failed-precondition') {
+                if ((error as any).code === 'failed-precondition') {
                     toast({ variant: 'destructive', title: 'Índice necessário no Firestore', description: 'Para otimizar esta consulta, um índice composto é necessário. Por favor, crie-o no console do Firebase.', duration: 8000 });
                 } else {
                     toast({ variant: 'destructive', title: 'Erro ao buscar dados' });
@@ -752,7 +752,7 @@ const AnaliseTab = ({ activeTab }: { activeTab: string }) => {
 
         const drivers = new Map<string, FirestoreUser>();
         allRuns.forEach(run => { if (!drivers.has(run.driverId)) { const driverInfo = users.get(run.driverId); if (driverInfo) drivers.set(run.driverId, driverInfo); } });
-        
+
         const finalFiltered = allRuns.filter(run => {
             const driver = users.get(run.driverId);
             if (selectedShift !== 'Todos' && driver?.shift !== selectedShift) return false;
@@ -772,7 +772,7 @@ const AnaliseTab = ({ activeTab }: { activeTab: string }) => {
         const totalStops = filteredRuns.reduce((acc, run) => acc + run.stops.length, 0);
         return { totalRuns, totalDistance, avgDurationMinutes, totalStops };
     }, [filteredRuns]);
-    
+
     const chartData = useMemo(() => {
         if (!date || !date.from) return { runsByDay: [], distanceByVehicle: [], stoppedTimeByVehicle: [] };
         const from = startOfDay(date.from);
@@ -781,7 +781,7 @@ const AnaliseTab = ({ activeTab }: { activeTab: string }) => {
         for (let d = new Date(from); d <= to; d.setDate(d.getDate() + 1)) dateMap.set(format(d, 'dd/MM'), 0);
         filteredRuns.forEach(run => {
             const day = format(new Date(run.startTime.seconds * 1000), 'dd/MM');
-            if(dateMap.has(day)) dateMap.set(day, (dateMap.get(day) || 0) + 1);
+            if (dateMap.has(day)) dateMap.set(day, (dateMap.get(day) || 0) + 1);
         });
         const distanceMap = new Map<string, number>();
         filteredRuns.forEach(run => { const distance = (run.endMileage || run.startMileage) - run.startMileage; if (distance > 0) distanceMap.set(run.vehicleId, (distanceMap.get(run.vehicleId) || 0) + distance); });
@@ -790,8 +790,8 @@ const AnaliseTab = ({ activeTab }: { activeTab: string }) => {
             let runStopTimeSeconds = run.stops.reduce((acc, stop) => acc + (stop.arrivalTime && stop.departureTime && stop.departureTime.seconds - stop.arrivalTime.seconds > 0 ? stop.departureTime.seconds - stop.arrivalTime.seconds : 0), 0);
             if (runStopTimeSeconds > 0) stoppedTimeMap.set(run.vehicleId, (stoppedTimeMap.get(run.vehicleId) || 0) + runStopTimeSeconds);
         });
-        const stoppedTimes = Array.from(stoppedTimeMap.entries()).map(([name, totalSeconds]) => ({ name, total: parseFloat((totalSeconds / 3600).toFixed(1)) })).sort((a,b) => b.total - a.total);
-        return { runsByDay: Array.from(dateMap, ([name, total]) => ({ name, total })), distanceByVehicle: Array.from(distanceMap, ([name, total]) => ({ name, total: Math.round(total) })).sort((a,b) => b.total - a.total), stoppedTimeByVehicle: stoppedTimes };
+        const stoppedTimes = Array.from(stoppedTimeMap.entries()).map(([name, totalSeconds]) => ({ name, total: parseFloat((totalSeconds / 3600).toFixed(1)) })).sort((a, b) => b.total - a.total);
+        return { runsByDay: Array.from(dateMap, ([name, total]) => ({ name, total })), distanceByVehicle: Array.from(distanceMap, ([name, total]) => ({ name, total: Math.round(total) })).sort((a, b) => b.total - a.total), stoppedTimeByVehicle: stoppedTimes };
     }, [filteredRuns, date]);
 
     if (isLoading) {
@@ -809,19 +809,19 @@ const AnaliseTab = ({ activeTab }: { activeTab: string }) => {
                     <DriverFilter drivers={driverList} selectedDriver={selectedDriver} onDriverChange={setSelectedDriver} />
                 </div>
             </div>
-             <div className="py-6 space-y-4">
-                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                     <KpiCard title="Corridas Concluídas" value={kpis.totalRuns} icon={ClipboardCheck} />
-                     <KpiCard title="Paradas Totais" value={kpis.totalStops} icon={Milestone} />
-                     <KpiCard title="Distância Total" value={`${kpis.totalDistance.toFixed(1)} km`} icon={Route} />
-                     <KpiCard title="Duração Média" value={`${kpis.avgDurationMinutes.toFixed(0)} min`} icon={Timer} />
-                 </div>
-                 <div className="grid gap-6 lg:grid-cols-2">
-                     <ChartCard title="Corridas por Dia" description="Total de corridas concluídas por dia."><BarChart data={chartData.runsByDay}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="name" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} /><YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} allowDecimals={false} /><Tooltip cursor={{fill: 'hsl(var(--muted))'}} contentStyle={{backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)'}}/><Bar dataKey="total" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} /></BarChart></ChartCard>
-                     <ChartCard title="Km Rodados por Caminhão" description="Distância total percorrida por caminhão."><BarChart data={chartData.distanceByVehicle} layout="vertical"><CartesianGrid strokeDasharray="3 3" horizontal={false} /><XAxis type="number" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} /><YAxis type="category" dataKey="name" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} width={80} /><Tooltip cursor={{fill: 'hsl(var(--muted))'}} contentStyle={{backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)'}} formatter={(value) => `${value} km`}/><Bar dataKey="total" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} /></BarChart></ChartCard>
-                     <ChartCard title="Tempo Parado por Caminhão (Horas)" description="Soma do tempo em que o veículo ficou parado nas paradas (coletas/entregas)." className="lg:col-span-2"><BarChart data={chartData.stoppedTimeByVehicle}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="name" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} /><YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} unit="h" /><Tooltip cursor={{fill: 'hsl(var(--muted))'}} contentStyle={{backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)'}} formatter={(value: number) => `${value.toFixed(1)} horas`}/><Bar dataKey="total" fill="hsl(var(--destructive))" radius={[4, 4, 0, 0]} /></BarChart></ChartCard>
-                 </div>
-             </div>
+            <div className="py-6 space-y-4">
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                    <KpiCard title="Corridas Concluídas" value={kpis.totalRuns} icon={ClipboardCheck} />
+                    <KpiCard title="Paradas Totais" value={kpis.totalStops} icon={Milestone} />
+                    <KpiCard title="Distância Total" value={`${kpis.totalDistance.toFixed(1)} km`} icon={Route} />
+                    <KpiCard title="Duração Média" value={`${kpis.avgDurationMinutes.toFixed(0)} min`} icon={Timer} />
+                </div>
+                <div className="grid gap-6 lg:grid-cols-2">
+                    <ChartCard title="Corridas por Dia" description="Total de corridas concluídas por dia."><BarChart data={chartData.runsByDay}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="name" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} /><YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} allowDecimals={false} /><Tooltip cursor={{ fill: 'hsl(var(--muted))' }} contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)' }} /><Bar dataKey="total" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} /></BarChart></ChartCard>
+                    <ChartCard title="Km Rodados por Caminhão" description="Distância total percorrida por caminhão."><BarChart data={chartData.distanceByVehicle} layout="vertical"><CartesianGrid strokeDasharray="3 3" horizontal={false} /><XAxis type="number" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} /><YAxis type="category" dataKey="name" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} width={80} /><Tooltip cursor={{ fill: 'hsl(var(--muted))' }} contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)' }} formatter={(value) => `${value} km`} /><Bar dataKey="total" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} /></BarChart></ChartCard>
+                    <ChartCard title="Tempo Parado por Caminhão (Horas)" description="Soma do tempo em que o veículo ficou parado nas paradas (coletas/entregas)." className="lg:col-span-2"><BarChart data={chartData.stoppedTimeByVehicle}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="name" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} /><YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} unit="h" /><Tooltip cursor={{ fill: 'hsl(var(--muted))' }} contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)' }} formatter={(value: number) => `${value.toFixed(1)} horas`} /><Bar dataKey="total" fill="hsl(var(--destructive))" radius={[4, 4, 0, 0]} /></BarChart></ChartCard>
+                </div>
+            </div>
         </div>
     );
 };
@@ -837,7 +837,7 @@ const HistoricoTab = ({ activeTab }: { activeTab: string }) => {
     const [date, setDate] = useState<DateRange | undefined>({ from: startOfDay(subDays(new Date(), 6)), to: endOfDay(new Date()) });
     const [selectedRunForDialog, setSelectedRunForDialog] = useState<AggregatedRun | null>(null);
     const [isClient, setIsClient] = useState(false);
-    
+
     // Data states
     const [allSectors, setAllSectors] = useState<SectorInfo[]>([]);
     const [users, setUsers] = useState<Map<string, FirestoreUser>>(new Map());
@@ -872,7 +872,7 @@ const HistoricoTab = ({ activeTab }: { activeTab: string }) => {
             setIsLoading(true);
             try {
                 const usersMap = new Map<string, FirestoreUser>();
-                const sectorRefsToFetch: {id: string, name: string}[] = [];
+                const sectorRefsToFetch: { id: string, name: string }[] = [];
 
                 if (isSuperAdmin) {
                     const sectorsSnapshot = await getDocs(collection(firestore, `companies/${user.companyId}/sectors`));
@@ -882,13 +882,13 @@ const HistoricoTab = ({ activeTab }: { activeTab: string }) => {
                     if (sectorSnap.exists()) sectorRefsToFetch.push({ id: sectorSnap.id, name: sectorSnap.data().name as string });
                 }
                 setAllSectors(sectorRefsToFetch);
-                
+
                 const runsPromises = sectorRefsToFetch.map(async (sector) => {
                     const usersSnapshot = await getDocs(collection(firestore, `companies/${user.companyId}/sectors/${sector.id}/users`));
                     usersSnapshot.forEach(doc => { if (!usersMap.has(doc.id)) usersMap.set(doc.id, { id: doc.id, ...doc.data() } as FirestoreUser); });
-                    
+
                     const runsQuery = query(
-                        collection(firestore, `companies/${user.companyId}/sectors/${sector.id}/runs`), 
+                        collection(firestore, `companies/${user.companyId}/sectors/${sector.id}/runs`),
                         where('startTime', '>=', startOfDay(date.from!)),
                         where('startTime', '<=', endOfDay(date.to || date.from!))
                     );
@@ -913,7 +913,7 @@ const HistoricoTab = ({ activeTab }: { activeTab: string }) => {
                 setIsLoading(false);
             }
         };
-        
+
         fetchHistoryData();
     }, [firestore, user, toast, isSuperAdmin, date, activeTab]);
 
@@ -922,7 +922,7 @@ const HistoricoTab = ({ activeTab }: { activeTab: string }) => {
         allRuns.forEach(run => vehicles.add(run.vehicleId));
         const drivers = new Map<string, FirestoreUser>();
         allRuns.forEach(run => { if (!drivers.has(run.driverId)) { const driverInfo = users.get(run.driverId); if (driverInfo) drivers.set(run.driverId, driverInfo); } });
-        
+
         const finalFiltered = allRuns.filter(run => {
             const driver = users.get(run.driverId);
             if (selectedShift !== 'Todos' && driver?.shift !== selectedShift) return false;
@@ -935,12 +935,12 @@ const HistoricoTab = ({ activeTab }: { activeTab: string }) => {
         const paginatedRuns = finalFiltered.slice(0, page * pageSize);
         const hasMore = finalFiltered.length > page * pageSize;
 
-        return { 
-            filteredRuns: paginatedRuns, 
+        return {
+            filteredRuns: paginatedRuns,
             totalFiltered: finalFiltered.length,
             hasMore,
-            vehicleList: Array.from(vehicles).sort(), 
-            driverList: Array.from(drivers.values()).sort((a, b) => a.name.localeCompare(b.name)) 
+            vehicleList: Array.from(vehicles).sort(),
+            driverList: Array.from(drivers.values()).sort((a, b) => a.name.localeCompare(b.name))
         };
     }, [allRuns, selectedShift, selectedVehicle, selectedDriver, selectedSector, users, isSuperAdmin, page]);
 
@@ -955,11 +955,11 @@ const HistoricoTab = ({ activeTab }: { activeTab: string }) => {
         });
         const aggregatedMap = new Map<string, AggregatedRun>();
         groupedRuns.forEach((runs, key) => {
-            runs.sort((a,b) => a.startTime.seconds - b.startTime.seconds);
+            runs.sort((a, b) => a.startTime.seconds - b.startTime.seconds);
             const firstRun = runs[0];
             const lastRun = runs[runs.length - 1];
             const driver = users.get(firstRun.driverId);
-            const allStops = runs.flatMap(r => r.stops).filter(s => s.status === 'COMPLETED').sort((a,b) => (a.arrivalTime?.seconds || 0) - (b.arrivalTime?.seconds || 0));
+            const allStops = runs.flatMap(r => r.stops).filter(s => s.status === 'COMPLETED').sort((a, b) => (a.arrivalTime?.seconds || 0) - (b.arrivalTime?.seconds || 0));
             const allLocations = runs.flatMap(r => r.locationHistory || []).sort((a, b) => a.timestamp.seconds - b.timestamp.seconds);
             const totalDistance = runs.reduce((acc, run) => acc + ((run.endMileage ?? 0) - run.startMileage > 0 ? (run.endMileage ?? 0) - run.startMileage : 0), 0);
             const totalDuration = lastRun.endTime ? lastRun.endTime.seconds - firstRun.startTime.seconds : 0;
@@ -967,7 +967,7 @@ const HistoricoTab = ({ activeTab }: { activeTab: string }) => {
         });
         return aggregatedMap;
     }, [filteredRuns, users]);
-    
+
     const handleViewDetails = (run: Run) => {
         const driver = users.get(run.driverId);
         const runDate = format(run.startTime.toDate(), 'yyyy-MM-dd');
@@ -988,7 +988,7 @@ const HistoricoTab = ({ activeTab }: { activeTab: string }) => {
             toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível deletar a corrida.' });
         }
     };
-    
+
     const handleExport = () => {
         if (!filteredRuns.length) {
             toast({ variant: 'destructive', title: 'Nenhum dado para exportar.' });
@@ -1012,22 +1012,22 @@ const HistoricoTab = ({ activeTab }: { activeTab: string }) => {
                 const stopTime = totalStopTimeSeconds > 0 ? formatDistanceStrict(0, totalStopTimeSeconds * 1000, { locale: ptBR, unit: 'minute' }) : '0 min';
                 const observations = run.stops.map(s => s.observation).filter(Boolean).join('; ');
                 const occupancies = run.stops.map(s => s.occupancy !== null ? `${s.occupancy}%` : 'N/A').join(', ');
-                
-                return { 
-                    'Data': format(run.startTime.toDate(), 'dd/MM/yyyy'), 
-                    'Horário Inicial': format(run.startTime.toDate(), 'HH:mm'), 
-                    'Horário Final': run.endTime ? format(run.endTime.toDate(), 'HH:mm') : 'N/A', 
-                    'Duração Total': totalDuration, 
-                    'Tempo Parado (na corrida)': stopTime, 
-                    'Setor': sector?.name || run.sectorId, 
+
+                return {
+                    'Data': format(run.startTime.toDate(), 'dd/MM/yyyy'),
+                    'Horário Inicial': format(run.startTime.toDate(), 'HH:mm'),
+                    'Horário Final': run.endTime ? format(run.endTime.toDate(), 'HH:mm') : 'N/A',
+                    'Duração Total': totalDuration,
+                    'Tempo Parado (na corrida)': stopTime,
+                    'Setor': sector?.name || run.sectorId,
                     'Veículo': run.vehicleId,
                     'Motorista': run.driverName,
-                    'Turno': driver?.shift || 'N/A', 
-                    'Paradas': run.stops.map(s => s.name).join(', '), 
+                    'Turno': driver?.shift || 'N/A',
+                    'Paradas': run.stops.map(s => s.name).join(', '),
                     'Ocupação (%)': occupancies,
-                    'Observações': observations, 
-                    'Distância (km)': distance > 0 ? distance.toFixed(1) : '0.0', 
-                    'Km Inicial': run.startMileage, 
+                    'Observações': observations,
+                    'Distância (km)': distance > 0 ? distance.toFixed(1) : '0.0',
+                    'Km Inicial': run.startMileage,
                     'Km Final': run.endMileage || 'N/A',
                 };
             });
@@ -1056,7 +1056,7 @@ const HistoricoTab = ({ activeTab }: { activeTab: string }) => {
             </div>
         );
     }
-    
+
     return (
         <div className="space-y-6">
             <div className="flex justify-center">
@@ -1068,7 +1068,7 @@ const HistoricoTab = ({ activeTab }: { activeTab: string }) => {
                     <DriverFilter drivers={driverList} selectedDriver={selectedDriver} onDriverChange={setSelectedDriver} />
                 </div>
             </div>
-             <div className="py-6">
+            <div className="py-6">
                 <Card>
                     <CardHeader>
                         <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-4">
@@ -1092,13 +1092,13 @@ const HistoricoTab = ({ activeTab }: { activeTab: string }) => {
                                 </TableHeader>
                                 <TableBody>
                                     {filteredRuns.length > 0 ? filteredRuns.map(run => (
-                                        <HistoryTableRow 
-                                            key={run.id} 
-                                            run={run} 
-                                            users={users} 
-                                            onViewDetails={() => handleViewDetails(run)} 
-                                            isSuperAdmin={isSuperAdmin} 
-                                            onDelete={() => handleDelete(run)} 
+                                        <HistoryTableRow
+                                            key={run.id}
+                                            run={run}
+                                            users={users}
+                                            onViewDetails={() => handleViewDetails(run)}
+                                            isSuperAdmin={isSuperAdmin}
+                                            onDelete={() => handleDelete(run)}
                                         />
                                     )) : (
                                         <TableRow><TableCell colSpan={7} className="text-center h-24">Nenhuma corrida encontrada</TableCell></TableRow>
@@ -1115,7 +1115,7 @@ const HistoricoTab = ({ activeTab }: { activeTab: string }) => {
                         )}
                     </CardContent>
                 </Card>
-             </div>
+            </div>
 
             <RunDetailsDialog run={selectedRunForDialog} isOpen={selectedRunForDialog !== null} onClose={() => setSelectedRunForDialog(null)} isClient={isClient} />
         </div>
@@ -1126,8 +1126,8 @@ const HistoricoTab = ({ activeTab }: { activeTab: string }) => {
 const RoteirizacaoTab = () => {
     const { firestore } = useFirebase();
     const { toast } = useToast();
-    
-    const [vehicles, setVehicles] = useState<{id: string, model: string}[]>([]);
+
+    const [vehicles, setVehicles] = useState<{ id: string, model: string }[]>([]);
     const [routes, setRoutes] = useState<PlannedRoute[]>([]);
     const [selectedDate, setSelectedDate] = useState<Date>(new Date());
     const [isLoading, setIsLoading] = useState(true);
@@ -1142,221 +1142,219 @@ const RoteirizacaoTab = () => {
     const [vehicleFilter, setVehicleFilter] = useState<string>('all');
 
     const fetchVehicles = useCallback(async () => {
-      const companyId = localStorage.getItem('companyId');
-      const sectorId = localStorage.getItem('sectorId');
-      if (!firestore || !companyId || !sectorId) return;
+        const companyId = localStorage.getItem('companyId');
+        const sectorId = localStorage.getItem('sectorId');
+        if (!firestore || !companyId || !sectorId) return;
 
-      try {
-        const vehiclesCol = collection(firestore, `companies/${companyId}/sectors/${sectorId}/vehicles`);
-        const snapshot = await getDocs(vehiclesCol);
-        const list = snapshot.docs
-          .map(doc => ({ id: doc.id, ...(doc.data() as any) }))
-          .filter(v => v.isTruck)
-          .map(v => ({ id: v.id, model: v.model }));
-        setVehicles(list);
-      } catch (error) {
-        toast({ variant: 'destructive', title: 'Erro', description: 'Erro ao carregar veículos.' });
-      }
+        try {
+            const vehiclesCol = collection(firestore, `companies/${companyId}/sectors/${sectorId}/vehicles`);
+            const snapshot = await getDocs(vehiclesCol);
+            const list = snapshot.docs
+                .map(doc => ({ id: doc.id, ...(doc.data() as any) }))
+                .filter(v => v.isTruck)
+                .map(v => ({ id: v.id, model: v.model }));
+            setVehicles(list);
+        } catch (error) {
+            toast({ variant: 'destructive', title: 'Erro', description: 'Erro ao carregar veículos.' });
+        }
     }, [firestore, toast]);
 
     const fetchRoutes = useCallback(async () => {
-      const companyId = localStorage.getItem('companyId');
-      const sectorId = localStorage.getItem('sectorId');
-      if (!firestore || !companyId || !sectorId) return;
+        const companyId = localStorage.getItem('companyId');
+        const sectorId = localStorage.getItem('sectorId');
+        if (!firestore || !companyId || !sectorId) return;
 
-      setIsLoading(true);
-      try {
-        const routesCol = collection(firestore, `companies/${companyId}/sectors/${sectorId}/routes`);
-        const start = format(startOfMonth(selectedDate), 'yyyy-MM-dd');
-        const end = format(endOfMonth(selectedDate), 'yyyy-MM-dd');
-        
-        const q = query(routesCol, where('date', '>=', start), where('date', '<=', end));
-        const snapshot = await getDocs(q);
-        const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PlannedRoute));
-        setRoutes(list);
-      } catch (error) {
-        console.error(error);
-        toast({ variant: 'destructive', title: 'Erro', description: 'Erro ao carregar rotas.' });
-      } finally {
-        setIsLoading(false);
-      }
+        setIsLoading(true);
+        try {
+            const routesCol = collection(firestore, `companies/${companyId}/sectors/${sectorId}/routes`);
+            const start = format(startOfMonth(selectedDate), 'yyyy-MM-dd');
+            const end = format(endOfMonth(selectedDate), 'yyyy-MM-dd');
+
+            const q = query(routesCol, where('date', '>=', start), where('date', '<=', end));
+            const snapshot = await getDocs(q);
+            const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PlannedRoute));
+            setRoutes(list);
+        } catch (error) {
+            console.error(error);
+            toast({ variant: 'destructive', title: 'Erro', description: 'Erro ao carregar rotas.' });
+        } finally {
+            setIsLoading(false);
+        }
     }, [firestore, selectedDate, toast]);
 
     useEffect(() => {
-      fetchVehicles();
-      fetchRoutes();
+        fetchVehicles();
+        fetchRoutes();
     }, [fetchVehicles, fetchRoutes]);
 
     const handleAddTrip = () => {
-      const newTrip: PlannedTrip = {
-        id: Math.random().toString(36).substr(2, 9),
-        name: `Viagem ${newTrips.length + 1}`,
-        stops: [{ name: '', plannedArrival: '', plannedDeparture: '' }]
-      };
-      setNewTrips([...newTrips, newTrip]);
+        const newTrip: PlannedTrip = {
+            id: Math.random().toString(36).substr(2, 9),
+            name: `Viagem ${newTrips.length + 1}`,
+            stops: [{ name: '', plannedArrival: '', plannedDeparture: '' }]
+        };
+        setNewTrips([...newTrips, newTrip]);
     };
 
     const handleAddStop = (tripId: string) => {
-      setNewTrips(newTrips.map(trip => {
-        if (trip.id === tripId) {
-          return { ...trip, stops: [...trip.stops, { name: '', plannedArrival: '', plannedDeparture: '' }] };
-        }
-        return trip;
-      }));
+        setNewTrips(newTrips.map(trip => {
+            if (trip.id === tripId) {
+                return { ...trip, stops: [...trip.stops, { name: '', plannedArrival: '', plannedDeparture: '' }] };
+            }
+            return trip;
+        }));
     };
 
     const handleUpdateStop = (tripId: string, stopIndex: number, field: keyof PlannedStop, value: string) => {
-      setNewTrips(newTrips.map(trip => {
-        if (trip.id === tripId) {
-          const newStops = [...trip.stops];
-          newStops[stopIndex] = { ...newStops[stopIndex], [field]: value };
-          return { ...trip, stops: newStops };
-        }
-        return trip;
-      }));
+        setNewTrips(newTrips.map(trip => {
+            if (trip.id === tripId) {
+                const newStops = [...trip.stops];
+                newStops[stopIndex] = { ...newStops[stopIndex], [field]: value };
+                return { ...trip, stops: newStops };
+            }
+            return trip;
+        }));
     };
 
     const handleRemoveStop = (tripId: string, stopIndex: number) => {
-      setNewTrips(newTrips.map(trip => {
-        if (trip.id === tripId) {
-          return { ...trip, stops: trip.stops.filter((_, i) => i !== stopIndex) };
-        }
-        return trip;
-      }));
+        setNewTrips(newTrips.map(trip => {
+            if (trip.id === tripId) {
+                return { ...trip, stops: trip.stops.filter((_, i) => i !== stopIndex) };
+            }
+            return trip;
+        }));
     };
 
     const handleRemoveTrip = (tripId: string) => {
-      setNewTrips(newTrips.filter(t => t.id !== tripId));
+        setNewTrips(newTrips.filter(t => t.id !== tripId));
     };
 
     const handleSaveRoute = async () => {
-      const companyId = localStorage.getItem('companyId');
-      const sectorId = localStorage.getItem('sectorId');
-      if (!firestore || !companyId || !sectorId || !newRouteVehicle) return;
+        const companyId = localStorage.getItem('companyId');
+        const sectorId = localStorage.getItem('sectorId');
+        if (!firestore || !companyId || !sectorId || !newRouteVehicle) return;
 
-      if (newTrips.length === 0) {
-        toast({ variant: 'destructive', title: 'Erro', description: 'Adicione pelo menos uma viagem.' });
-        return;
-      }
-
-      setIsSaving(true);
-      try {
-        const datesToSave = [format(selectedDate, 'yyyy-MM-dd'), ...selectedAdditionalDates];
-        // Save in batches of 5 dates to avoid 'Transaction too big' error
-        for (let i = 0; i < datesToSave.length; i += 5) {
-          const batch = writeBatch(firestore);
-          const chunk = datesToSave.slice(i, i + 5);
-          
-          for (const dateStr of chunk) {
-            const routeId = isEditing && dateStr === format(selectedDate, 'yyyy-MM-dd') 
-              ? editingRouteId! 
-              : `${dateStr}_${newRouteVehicle}_${Math.random().toString(36).substr(2, 5)}`;
-            
-            const routeRef = doc(firestore, `companies/${companyId}/sectors/${sectorId}/routes`, routeId);
-            batch.set(routeRef, {
-              vehicleId: newRouteVehicle,
-              date: dateStr,
-              trips: newTrips
-            });
-          }
-          await batch.commit();
+        if (newTrips.length === 0) {
+            toast({ variant: 'destructive', title: 'Erro', description: 'Adicione pelo menos uma viagem.' });
+            return;
         }
 
-        toast({ title: 'Sucesso', description: isEditing ? 'Rota atualizada!' : 'Rota(s) salva(s) com sucesso!' });
-        resetForm();
-        fetchRoutes();
-      } catch (error) {
-        toast({ variant: 'destructive', title: 'Erro', description: 'Erro ao salvar rota.' });
-      } finally {
-        setIsSaving(false);
-      }
+        setIsSaving(true);
+        try {
+            const datesToSave = [format(selectedDate, 'yyyy-MM-dd'), ...selectedAdditionalDates];
+            // Save in batches of 5 dates to avoid 'Transaction too big' error
+            for (let i = 0; i < datesToSave.length; i += 5) {
+                const batch = writeBatch(firestore);
+                const chunk = datesToSave.slice(i, i + 5);
+
+                for (const dateStr of chunk) {
+                    const routeId = isEditing && dateStr === format(selectedDate, 'yyyy-MM-dd')
+                        ? editingRouteId!
+                        : `${dateStr}_${newRouteVehicle}_${Math.random().toString(36).substr(2, 5)}`;
+
+                    const routeRef = doc(firestore, `companies/${companyId}/sectors/${sectorId}/routes`, routeId);
+                    batch.set(routeRef, {
+                        vehicleId: newRouteVehicle,
+                        trips: newTrips
+                    });
+                }
+                await batch.commit();
+            }
+
+            toast({ title: 'Sucesso', description: isEditing ? 'Rota atualizada!' : 'Rota(s) salva(s) com sucesso!' });
+            resetForm();
+            fetchRoutes();
+        } catch (error) {
+            toast({ variant: 'destructive', title: 'Erro', description: 'Erro ao salvar rota.' });
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     const resetForm = () => {
-      setNewRouteVehicle('');
-      setNewTrips([]);
-      setIsEditing(false);
-      setEditingRouteId(null);
-      setSelectedAdditionalDates([]);
+        setNewRouteVehicle('');
+        setNewTrips([]);
+        setIsEditing(false);
+        setEditingRouteId(null);
+        setSelectedAdditionalDates([]);
     };
 
     const handleEditRoute = (route: PlannedRoute) => {
-      setNewRouteVehicle(route.vehicleId);
-      setNewTrips(route.trips);
-      setSelectedDate(new Date(route.date + 'T12:00:00'));
-      setIsEditing(true);
-      setEditingRouteId(route.id);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+        setNewRouteVehicle(route.vehicleId);
+        setNewTrips(route.trips);
+        setSelectedDate(new Date(route.date + 'T12:00:00'));
+        setIsEditing(true);
+        setEditingRouteId(route.id);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
     const handleDeleteRoute = async (routeId: string) => {
-      const companyId = localStorage.getItem('companyId');
-      const sectorId = localStorage.getItem('sectorId');
-      if (!firestore || !companyId || !sectorId) return;
+        const companyId = localStorage.getItem('companyId');
+        const sectorId = localStorage.getItem('sectorId');
+        if (!firestore || !companyId || !sectorId) return;
 
-      try {
-        await deleteDoc(doc(firestore, `companies/${companyId}/sectors/${sectorId}/routes`, routeId));
-        toast({ title: 'Sucesso', description: 'Rota excluída.' });
-        fetchRoutes();
-      } catch (error) {
-        toast({ variant: 'destructive', title: 'Erro', description: 'Erro ao excluir rota.' });
-      }
+        try {
+            await deleteDoc(doc(firestore, `companies/${companyId}/sectors/${sectorId}/routes`, routeId));
+            toast({ title: 'Sucesso', description: 'Rota excluída.' });
+            fetchRoutes();
+        } catch (error) {
+            toast({ variant: 'destructive', title: 'Erro', description: 'Erro ao excluir rota.' });
+        }
     };
 
     const routesForSelectedDate = routes.filter(r => r.date === format(selectedDate, 'yyyy-MM-dd'));
 
     const CalendarView = () => {
-      const days = eachDayOfInterval({
-        start: startOfMonth(selectedDate),
-        end: endOfMonth(selectedDate)
-      });
+        const days = eachDayOfInterval({
+            start: startOfMonth(selectedDate),
+            end: endOfMonth(selectedDate)
+        });
 
-      const startDay = getDay(days[0]);
-      const padding = Array(startDay).fill(null);
+        const startDay = getDay(days[0]);
+        const padding = Array(startDay).fill(null);
 
-      return (
-        <div className="bg-card border rounded-xl p-6 shadow-sm">
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="font-bold text-lg">{format(selectedDate, 'MMMM yyyy', { locale: ptBR })}</h3>
-            <div className="flex gap-1">
-              <Button variant="outline" size="icon" onClick={() => setSelectedDate(subMonths(selectedDate, 1))}><ArrowLeft className="w-4 h-4"/></Button>
-              <Button variant="outline" size="icon" onClick={() => setSelectedDate(addMonths(selectedDate, 1))}><ArrowRight className="w-4 h-4"/></Button>
-            </div>
-          </div>
-          <div className="grid grid-cols-7 gap-1 text-center mb-2">
-            {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'].map(d => (
-              <span key={d} className="text-[10px] font-black uppercase text-muted-foreground">{d}</span>
-            ))}
-          </div>
-          <div className="grid grid-cols-7 gap-1">
-            {padding.map((_, i) => <div key={`p-${i}`} className="h-12" />)}
-            {days.map(day => {
-              const dateStr = format(day, 'yyyy-MM-dd');
-              const dayRoutes = routes.filter(r => r.date === dateStr);
-              const isSelected = format(selectedDate, 'yyyy-MM-dd') === dateStr;
-              const isToday = format(new Date(), 'yyyy-MM-dd') === dateStr;
-              
-              return (
-                <button 
-                  key={dateStr}
-                  onClick={() => setSelectedDate(day)}
-                  className={`h-12 rounded-lg flex flex-col items-center justify-center gap-1 transition-all ${
-                    isSelected ? 'bg-primary text-primary-foreground shadow-md' : 
-                    isToday ? 'bg-primary/10 text-primary' : 'hover:bg-muted'
-                  }`}
-                >
-                  <span className="text-sm font-bold">{format(day, 'd')}</span>
-                  <div className="flex gap-0.5">
-                    {dayRoutes.slice(0, 3).map((_, i) => (
-                      <div key={i} className={`w-1 h-1 rounded-full ${isSelected ? 'bg-white' : 'bg-primary'}`} />
+        return (
+            <div className="bg-card border rounded-xl p-6 shadow-sm">
+                <div className="flex justify-between items-center mb-6">
+                    <h3 className="font-bold text-lg">{format(selectedDate, 'MMMM yyyy', { locale: ptBR })}</h3>
+                    <div className="flex gap-1">
+                        <Button variant="outline" size="icon" onClick={() => setSelectedDate(subMonths(selectedDate, 1))}><ArrowLeft className="w-4 h-4" /></Button>
+                        <Button variant="outline" size="icon" onClick={() => setSelectedDate(addMonths(selectedDate, 1))}><ArrowRight className="w-4 h-4" /></Button>
+                    </div>
+                </div>
+                <div className="grid grid-cols-7 gap-1 text-center mb-2">
+                    {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'].map(d => (
+                        <span key={d} className="text-[10px] font-black uppercase text-muted-foreground">{d}</span>
                     ))}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      );
+                </div>
+                <div className="grid grid-cols-7 gap-1">
+                    {padding.map((_, i) => <div key={`p-${i}`} className="h-12" />)}
+                    {days.map(day => {
+                        const dateStr = format(day, 'yyyy-MM-dd');
+                        const dayRoutes = routes.filter(r => r.date === dateStr);
+                        const isSelected = format(selectedDate, 'yyyy-MM-dd') === dateStr;
+                        const isToday = format(new Date(), 'yyyy-MM-dd') === dateStr;
+
+                        return (
+                            <button
+                                key={dateStr}
+                                onClick={() => setSelectedDate(day)}
+                                className={`h-12 rounded-lg flex flex-col items-center justify-center gap-1 transition-all ${isSelected ? 'bg-primary text-primary-foreground shadow-md' :
+                                        isToday ? 'bg-primary/10 text-primary' : 'hover:bg-muted'
+                                    }`}
+                            >
+                                <span className="text-sm font-bold">{format(day, 'd')}</span>
+                                <div className="flex gap-0.5">
+                                    {dayRoutes.slice(0, 3).map((_, i) => (
+                                        <div key={i} className={`w-1 h-1 rounded-full ${isSelected ? 'bg-white' : 'bg-primary'}`} />
+                                    ))}
+                                </div>
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
+        );
     };
 
     if (isLoading && routes.length === 0) {
@@ -1380,8 +1378,8 @@ const RoteirizacaoTab = () => {
                 </div>
                 <div className="flex items-center gap-2 bg-card p-2 rounded-lg border shadow-sm">
                     <CalendarIcon className="w-5 h-5 text-primary" />
-                    <Input 
-                        type="date" 
+                    <Input
+                        type="date"
                         value={format(selectedDate, 'yyyy-MM-dd')}
                         onChange={(e) => setSelectedDate(new Date(e.target.value + 'T12:00:00'))}
                         className="border-none focus-visible:ring-0 w-36 h-8 text-sm p-0"
@@ -1395,7 +1393,7 @@ const RoteirizacaoTab = () => {
                         <CardHeader className="flex flex-row items-center justify-between space-y-0">
                             <div>
                                 <CardTitle className="flex items-center gap-2 text-lg">
-                                    {isEditing ? <Edit className="w-5 h-5" /> : <Plus className="w-5 h-5" />} 
+                                    {isEditing ? <Edit className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
                                     {isEditing ? 'Editar Programação' : 'Nova Programação'}
                                 </CardTitle>
                                 <CardDescription>
@@ -1403,7 +1401,7 @@ const RoteirizacaoTab = () => {
                                 </CardDescription>
                             </div>
                             {isEditing && (
-                              <Button variant="ghost" size="sm" onClick={resetForm}>Cancelar Edição</Button>
+                                <Button variant="ghost" size="sm" onClick={resetForm}>Cancelar Edição</Button>
                             )}
                         </CardHeader>
                         <CardContent className="space-y-6">
@@ -1419,28 +1417,28 @@ const RoteirizacaoTab = () => {
                                     <div className="flex justify-between items-end">
                                         <Label>Repetir para Datas (Opcional)</Label>
                                         <div className="flex gap-1">
-                                            <Button variant="outline" size="xs" className="h-6 text-[10px]" onClick={() => {
-                                                const next5 = Array.from({length: 5}, (_, i) => format(addDays(selectedDate, i + 1), 'yyyy-MM-dd'));
+                                            <Button variant="outline" size="sm" className="h-6 text-[10px]" onClick={() => {
+                                                const next5 = Array.from({ length: 5 }, (_, i) => format(addDays(selectedDate, i + 1), 'yyyy-MM-dd'));
                                                 setSelectedAdditionalDates([...new Set([...selectedAdditionalDates, ...next5])]);
                                             }}>+5 dias</Button>
-                                            <Button variant="outline" size="xs" className="h-6 text-[10px]" onClick={() => setSelectedAdditionalDates([])}>Limpar</Button>
+                                            <Button variant="outline" size="sm" className="h-6 text-[10px]" onClick={() => setSelectedAdditionalDates([])}>Limpar</Button>
                                         </div>
                                     </div>
-                                    <Input 
-                                      type="date" 
-                                      onChange={(e) => {
-                                        if (e.target.value && !selectedAdditionalDates.includes(e.target.value)) {
-                                          setSelectedAdditionalDates([...selectedAdditionalDates, e.target.value]);
-                                        }
-                                      }}
+                                    <Input
+                                        type="date"
+                                        onChange={(e) => {
+                                            if (e.target.value && !selectedAdditionalDates.includes(e.target.value)) {
+                                                setSelectedAdditionalDates([...selectedAdditionalDates, e.target.value]);
+                                            }
+                                        }}
                                     />
                                     <div className="flex flex-wrap gap-1 mt-1">
-                                      {selectedAdditionalDates.map(d => (
-                                        <Badge key={d} variant="secondary" className="gap-1">
-                                          {format(new Date(d + 'T12:00:00'), 'dd/MM')}
-                                          <X className="w-3 h-3 cursor-pointer" onClick={() => setSelectedAdditionalDates(selectedAdditionalDates.filter(x => x !== d))} />
-                                        </Badge>
-                                      ))}
+                                        {selectedAdditionalDates.map(d => (
+                                            <Badge key={d} variant="secondary" className="gap-1">
+                                                {format(new Date(d + 'T12:00:00'), 'dd/MM')}
+                                                <X className="w-3 h-3 cursor-pointer" onClick={() => setSelectedAdditionalDates(selectedAdditionalDates.filter(x => x !== d))} />
+                                            </Badge>
+                                        ))}
                                     </div>
                                 </div>
                             </div>
@@ -1491,45 +1489,45 @@ const RoteirizacaoTab = () => {
                                 </SelectContent>
                             </Select>
                         </div>
-                        
+
                         {routesForSelectedDate.filter(r => vehicleFilter === 'all' || r.vehicleId === vehicleFilter).length === 0 ? (
                             <div className="text-muted-foreground text-center py-12 border rounded-lg border-dashed flex flex-col items-center gap-2"><CalendarIcon className="h-8 w-8 opacity-20" /><p className="text-sm">Nenhuma rota para hoje.</p></div>
                         ) : (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              {routesForSelectedDate
-                                .filter(r => vehicleFilter === 'all' || r.vehicleId === vehicleFilter)
-                                .map(route => (
-                                <Card key={route.id} className="overflow-hidden border-primary/20">
-                                    <div className="bg-primary/5 p-3 flex justify-between items-center border-b">
-                                        <span className="font-bold text-sm flex items-center gap-2"><Truck className="w-4 h-4" /> {route.vehicleId}</span>
-                                        <div className="flex gap-1">
-                                          <Button variant="ghost" size="icon" className="h-8 w-8 text-primary" onClick={() => handleEditRoute(route)}><Edit className="w-4 h-4" /></Button>
-                                          <AlertDialog>
-                                              <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 text-destructive"><Trash2 className="w-4 h-4" /></Button></AlertDialogTrigger>
-                                              <AlertDialogContent>
-                                                  <AlertDialogHeader><AlertDialogTitle>Excluir Rota?</AlertDialogTitle><AlertDialogDescription>Deseja realmente excluir a programação do veículo {route.vehicleId}?</AlertDialogDescription></AlertDialogHeader>
-                                                  <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteRoute(route.id)}>Excluir</AlertDialogAction></AlertDialogFooter>
-                                              </AlertDialogContent>
-                                          </AlertDialog>
-                                        </div>
-                                    </div>
-                                    <CardContent className="p-3 space-y-4">
-                                        {route.trips.map((trip, idx) => (
-                                            <div key={idx} className="space-y-1.5">
-                                                <p className="text-[10px] font-black uppercase text-primary/70">{trip.name}</p>
-                                                <div className="space-y-1 border-l-2 border-primary/20 ml-1 pl-2">
-                                                    {trip.stops.map((stop, sIdx) => (
-                                                        <div key={sIdx} className="text-xs flex justify-between items-center bg-muted/30 p-1 rounded px-2">
-                                                            <span className="font-medium">{stop.name}</span>
-                                                            <span className="text-[10px] text-muted-foreground font-mono">{stop.plannedArrival} - {stop.plannedDeparture}</span>
-                                                        </div>
-                                                    ))}
+                                {routesForSelectedDate
+                                    .filter(r => vehicleFilter === 'all' || r.vehicleId === vehicleFilter)
+                                    .map(route => (
+                                        <Card key={route.id} className="overflow-hidden border-primary/20">
+                                            <div className="bg-primary/5 p-3 flex justify-between items-center border-b">
+                                                <span className="font-bold text-sm flex items-center gap-2"><Truck className="w-4 h-4" /> {route.vehicleId}</span>
+                                                <div className="flex gap-1">
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-primary" onClick={() => handleEditRoute(route)}><Edit className="w-4 h-4" /></Button>
+                                                    <AlertDialog>
+                                                        <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 text-destructive"><Trash2 className="w-4 h-4" /></Button></AlertDialogTrigger>
+                                                        <AlertDialogContent>
+                                                            <AlertDialogHeader><AlertDialogTitle>Excluir Rota?</AlertDialogTitle><AlertDialogDescription>Deseja realmente excluir a programação do veículo {route.vehicleId}?</AlertDialogDescription></AlertDialogHeader>
+                                                            <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteRoute(route.id)}>Excluir</AlertDialogAction></AlertDialogFooter>
+                                                        </AlertDialogContent>
+                                                    </AlertDialog>
                                                 </div>
                                             </div>
-                                        ))}
-                                    </CardContent>
-                                </Card>
-                              ))}
+                                            <CardContent className="p-3 space-y-4">
+                                                {route.trips.map((trip, idx) => (
+                                                    <div key={idx} className="space-y-1.5">
+                                                        <p className="text-[10px] font-black uppercase text-primary/70">{trip.name}</p>
+                                                        <div className="space-y-1 border-l-2 border-primary/20 ml-1 pl-2">
+                                                            {trip.stops.map((stop, sIdx) => (
+                                                                <div key={sIdx} className="text-xs flex justify-between items-center bg-muted/30 p-1 rounded px-2">
+                                                                    <span className="font-medium">{stop.name}</span>
+                                                                    <span className="text-[10px] text-muted-foreground font-mono">{stop.plannedArrival} - {stop.plannedDeparture}</span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </CardContent>
+                                        </Card>
+                                    ))}
                             </div>
                         )}
                     </div>
@@ -1538,18 +1536,18 @@ const RoteirizacaoTab = () => {
                 <div className="space-y-6">
                     <CalendarView />
                     <Card>
-                      <CardHeader><CardTitle className="text-sm font-bold">Resumo do Mês</CardTitle></CardHeader>
-                      <CardContent className="space-y-4">
-                        {vehicles.map(v => {
-                          const vehicleRoutes = routes.filter(r => r.vehicleId === v.id);
-                          return (
-                            <div key={v.id} className="flex justify-between items-center text-sm">
-                              <span>{v.id}</span>
-                              <Badge variant="outline">{vehicleRoutes.length} dias programados</Badge>
-                            </div>
-                          );
-                        })}
-                      </CardContent>
+                        <CardHeader><CardTitle className="text-sm font-bold">Resumo do Mês</CardTitle></CardHeader>
+                        <CardContent className="space-y-4">
+                            {vehicles.map(v => {
+                                const vehicleRoutes = routes.filter(r => r.vehicleId === v.id);
+                                return (
+                                    <div key={v.id} className="flex justify-between items-center text-sm">
+                                        <span>{v.id}</span>
+                                        <Badge variant="outline">{vehicleRoutes.length} dias programados</Badge>
+                                    </div>
+                                );
+                            })}
+                        </CardContent>
                     </Card>
                 </div>
             </div>
@@ -1574,7 +1572,7 @@ const AbastecimentosTab = ({ activeTab }: { activeTab: string }) => {
         const matricula = localStorage.getItem('matricula');
         if (storedUser && companyId && sectorId && matricula) setUser({ ...JSON.parse(storedUser), companyId, sectorId, matricula });
     }, []);
-    
+
     useEffect(() => {
         const fetchRefuelData = async () => {
             if (!firestore || !user || activeTab !== 'abastecimentos') return;
@@ -1584,7 +1582,7 @@ const AbastecimentosTab = ({ activeTab }: { activeTab: string }) => {
                 const usersMap = new Map<string, FirestoreUser>();
                 usersSnapshot.forEach(doc => usersMap.set(doc.id, { id: doc.id, ...doc.data() } as FirestoreUser));
                 setUsers(usersMap);
-                
+
                 const refuelsQuery = query(collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/refuels`), orderBy('timestamp', 'desc'));
                 const querySnapshot = await getDocs(refuelsQuery);
                 setAllRefuels(querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -1648,9 +1646,9 @@ const ChecklistsTab = ({ activeTab }: { activeTab: string }) => {
 
     useEffect(() => {
         const storedUser = localStorage.getItem('user'); const companyId = localStorage.getItem('companyId'); const sectorId = localStorage.getItem('sectorId'); const matricula = localStorage.getItem('matricula');
-        if (storedUser && companyId && sectorId && matricula) { setUser({ ...JSON.parse(storedUser), companyId, sectorId, matricula }); if (matricula === '801231') setIsSuperAdmin(true); } 
+        if (storedUser && companyId && sectorId && matricula) { setUser({ ...JSON.parse(storedUser), companyId, sectorId, matricula }); if (matricula === '801231') setIsSuperAdmin(true); }
     }, []);
-    
+
     useEffect(() => {
         const fetchChecklistData = async () => {
             if (!firestore || !user || activeTab !== 'checklists') return;
@@ -1661,7 +1659,7 @@ const ChecklistsTab = ({ activeTab }: { activeTab: string }) => {
                 const usersMap = new Map<string, FirestoreUser>();
                 usersSnapshot.forEach(doc => usersMap.set(doc.id, { id: doc.id, ...doc.data() } as FirestoreUser));
                 setUsers(usersMap);
-                
+
                 const checklistsQuery = query(collectionGroup(firestore, 'checklists'));
                 const querySnapshot = await getDocs(checklistsQuery);
                 const checklists = querySnapshot.docs.map(doc => ({ id: doc.id, path: doc.ref.path, ...doc.data() as any }));
@@ -1672,20 +1670,21 @@ const ChecklistsTab = ({ activeTab }: { activeTab: string }) => {
                     .sort((a, b) => b.timestamp.seconds - a.timestamp.seconds);
 
                 setAllChecklists(filteredAndSorted);
-            } catch (error) { 
+            } catch (error) {
                 console.error("Error fetching checklists:", error);
                 toast({ variant: 'destructive', title: 'Erro ao buscar checklists' });
             } finally {
                 setIsChecklistsLoading(false);
             }
         };
-        
+
         fetchChecklistData();
     }, [firestore, user, toast, activeTab]);
-    
+
     const handleDelete = async (path: string) => {
         if (!firestore || !isSuperAdmin) return;
-        try { await deleteDoc(doc(firestore, path)); toast({ title: 'Sucesso', description: 'Checklist deletado.' }); 
+        try {
+            await deleteDoc(doc(firestore, path)); toast({ title: 'Sucesso', description: 'Checklist deletado.' });
             setAllChecklists(prev => prev.filter(c => c.path !== path));
         } catch (error) { toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível deletar.' }); }
     };
@@ -1695,7 +1694,7 @@ const ChecklistsTab = ({ activeTab }: { activeTab: string }) => {
         const filtered = allChecklists.filter(c => {
             const cDate = new Date(c.timestamp.seconds * 1000);
             if (!(date?.from && cDate >= startOfDay(date.from) && cDate <= endOfDay(date.to || date.from))) return false;
-            if(selectedVehicle !== 'all' && c.vehicleId !== selectedVehicle) return false;
+            if (selectedVehicle !== 'all' && c.vehicleId !== selectedVehicle) return false;
             return true;
         });
         return { filteredChecklists: filtered, vehicleList: Array.from(vehicles).sort() };
@@ -1747,26 +1746,26 @@ const HistoryTableRow = ({ run, users, onViewDetails, isSuperAdmin, onDelete }: 
     const driver = users.get(run.driverId);
     const distance = run.endMileage ? run.endMileage - run.startMileage : 0;
     const getInitials = (name: string) => name.split(' ').map(n => n[0]).slice(0, 2).join('');
-    return (<TableRow><TableCell><div className="flex items-center gap-2"><Truck className="h-4 w-4 text-muted-foreground"/>{run.vehicleId}</div></TableCell><TableCell><div className="font-medium flex items-center gap-2"><Avatar className="h-6 w-6"><AvatarImage src={driver?.photoURL} alt={run.driverName} /><AvatarFallback className="text-xs">{getInitials(run.driverName)}</AvatarFallback></Avatar>{run.driverName}</div></TableCell><TableCell>{driver?.shift || 'N/A'}</TableCell><TableCell>{run.stops.map(s => s.name).join(', ')}</TableCell><TableCell>{distance > 0 ? `${distance.toFixed(1)} km` : '0.0 km'}</TableCell><TableCell>{format(run.startTime.toDate(), 'dd/MM/yyyy')}</TableCell><TableCell className="text-right space-x-2"><Button variant="outline" size="sm" onClick={onViewDetails}><Route className="mr-2 h-4 w-4" />Ver Detalhes</Button>{isSuperAdmin && (<AlertDialog><AlertDialogTrigger asChild><Button variant="destructive" size="sm"><Trash2 className="h-4 w-4 mr-1" /> Deletar</Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Você tem certeza?</AlertDialogTitle><AlertDialogDescription>Esta ação não pode ser desfeita. Isto irá apagar permanentemente a corrida do motorista {run.driverName} para {run.stops.map(s => s.name).join(', ')}.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={onDelete}>Confirmar</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>)}</TableCell></TableRow>);
+    return (<TableRow><TableCell><div className="flex items-center gap-2"><Truck className="h-4 w-4 text-muted-foreground" />{run.vehicleId}</div></TableCell><TableCell><div className="font-medium flex items-center gap-2"><Avatar className="h-6 w-6"><AvatarImage src={driver?.photoURL} alt={run.driverName} /><AvatarFallback className="text-xs">{getInitials(run.driverName)}</AvatarFallback></Avatar>{run.driverName}</div></TableCell><TableCell>{driver?.shift || 'N/A'}</TableCell><TableCell>{run.stops.map(s => s.name).join(', ')}</TableCell><TableCell>{distance > 0 ? `${distance.toFixed(1)} km` : '0.0 km'}</TableCell><TableCell>{format(run.startTime.toDate(), 'dd/MM/yyyy')}</TableCell><TableCell className="text-right space-x-2"><Button variant="outline" size="sm" onClick={onViewDetails}><Route className="mr-2 h-4 w-4" />Ver Detalhes</Button>{isSuperAdmin && (<AlertDialog><AlertDialogTrigger asChild><Button variant="destructive" size="sm"><Trash2 className="h-4 w-4 mr-1" /> Deletar</Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Você tem certeza?</AlertDialogTitle><AlertDialogDescription>Esta ação não pode ser desfeita. Isto irá apagar permanentemente a corrida do motorista {run.driverName} para {run.stops.map(s => s.name).join(', ')}.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={onDelete}>Confirmar</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>)}</TableCell></TableRow>);
 };
 const DateFilter = ({ date, setDate }: { date: DateRange | undefined, setDate: (date: DateRange | undefined) => void }) => (<Popover><PopoverTrigger asChild><Button id="date" variant={"outline"} className="w-full justify-start text-left font-normal sm:w-auto"><CalendarIcon className="mr-2 h-4 w-4" />{date?.from ? (date.to ? `${format(date.from, "dd/MM/y", { locale: ptBR })} - ${format(date.to, "dd/MM/y", { locale: ptBR })}` : format(date.from, "dd/MM/y", { locale: ptBR })) : <span>Selecione um período</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0" align="center"><Calendar initialFocus mode="range" defaultMonth={date?.from} selected={date} onSelect={setDate} numberOfMonths={2} locale={ptBR} /></PopoverContent></Popover>);
 const ShiftFilter = ({ selectedShift, onShiftChange }: { selectedShift: string, onShiftChange: (shift: string) => void }) => (<Select value={selectedShift} onValueChange={onShiftChange}><SelectTrigger className="w-full sm:w-auto"><SelectValue placeholder="Filtrar por turno" /></SelectTrigger><SelectContent>{Object.values({ TODOS: 'Todos', PRIMEIRO_NORMAL: '1° NORMAL', SEGUNDO_NORMAL: '2° NORMAL', PRIMEIRO_ESPECIAL: '1° ESPECIAL', SEGUNDO_ESPECIAL: '2° ESPECIAL' }).map(turno => (<SelectItem key={turno} value={turno}>{turno}</SelectItem>))}</SelectContent></Select>);
-const SectorFilter = ({ sectors, selectedSector, onSectorChange }: { sectors: SectorInfo[], selectedSector: string, onSectorChange: (sector: string) => void }) => (<Select value={selectedSector} onValueChange={onSectorChange}><SelectTrigger className="w-full sm:w-auto"><SelectValue placeholder="Filtrar por setor" /></SelectTrigger><SelectContent><SelectItem value="all"><Building className="h-4 w-4 inline-block mr-2"/>Todos os Setores</SelectItem>{sectors.map(s => (<SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>))}</SelectContent></Select>);
-const VehicleFilter = ({ vehicles, selectedVehicle, onVehicleChange }: { vehicles: string[], selectedVehicle: string, onVehicleChange: (vehicle: string) => void }) => (<Select value={selectedVehicle} onValueChange={onVehicleChange}><SelectTrigger className="w-full sm:w-auto"><SelectValue placeholder="Filtrar por veículo" /></SelectTrigger><SelectContent><SelectItem value="all"><Truck className="h-4 w-4 inline-block mr-2"/>Todos os Veículos</SelectItem>{vehicles.map(v => (<SelectItem key={v} value={v}><Truck className="h-4 w-4 inline-block mr-2"/>{v}</SelectItem>))}</SelectContent></Select>);
-const DriverFilter = ({ drivers, selectedDriver, onDriverChange }: { drivers: FirestoreUser[], selectedDriver: string, onDriverChange: (driver: string) => void }) => (<Select value={selectedDriver} onValueChange={onDriverChange}><SelectTrigger className="w-full sm:w-auto"><SelectValue placeholder="Filtrar por motorista" /></SelectTrigger><SelectContent><SelectItem value="all"><User className="h-4 w-4 inline-block mr-2"/>Todos os Motoristas</SelectItem>{drivers.map(d => (<SelectItem key={d.id} value={d.id}><User className="h-4 w-4 inline-block mr-2"/>{d.name}</SelectItem>))}</SelectContent></Select>);
+const SectorFilter = ({ sectors, selectedSector, onSectorChange }: { sectors: SectorInfo[], selectedSector: string, onSectorChange: (sector: string) => void }) => (<Select value={selectedSector} onValueChange={onSectorChange}><SelectTrigger className="w-full sm:w-auto"><SelectValue placeholder="Filtrar por setor" /></SelectTrigger><SelectContent><SelectItem value="all"><Building className="h-4 w-4 inline-block mr-2" />Todos os Setores</SelectItem>{sectors.map(s => (<SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>))}</SelectContent></Select>);
+const VehicleFilter = ({ vehicles, selectedVehicle, onVehicleChange }: { vehicles: string[], selectedVehicle: string, onVehicleChange: (vehicle: string) => void }) => (<Select value={selectedVehicle} onValueChange={onVehicleChange}><SelectTrigger className="w-full sm:w-auto"><SelectValue placeholder="Filtrar por veículo" /></SelectTrigger><SelectContent><SelectItem value="all"><Truck className="h-4 w-4 inline-block mr-2" />Todos os Veículos</SelectItem>{vehicles.map(v => (<SelectItem key={v} value={v}><Truck className="h-4 w-4 inline-block mr-2" />{v}</SelectItem>))}</SelectContent></Select>);
+const DriverFilter = ({ drivers, selectedDriver, onDriverChange }: { drivers: FirestoreUser[], selectedDriver: string, onDriverChange: (driver: string) => void }) => (<Select value={selectedDriver} onValueChange={onDriverChange}><SelectTrigger className="w-full sm:w-auto"><SelectValue placeholder="Filtrar por motorista" /></SelectTrigger><SelectContent><SelectItem value="all"><User className="h-4 w-4 inline-block mr-2" />Todos os Motoristas</SelectItem>{drivers.map(d => (<SelectItem key={d.id} value={d.id}><User className="h-4 w-4 inline-block mr-2" />{d.name}</SelectItem>))}</SelectContent></Select>);
 
 const RefuelTableRow = ({ refuel, driver }: { refuel: any, driver?: FirestoreUser }) => {
     const getInitials = (name: string) => name.split(' ').map(n => n[0]).slice(0, 2).join('');
     return (
-        <TableRow><TableCell>{format(new Date(refuel.timestamp.seconds * 1000), 'dd/MM/yy HH:mm')}</TableCell><TableCell><div className="flex items-center gap-2"><Truck className="h-4 w-4 text-muted-foreground"/>{refuel.vehicleId}</div></TableCell><TableCell><div className="font-medium flex items-center gap-2"><Avatar className="h-6 w-6"><AvatarImage src={driver?.photoURL} alt={refuel.driverName} /><AvatarFallback className="text-xs">{getInitials(refuel.driverName)}</AvatarFallback></Avatar>{refuel.driverName}</div></TableCell><TableCell><div className="flex items-center gap-2"><Fuel className="h-4 w-4 text-muted-foreground"/>{refuel.liters.toFixed(2)} L</div></TableCell><TableCell className="text-right font-medium">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(refuel.amount)}</TableCell></TableRow>
+        <TableRow><TableCell>{format(new Date(refuel.timestamp.seconds * 1000), 'dd/MM/yy HH:mm')}</TableCell><TableCell><div className="flex items-center gap-2"><Truck className="h-4 w-4 text-muted-foreground" />{refuel.vehicleId}</div></TableCell><TableCell><div className="font-medium flex items-center gap-2"><Avatar className="h-6 w-6"><AvatarImage src={driver?.photoURL} alt={refuel.driverName} /><AvatarFallback className="text-xs">{getInitials(refuel.driverName)}</AvatarFallback></Avatar>{refuel.driverName}</div></TableCell><TableCell><div className="flex items-center gap-2"><Fuel className="h-4 w-4 text-muted-foreground" />{refuel.liters.toFixed(2)} L</div></TableCell><TableCell className="text-right font-medium">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(refuel.amount)}</TableCell></TableRow>
     );
 };
 
 const ChecklistTableRow = ({ checklist, driver, onViewDetails, isSuperAdmin, onDelete }: { checklist: any, driver?: FirestoreUser, onViewDetails: () => void, isSuperAdmin: boolean, onDelete: (path: string) => void }) => {
-    const nonCompliantItems = checklist.items.filter((item:any) => item.status === 'nao_conforme').length;
+    const nonCompliantItems = checklist.items.filter((item: any) => item.status === 'nao_conforme').length;
     const getInitials = (name: string) => name.split(' ').map(n => n[0]).slice(0, 2).join('');
     return (
-        <TableRow><TableCell>{format(new Date(checklist.timestamp.seconds * 1000), 'dd/MM/yy HH:mm')}</TableCell><TableCell><div className="flex items-center gap-2"><Truck className="h-4 w-4 text-muted-foreground"/>{checklist.vehicleId}</div></TableCell><TableCell><div className="font-medium flex items-center gap-2"><Avatar className="h-6 w-6"><AvatarImage src={driver?.photoURL} alt={checklist.driverName} /><AvatarFallback className="text-xs">{getInitials(checklist.driverName)}</AvatarFallback></Avatar>{checklist.driverName}</div></TableCell><TableCell>{nonCompliantItems > 0 ? <Badge variant="destructive">{nonCompliantItems} item(ns) não conforme</Badge> : <Badge className="bg-green-600 hover:bg-green-700">Tudo conforme</Badge>}</TableCell><TableCell className="text-right font-medium space-x-2"><Button variant="outline" size="sm" onClick={onViewDetails}><FileText className="h-4 w-4 mr-2" />Ver Detalhes</Button>{isSuperAdmin && (<AlertDialog><AlertDialogTrigger asChild><Button variant="destructive" size="sm"><Trash2 className="h-4 w-4 mr-1" /> Deletar</Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Você tem certeza?</AlertDialogTitle><AlertDialogDescription>Esta ação não pode ser desfeita e irá apagar permanentemente o checklist.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => onDelete(checklist.path)}>Confirmar</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>)}</TableCell></TableRow>
+        <TableRow><TableCell>{format(new Date(checklist.timestamp.seconds * 1000), 'dd/MM/yy HH:mm')}</TableCell><TableCell><div className="flex items-center gap-2"><Truck className="h-4 w-4 text-muted-foreground" />{checklist.vehicleId}</div></TableCell><TableCell><div className="font-medium flex items-center gap-2"><Avatar className="h-6 w-6"><AvatarImage src={driver?.photoURL} alt={checklist.driverName} /><AvatarFallback className="text-xs">{getInitials(checklist.driverName)}</AvatarFallback></Avatar>{checklist.driverName}</div></TableCell><TableCell>{nonCompliantItems > 0 ? <Badge variant="destructive">{nonCompliantItems} item(ns) não conforme</Badge> : <Badge className="bg-green-600 hover:bg-green-700">Tudo conforme</Badge>}</TableCell><TableCell className="text-right font-medium space-x-2"><Button variant="outline" size="sm" onClick={onViewDetails}><FileText className="h-4 w-4 mr-2" />Ver Detalhes</Button>{isSuperAdmin && (<AlertDialog><AlertDialogTrigger asChild><Button variant="destructive" size="sm"><Trash2 className="h-4 w-4 mr-1" /> Deletar</Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Você tem certeza?</AlertDialogTitle><AlertDialogDescription>Esta ação não pode ser desfeita e irá apagar permanentemente o checklist.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => onDelete(checklist.path)}>Confirmar</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>)}</TableCell></TableRow>
     );
 };
 
@@ -1792,7 +1791,7 @@ const RunDetailsDialog = ({ run, isOpen, onClose, isClient }: { run: AggregatedR
                 <div className={cn("flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 p-6 pt-0 min-h-0")}>
                     <div className={cn("lg:col-span-2 bg-muted rounded-md min-h-[300px] lg:min-h-0")}>{isClient && <RealTimeMap segments={displayedSegments} fullLocationHistory={fullLocationHistory} vehicleId={run.vehicleId} />}</div>
                     <div className={cn("lg:col-span-1 flex flex-col min-h-0")}>
-                         <div className="flex items-center justify-between mb-2"><h4 className="font-semibold">Detalhes da Rota</h4><div className="flex items-center gap-2">{highlightedSegmentId && (<Button variant="ghost" size="sm" onClick={() => setHighlightedSegmentId(null)}><EyeOff className="mr-2 h-4 w-4"/> Limpar</Button>)}<Button variant="outline" size="sm" onClick={() => { setMapRun(run); setIsAggregatedMap(true); setHighlightedSegmentId(null); }}><Route className="mr-2 h-4 w-4"/> Rota Completa</Button></div></div>
+                        <div className="flex items-center justify-between mb-2"><h4 className="font-semibold">Detalhes da Rota</h4><div className="flex items-center gap-2">{highlightedSegmentId && (<Button variant="ghost" size="sm" onClick={() => setHighlightedSegmentId(null)}><EyeOff className="mr-2 h-4 w-4" /> Limpar</Button>)}<Button variant="outline" size="sm" onClick={() => { setMapRun(run); setIsAggregatedMap(true); setHighlightedSegmentId(null); }}><Route className="mr-2 h-4 w-4" /> Rota Completa</Button></div></div>
                         <ScrollArea className="flex-1 -mr-6 pr-6"><div className="space-y-4 p-1">{run.originalRuns.map((originalRun, runIndex) => {
                             const previousRun = runIndex > 0 ? run.originalRuns[runIndex - 1] : null;
                             let idleTime: string | null = null; if (previousRun && previousRun.endTime) idleTime = formatDistanceStrict(previousRun.endTime.toDate(), originalRun.startTime.toDate(), { locale: ptBR, unit: 'minute' });
@@ -1826,54 +1825,54 @@ const ChecklistDetailsDialog = ({ checklist, isOpen, onClose }: { checklist: any
         return <Badge variant="secondary">N/A</Badge>;
     };
     return (
-        <Dialog open={isOpen} onOpenChange={onClose}><DialogContent className="max-w-2xl h-[80vh]"><DialogHeader><DialogTitle>Detalhes do Checklist</DialogTitle><DialogDescription>Realizado por {checklist.driverName} no veículo {checklist.vehicleId} em {format(checklist.timestamp.toDate(), "dd/MM/yyyy 'às' HH:mm")}.</DialogDescription></DialogHeader><div className="h-[calc(80vh-120px)] overflow-y-auto space-y-3 pr-2">{checklist.items.map((item:any) => (<div key={item.id} className="border rounded-md p-3"><div className="flex justify-between items-center"><p className="font-semibold">{item.id}. {item.title}</p>{getStatusBadge(item.status)}</div><p className="text-xs text-muted-foreground ml-6">{item.description}</p>{item.status === 'nao_conforme' && item.observation && <p className="text-sm text-destructive-foreground bg-destructive/80 p-2 rounded-md mt-2 ml-6"><strong>Observação:</strong> {item.observation}</p>}</div>))}</div></DialogContent></Dialog>
+        <Dialog open={isOpen} onOpenChange={onClose}><DialogContent className="max-w-2xl h-[80vh]"><DialogHeader><DialogTitle>Detalhes do Checklist</DialogTitle><DialogDescription>Realizado por {checklist.driverName} no veículo {checklist.vehicleId} em {format(checklist.timestamp.toDate(), "dd/MM/yyyy 'às' HH:mm")}.</DialogDescription></DialogHeader><div className="h-[calc(80vh-120px)] overflow-y-auto space-y-3 pr-2">{checklist.items.map((item: any) => (<div key={item.id} className="border rounded-md p-3"><div className="flex justify-between items-center"><p className="font-semibold">{item.id}. {item.title}</p>{getStatusBadge(item.status)}</div><p className="text-xs text-muted-foreground ml-6">{item.description}</p>{item.status === 'nao_conforme' && item.observation && <p className="text-sm text-destructive-foreground bg-destructive/80 p-2 rounded-md mt-2 ml-6"><strong>Observação:</strong> {item.observation}</p>}</div>))}</div></DialogContent></Dialog>
     )
 };
 
 
 // --- Componente Principal da Página ---
 export default function DashboardPage() {
-  const isMobile = useIsMobile();
-  const [activeTab, setActiveTab] = useState('acompanhamento');
+    const isMobile = useIsMobile();
+    const [activeTab, setActiveTab] = useState('acompanhamento');
 
-  return (
-    <div className="flex flex-col gap-6">
-       <div>
-        <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Painel de Controle</h1>
-        <p className="text-muted-foreground">Visão geral do sistema Frotacontrol.</p>
-       </div>
-       
-       <Tabs defaultValue="acompanhamento" className="w-full" onValueChange={setActiveTab}>
-        <TabsList className={cn("grid w-full", isMobile ? "grid-cols-2" : "grid-cols-6")}>
-            <TabsTrigger value="acompanhamento">Acompanhamento</TabsTrigger>
-            <TabsTrigger value="roteirizacao">Roteirização</TabsTrigger>
-            <TabsTrigger value="analise">Análise</TabsTrigger>
-            <TabsTrigger value="historico">Histórico</TabsTrigger>
-            <TabsTrigger value="abastecimentos">Abastecimentos</TabsTrigger>
-            <TabsTrigger value="checklists">Checklists</TabsTrigger>
-        </TabsList>
+    return (
+        <div className="flex flex-col gap-6">
+            <div>
+                <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Painel de Controle</h1>
+                <p className="text-muted-foreground">Visão geral do sistema Frotacontrol.</p>
+            </div>
 
-        <TabsContent value="acompanhamento" className="mt-6">
-            <AcompanhamentoTab activeTab={activeTab} />
-        </TabsContent>
-        <TabsContent value="roteirizacao" className="mt-6">
-            <RoteirizacaoTab />
-        </TabsContent>
-        <TabsContent value="analise" className="mt-6">
-            <AnaliseTab activeTab={activeTab} />
-        </TabsContent>
-        <TabsContent value="historico" className="mt-6">
-            <HistoricoTab activeTab={activeTab} />
-        </TabsContent>
-        <TabsContent value="abastecimentos" className="mt-6">
-            <AbastecimentosTab activeTab={activeTab} />
-        </TabsContent>
-        <TabsContent value="checklists" className="mt-6">
-            <ChecklistsTab activeTab={activeTab} />
-        </TabsContent>
-       </Tabs>
-    </div>
-  );
+            <Tabs defaultValue="acompanhamento" className="w-full" onValueChange={setActiveTab}>
+                <TabsList className={cn("grid w-full", isMobile ? "grid-cols-2" : "grid-cols-6")}>
+                    <TabsTrigger value="acompanhamento">Acompanhamento</TabsTrigger>
+                    <TabsTrigger value="roteirizacao">Roteirização</TabsTrigger>
+                    <TabsTrigger value="analise">Análise</TabsTrigger>
+                    <TabsTrigger value="historico">Histórico</TabsTrigger>
+                    <TabsTrigger value="abastecimentos">Abastecimentos</TabsTrigger>
+                    <TabsTrigger value="checklists">Checklists</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="acompanhamento" className="mt-6">
+                    <AcompanhamentoTab activeTab={activeTab} />
+                </TabsContent>
+                <TabsContent value="roteirizacao" className="mt-6">
+                    <RoteirizacaoTab />
+                </TabsContent>
+                <TabsContent value="analise" className="mt-6">
+                    <AnaliseTab activeTab={activeTab} />
+                </TabsContent>
+                <TabsContent value="historico" className="mt-6">
+                    <HistoricoTab activeTab={activeTab} />
+                </TabsContent>
+                <TabsContent value="abastecimentos" className="mt-6">
+                    <AbastecimentosTab activeTab={activeTab} />
+                </TabsContent>
+                <TabsContent value="checklists" className="mt-6">
+                    <ChecklistsTab activeTab={activeTab} />
+                </TabsContent>
+            </Tabs>
+        </div>
+    );
 }
 
 

@@ -131,15 +131,37 @@ export default function LoginPage() {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const authUser = userCredential.user;
       
+      const selectedSector = sectors.find(s => s.id === data.sectorId);
+      const selectedSectorName = selectedSector?.name || '';
+      
       const userDocRef = doc(firestore, `companies/${data.companyId}/sectors/${data.sectorId}/users`, authUser.uid);
       const userDoc = await getDoc(userDocRef);
 
-      if (userDoc.exists()) {
-        const userData = userDoc.data();
+      let userData = userDoc.exists() ? userDoc.data() : null;
+
+      // Se não encontrou no setor selecionado, verifica em outros setores se é admin
+      if (!userData) {
+          const sectorsSnapshot = await getDocs(collection(firestore, `companies/${data.companyId}/sectors`));
+          for (const sectorDoc of sectorsSnapshot.docs) {
+              const otherUserDocRef = doc(firestore, `companies/${data.companyId}/sectors/${sectorDoc.id}/users`, authUser.uid);
+              const otherUserDoc = await getDoc(otherUserDocRef);
+              if (otherUserDoc.exists()) {
+                  const otherUserData = otherUserDoc.data();
+                  if (otherUserData.isAdmin) {
+                      userData = otherUserData;
+                      break;
+                  }
+              }
+          }
+      }
+
+      if (userData) {
         localStorage.setItem('user', JSON.stringify({ ...userData, id: authUser.uid }));
         localStorage.setItem('companyId', data.companyId);
         localStorage.setItem('sectorId', data.sectorId);
+        localStorage.setItem('sectorName', selectedSectorName);
         localStorage.setItem('matricula', data.email);
+        
         // Save for pre-filling next time
         localStorage.setItem('lastCompanyId', data.companyId);
         localStorage.setItem('lastSectorId', data.sectorId);
@@ -148,13 +170,13 @@ export default function LoginPage() {
         toast({ title: 'Login bem-sucedido!' });
         router.push(userData.isAdmin ? '/dashboard' : '/dashboard-truck');
       } else {
-        throw new Error("Usuário não pertence ao setor selecionado.");
+        throw new Error("Usuário não pertence ao setor selecionado ou não é administrador.");
       }
     } catch (error: any) {
       toast({
         variant: "destructive",
         title: "Erro no Login",
-        description: "Matrícula, senha ou setor incorretos. Tente novamente.",
+        description: error.message || "Matrícula, senha ou setor incorretos. Tente novamente.",
       });
     } finally {
       setIsLoading(false);

@@ -48,11 +48,12 @@ export default function DashboardTruckPage() {
     const storedUser = localStorage.getItem('user');
     const companyId = localStorage.getItem('companyId');
     const sectorId = localStorage.getItem('sectorId');
+    const sectorName = localStorage.getItem('sectorName') || '';
     const matricula = localStorage.getItem('matricula');
 
     if (storedUser && companyId && sectorId && matricula) {
         const parsedUser = JSON.parse(storedUser);
-      setUser({ ...parsedUser, id: authUser.uid, companyId, sectorId, matricula });
+      setUser({ ...parsedUser, id: authUser.uid, companyId, sectorId, sectorName, matricula });
     } else {
       toast({
         variant: 'destructive',

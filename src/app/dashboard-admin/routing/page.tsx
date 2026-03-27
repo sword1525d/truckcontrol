@@ -54,6 +54,18 @@ export default function RoutingPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
+  const sectorName = typeof window !== 'undefined' ? localStorage.getItem('sectorName') : '';
+  const isAuthorized = sectorName?.toUpperCase().includes('MILKRUN') && sectorName?.toUpperCase() !== 'MILKRUN ASTEC';
+
+  if (!isAuthorized) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
+        <h1 className="text-2xl font-bold text-destructive">Acesso não autorizado</h1>
+        <p className="text-muted-foreground text-center max-w-sm">O seu setor atual ({sectorName}) não possui acesso ao módulo de roteirização.</p>
+      </div>
+    );
+  }
+
   // New Route Form State
   const [newRouteVehicle, setNewRouteVehicle] = useState('');
   const [newTrips, setNewTrips] = useState<Trip[]>([]);

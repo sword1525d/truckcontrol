@@ -32,10 +32,10 @@ export function AdminSidebar() {
   const router = useRouter();
   const pathname = usePathname();
   const { toggleSidebar, state } = useSidebar();
-  const [sectorId, setSectorId] = useState<string | null>(null);
+  const [sectorName, setSectorName] = useState<string | null>(null);
 
   useEffect(() => {
-    setSectorId(localStorage.getItem('sectorId'));
+    setSectorName(localStorage.getItem('sectorName'));
   }, []);
   
   const handleLogout = () => {
@@ -53,7 +53,7 @@ export function AdminSidebar() {
     { href: '/dashboard-admin/refueling', label: 'Abastecimentos', icon: Fuel },
     { href: '/dashboard-admin/checklists', label: 'Checklists', icon: ClipboardCheck },
     { href: '/dashboard-admin/manage', label: 'Gerenciamento', icon: Users },
-    ...(sectorId === 'MILKRUN INTERNO' 
+    ...(sectorName?.toUpperCase().includes('MILKRUN') && sectorName?.toUpperCase() !== 'MILKRUN ASTEC'
       ? [{ href: '/dashboard-admin/routing', label: 'Roteirização', icon: Milestone }] 
       : []),
     { href: '/dashboard-admin/settings', label: 'Configurações', icon: Settings },
