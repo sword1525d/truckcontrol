@@ -29,6 +29,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { useToast } from '@/hooks/use-toast';
+import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, CheckCircle2, Loader2, Milestone } from 'lucide-react';
 import { OccupancySelector } from './OccupancySelector';
 import { Textarea } from '@/components/ui/textarea';
@@ -65,6 +66,8 @@ type Run = {
   endTime: any;
   endMileage: number | null;
   locationHistory?: LocationPoint[];
+  tripId?: string | null;
+  tripName?: string | null;
 };
 
 // Custom hook for location tracking with batching
@@ -398,6 +401,28 @@ function ActiveRunContent() {
             <div>
                 <h1 className="text-2xl font-bold">Trajeto Ativo</h1>
                 <p className="text-muted-foreground">Veículo: {run.vehicleId} | Motorista: {run.driverName}</p>
+                {run.tripName && <Badge variant="secondary" className="mt-1">{run.tripName}</Badge>}
+            </div>
+            <div className="ml-auto">
+              <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                      <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive gap-2">
+                        <ArrowLeft className="w-4 h-4" /> Sair Temporariamente
+                      </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                      <AlertDialogHeader>
+                          <AlertDialogTitle>Deseja sair deste trajeto?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                              O trajeto continuará em aberto. Você poderá retomá-lo mais tarde no menu inicial.
+                          </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                          <AlertDialogCancel>Continuar aqui</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => router.push('/dashboard-truck')} className="bg-orange-600 hover:bg-orange-700">Sair agora</AlertDialogAction>
+                      </AlertDialogFooter>
+                  </AlertDialogContent>
+              </AlertDialog>
             </div>
         </div>
 

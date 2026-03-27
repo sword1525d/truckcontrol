@@ -11,6 +11,7 @@ import {
     CardTitle,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import { Loader2, Truck, User, Wrench, PlayCircle, Route, Timer, X, Hourglass, MapIcon, Milestone, Maximize, Car, Package, Warehouse, CheckCircle, Clock, Calendar as CalendarIcon, Fuel, ClipboardCheck, Building, Download, Trash2, FileText, EyeOff, MapPin, Plus, ArrowLeft, ArrowRight, Edit, Check } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
@@ -199,7 +200,8 @@ export type AggregatedRun = {
     locationHistory: LocationPoint[];
     originalRuns: Run[];
     startMileage: number;
-    status: 'IN_PROGRESS' | 'COMPLETED';
+    status: 'IN_PROGRESS' | 'COMPLETED' | 'PLANNED';
+    plannedRoute?: PlannedRoute;
 };
 
 // --- Tipos para Roteirização ---
@@ -219,7 +221,9 @@ type PlannedRoute = {
     id: string;
     vehicleId: string;
     trips: PlannedTrip[];
-    date: string; // ISO YYYY-MM-DD
+    date: string; // ISO YYYY-MM-DD or 'fixed'
+    shift: string; // 'Turno 1', 'Turno 2', 'Turno 3'
+    isFixed?: boolean;
 };
 
 export type FirestoreUser = {
@@ -280,6 +284,9 @@ const AcompanhamentoTab = ({ activeTab }: { activeTab: string }) => {
     const [isOverviewLoading, setIsOverviewLoading] = useState(true);
     const [isFleetMapOpen, setIsFleetMapOpen] = useState(false);
     const [activeTrucks, setActiveTrucks] = useState<{ id: string; latitude: number; longitude: number }[]>([]);
+    const [selectedShift, setSelectedShift] = useState<string>('Turno 1');
+    const [dailyProgrammedRoutes, setDailyProgrammedRoutes] = useState<PlannedRoute[]>([]);
+    const [vehicles, setVehicles] = useState<{id: string, model: string}[]>([]);
 
 
     useEffect(() => setIsClient(true), []);
@@ -301,6 +308,24 @@ const AcompanhamentoTab = ({ activeTab }: { activeTab: string }) => {
 
         const companyId = user.companyId;
         const sectorId = user.sectorId;
+
+        // Fetch Vehicles
+        const vCol = collection(firestore, `companies/${companyId}/sectors/${sectorId}/vehicles`);
+        getDocs(query(vCol, where('isTruck', '==', true))).then(snap => {
+            setVehicles(snap.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) })));
+        });
+
+        // Fetch Planned Routes for today
+        const fetchProgrammed = async () => {
+            const routesCol = collection(firestore, `companies/${companyId}/sectors/${sectorId}/routes`);
+            const todayStr = format(new Date(), 'yyyy-MM-dd');
+            const qDate = query(routesCol, where('date', '==', todayStr));
+            const qFixed = query(routesCol, where('date', '==', 'fixed'));
+            const [snapDate, snapFixed] = await Promise.all([getDocs(qDate), getDocs(qFixed)]);
+            const list = [...snapDate.docs, ...snapFixed.docs].map(doc => ({ id: doc.id, ...doc.data() } as PlannedRoute));
+            setDailyProgrammedRoutes(list);
+        };
+        fetchProgrammed();
 
         // Fetch Users
         const usersCol = collection(firestore, `companies/${companyId}/sectors/${sectorId}/users`);
@@ -367,12 +392,17 @@ const AcompanhamentoTab = ({ activeTab }: { activeTab: string }) => {
         allRuns.forEach(run => {
             const driver = users.get(run.driverId);
             const runDate = format(run.startTime.toDate(), 'yyyy-MM-dd');
-            const key = `${run.vehicleId}-${driver?.shift || 'sem-turno'}-${runDate}`;
+            // Using shift from run if available, otherwise from user
+            const shift = (run as any).shift || driver?.shift || 'Turno 1';
+            const key = `${run.vehicleId}-${shift}-${runDate}`;
             if (!groupedRuns.has(key)) groupedRuns.set(key, []);
             groupedRuns.get(key)!.push(run);
         });
 
         const aggregated: AggregatedRun[] = [];
+        const processedKeys = new Set<string>();
+
+        // First, process vehicles that HAVE runs
         groupedRuns.forEach((runs, key) => {
             runs.sort((a, b) => a.startTime.seconds - b.startTime.seconds);
             const firstRun = runs[0];
@@ -384,16 +414,71 @@ const AcompanhamentoTab = ({ activeTab }: { activeTab: string }) => {
             const endMileage = lastRun.endMileage ?? allStops.filter(s => s.mileageAtStop).slice(-1)[0]?.mileageAtStop ?? null;
             const totalDistance = (endMileage && startMileage) ? endMileage - startMileage : 0;
             const status = runs.some(r => r.status === 'IN_PROGRESS') ? 'IN_PROGRESS' : 'COMPLETED';
+            
+            const shift = (firstRun as any).shift || driver?.shift || 'Turno 1';
+            const runDateStr = format(firstRun.startTime.toDate(), 'yyyy-MM-dd');
+            
+            // Find matched planned route
+            const planned = dailyProgrammedRoutes.find(pr => pr.vehicleId === firstRun.vehicleId && (pr.date === runDateStr || pr.date === 'fixed') && (pr.shift === shift || (!pr.shift && shift === 'Turno 1')));
 
-            aggregated.push({ key, driverId: firstRun.driverId, driverName: firstRun.driverName, vehicleId: firstRun.vehicleId, shift: driver?.shift || 'N/A', date: format(firstRun.startTime.toDate(), 'dd/MM/yyyy'), startTime: firstRun.startTime, endTime: lastRun.endTime, totalDistance, stops: allStops, locationHistory: allLocations, originalRuns: runs, startMileage, status });
+            aggregated.push({ 
+                key, 
+                driverId: firstRun.driverId, 
+                driverName: firstRun.driverName, 
+                vehicleId: firstRun.vehicleId, 
+                shift, 
+                date: format(firstRun.startTime.toDate(), 'dd/MM/yyyy'), 
+                startTime: firstRun.startTime, 
+                endTime: lastRun.endTime ?? null, 
+                totalDistance, 
+                stops: allStops, 
+                locationHistory: allLocations, 
+                originalRuns: runs, 
+                startMileage, 
+                status,
+                plannedRoute: planned
+            });
+            processedKeys.add(key);
+        });
+
+        // Second, add vehicles that have PLANNED routes but NO runs yet for the selected shift
+        dailyProgrammedRoutes.forEach(route => {
+            const shift = route.shift || 'Turno 1';
+            if (shift !== selectedShift) return; // Only show for current selected shift in the dashboard
+
+            const todayStr = format(new Date(), 'yyyy-MM-dd');
+            const key = `${route.vehicleId}-${shift}-${todayStr}`;
+            
+            if (!processedKeys.has(key)) {
+                aggregated.push({
+                    key,
+                    driverId: '',
+                    driverName: 'Aguardando Motorista',
+                    vehicleId: route.vehicleId,
+                    shift,
+                    date: format(new Date(), 'dd/MM/yyyy'),
+                    startTime: Timestamp.now(),
+                    endTime: null,
+                    totalDistance: 0,
+                    stops: [],
+                    locationHistory: [],
+                    originalRuns: [],
+                    startMileage: 0,
+                    status: 'PLANNED',
+                    plannedRoute: route
+                });
+                processedKeys.add(key);
+            }
         });
 
         return aggregated.sort((a, b) => {
             if (a.status === 'IN_PROGRESS' && b.status !== 'IN_PROGRESS') return -1;
             if (a.status !== 'IN_PROGRESS' && b.status === 'IN_PROGRESS') return 1;
+            if (a.status === 'COMPLETED' && b.status === 'PLANNED') return -1;
+            if (a.status === 'PLANNED' && b.status === 'COMPLETED') return 1;
             return b.startTime.seconds - a.startTime.seconds;
         });
-    }, [allRuns, users]);
+    }, [allRuns, users, dailyProgrammedRoutes, selectedShift]);
 
     useEffect(() => {
         const inProgressRuns = aggregatedRuns.filter(run => run.status === 'IN_PROGRESS');
@@ -464,12 +549,31 @@ const AcompanhamentoTab = ({ activeTab }: { activeTab: string }) => {
                         <KpiCard title="Parados" value={kpis.parado} icon={Truck} />
                         <KpiCard title="Em Manutenção" value={kpis.emManutencao} icon={Wrench} />
                     </div>
+
+                    <div className="flex justify-between items-center bg-card p-4 rounded-xl border shadow-sm">
+                        <div className="flex items-center gap-4">
+                            <h3 className="font-bold text-lg">Acompanhamento de Operação</h3>
+                            <div className="h-6 w-px bg-muted" />
+                            <Select value={selectedShift} onValueChange={setSelectedShift}>
+                                <SelectTrigger className="w-[160px]">
+                                    <SelectValue placeholder="Selecione o Turno" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="Turno 1">Turno 1</SelectItem>
+                                    <SelectItem value="Turno 2">Turno 2</SelectItem>
+                                    <SelectItem value="Turno 3">Turno 3</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <p className="text-sm text-muted-foreground">{format(new Date(), "dd 'de' MMMM", { locale: ptBR })}</p>
+                    </div>
+
                     <Card>
                         <CardHeader>
                             <div className="flex justify-between items-center">
                                 <div>
-                                    <CardTitle className="flex items-center gap-2"><Truck className="h-6 w-6" /> Status da Frota</CardTitle>
-                                    <CardDescription>Visão geral de todos os caminhões do setor.</CardDescription>
+                                    <CardTitle className="flex items-center gap-2"><Truck className="h-6 w-6" /> Status da Frota Ativa</CardTitle>
+                                    <CardDescription>Visão geral de todos os caminhões em operação no momento.</CardDescription>
                                 </div>
                                 <Button variant="outline" size="icon" onClick={() => setIsFleetMapOpen(true)} disabled={activeTrucks.length === 0}>
                                     <MapIcon className="h-5 w-5" />
@@ -487,21 +591,32 @@ const AcompanhamentoTab = ({ activeTab }: { activeTab: string }) => {
                             )}
                         </CardContent>
                     </Card>
+
+                    <div className='mt-6'>
+                        {aggregatedRuns.filter(r => r.shift === selectedShift).length === 0 ? (
+                            <Card className="text-center p-12 border-dashed border-2">
+                                <CardHeader>
+                                    <CardTitle>Nenhuma atividade para este turno</CardTitle>
+                                    <CardDescription>Não há motoristas em rota, corridas finalizadas ou rotas programadas para o {selectedShift}.</CardDescription>
+                                </CardHeader>
+                            </Card>
+                        ) : (
+                            <Accordion type="single" collapsible className="w-full space-y-4 shadow-sm" defaultValue={aggregatedRuns.find(r => r.status === 'IN_PROGRESS')?.key || aggregatedRuns[0]?.key}>
+                                {aggregatedRuns
+                                    .filter(r => r.shift === selectedShift)
+                                    .map(run => <RunAccordionItem key={run.key} run={run} users={users} onViewRoute={() => handleViewRoute(run.key)} />)}
+                            </Accordion>
+                        )}
+                    </div>
+
+
                 </>
             )}
 
             {isLoading ? (
                 <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
             ) : (
-                <div className='mt-6'>
-                    {aggregatedRuns.length === 0 ? (
-                        <Card className="text-center p-8 mt-6"><CardHeader><CardTitle>Nenhuma atividade hoje</CardTitle><CardDescription>Não há motoristas em rota ou corridas finalizadas hoje.</CardDescription></CardHeader></Card>
-                    ) : (
-                        <Accordion type="single" collapsible className="w-full space-y-4" defaultValue={aggregatedRuns.find(r => r.status === 'IN_PROGRESS')?.key || aggregatedRuns[0]?.key}>
-                            {aggregatedRuns.map(run => <RunAccordionItem key={run.key} run={run} users={users} onViewRoute={() => handleViewRoute(run.key)} />)}
-                        </Accordion>
-                    )}
-                </div>
+                null /* Deletado o bloco duplicado do aggregatedRuns e colocado acima integrado */
             )}
             <Dialog open={selectedRunForMap !== null} onOpenChange={(isOpen) => !isOpen && handleCloseDialog()}>
                 <DialogContent className="max-w-[90vw] lg:max-w-7xl w-full h-[90vh] flex flex-col p-0">
@@ -580,8 +695,20 @@ const VehicleStatusCard = ({ vehicle }: { vehicle: any }) => {
 
 const RunAccordionItem = ({ run, users, onViewRoute }: { run: AggregatedRun, users: Map<string, FirestoreUser>, onViewRoute: () => void }) => {
     const isCompletedRun = run.status === 'COMPLETED';
-    const completedStops = run.stops.filter(s => s.status === 'COMPLETED').length;
-    const totalStops = run.stops.filter(s => s.status !== 'CANCELED').length;
+    const isPlannedRun = run.status === 'PLANNED';
+    
+    // Calculate progress based on planned stops if available, otherwise on run stops
+    let completedStops = 0;
+    let totalStops = 0;
+    
+    if (run.plannedRoute) {
+        totalStops = run.plannedRoute.trips.reduce((acc, trip) => acc + trip.stops.length, 0);
+        completedStops = run.stops.filter(s => s.status === 'COMPLETED').length;
+    } else {
+        completedStops = run.stops.filter(s => s.status === 'COMPLETED').length;
+        totalStops = run.stops.filter(s => s.status !== 'CANCELED').length;
+    }
+    
     const progress = isCompletedRun ? 100 : (totalStops > 0 ? (completedStops / totalStops) * 100 : 0);
     const currentStop = run.stops.find(s => s.status === 'IN_PROGRESS');
     const driver = users.get(run.driverId);
@@ -589,24 +716,87 @@ const RunAccordionItem = ({ run, users, onViewRoute }: { run: AggregatedRun, use
     const getInitials = (name: string) => name.split(' ').map(n => n[0]).slice(0, 2).join('');
 
     return (
-        <AccordionItem value={run.key} className="bg-card border rounded-lg shadow-sm">
+        <AccordionItem value={run.key} className={cn(
+            "bg-card border rounded-lg shadow-sm transition-all",
+            isPlannedRun && "opacity-60 border-dashed"
+        )}>
             <AccordionTrigger className="p-4 hover:no-underline">
                 <div className="w-full flex flex-col sm:flex-row justify-between items-start sm:items-center text-left gap-4 sm:gap-2">
                     <div className="flex-1 min-w-0">
-                        <p className="font-bold text-lg text-primary truncate flex items-center gap-2"><Truck className="h-5 w-5" />{run.vehicleId} ({run.shift})</p>
-                        <div className="text-sm text-muted-foreground flex items-center gap-2"><Avatar className="h-5 w-5"><AvatarImage src={driver?.photoURL} alt={run.driverName} /><AvatarFallback className="text-xs">{getInitials(run.driverName)}</AvatarFallback></Avatar>{run.driverName}</div>
+                        <p className="font-bold text-lg text-primary truncate flex items-center gap-2">
+                            <Truck className="h-5 w-5" />
+                            {run.vehicleId} 
+                            <span className="text-xs font-normal text-muted-foreground ml-2">({run.shift})</span>
+                        </p>
+                        <div className="text-sm text-muted-foreground flex items-center gap-2">
+                            {isPlannedRun ? (
+                                <><Hourglass className="h-4 w-4 text-muted-foreground" /> Aguardando Motorista</>
+                            ) : (
+                                <><Avatar className="h-5 w-5"><AvatarImage src={driver?.photoURL} alt={run.driverName} /><AvatarFallback className="text-xs">{getInitials(run.driverName)}</AvatarFallback></Avatar>{run.driverName}</>
+                            )}
+                        </div>
                     </div>
-                    <div className="flex-1 w-full sm:w-auto"><div className="flex justify-between text-sm mb-1"><span className="font-medium">{isCompletedRun ? 'Concluído' : `${completedStops} de ${totalStops}`}</span><span className="font-bold text-primary">{Math.round(progress)}%</span></div><Progress value={progress} className="h-2" /></div>
-                    <div className="flex-none"><Badge variant={isCompletedRun ? 'default' : (currentStop ? "default" : "secondary")} className={`truncate ${isCompletedRun ? 'bg-green-600' : ''}`}><MapPin className="h-3 w-3 mr-1.5" />{isCompletedRun ? `Finalizado às ${formatFirebaseTime(run.endTime)}` : (currentStop ? currentStop.name : 'Iniciando...')}</Badge></div>
+                    <div className="flex-1 w-full sm:w-auto">
+                        <div className="flex justify-between text-xs mb-1">
+                            <span className="font-medium">
+                                {isCompletedRun ? 'Concluído' : isPlannedRun ? 'Pendente' : `${completedStops} de ${totalStops} paradas`}
+                            </span>
+                            <span className="font-bold text-primary">{Math.round(progress)}%</span>
+                        </div>
+                        <Progress value={progress} className="h-1.5" />
+                    </div>
+                    <div className="flex-none">
+                        <Badge variant={isCompletedRun ? 'default' : (isPlannedRun ? "outline" : (currentStop ? "default" : "secondary"))} 
+                            className={cn(
+                                "truncate px-3",
+                                isCompletedRun && "bg-green-600 hover:bg-green-700",
+                                isPlannedRun && "border-primary/30 text-primary/50"
+                            )}>
+                            <MapPin className="h-3 w-3 mr-1.5" />
+                            {isCompletedRun ? `Finalizado às ${formatFirebaseTime(run.endTime)}` : 
+                             isPlannedRun ? "Rota Programada" : 
+                             (currentStop ? currentStop.name : 'Em Trânsito...')}
+                        </Badge>
+                    </div>
                 </div>
             </AccordionTrigger>
             <AccordionContent className="p-4 pt-0">
                 <div className="space-y-4 mt-4">
-                    <div className="flex justify-between items-center mb-2"><h4 className="font-semibold">Detalhes da Rota</h4><Button variant="outline" size="sm" onClick={onViewRoute}><Route className="mr-2 h-4 w-4" /> Ver Acompanhamento</Button></div>
-                    <RunDetailsContent run={run} />
+                    <div className="flex justify-between items-center mb-2">
+                        <h4 className="font-semibold">{isPlannedRun ? 'Roteirização Programada' : 'Acompanhamento em Tempo Real'}</h4>
+                        {!isPlannedRun && (
+                            <Button variant="outline" size="sm" onClick={onViewRoute}>
+                                <Route className="mr-2 h-4 w-4" /> Ver No Mapa
+                            </Button>
+                        )}
+                    </div>
+                    
+                    {isPlannedRun && run.plannedRoute ? (
+                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                            {run.plannedRoute.trips.map((trip, idx) => (
+                                <div key={idx} className="p-3 rounded-lg bg-muted/30 border border-border/50">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <span className="text-xs font-bold text-primary">{trip.name}</span>
+                                        <Badge variant="secondary" className="text-[9px] h-4">{trip.stops.length} paradas</Badge>
+                                    </div>
+                                    <div className="space-y-1.5 border-l-2 border-primary/10 ml-1 pl-2">
+                                        {trip.stops.map((stop, sIdx) => (
+                                            <div key={sIdx} className="text-[10px] flex justify-between gap-2">
+                                                <span className="truncate">{stop.name}</span>
+                                                <span className="text-muted-foreground whitespace-nowrap">{stop.plannedArrival}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <RunDetailsContent run={run} />
+                    )}
                 </div>
             </AccordionContent>
         </AccordionItem>
+
     );
 };
 
@@ -963,7 +1153,7 @@ const HistoricoTab = ({ activeTab }: { activeTab: string }) => {
             const allLocations = runs.flatMap(r => r.locationHistory || []).sort((a, b) => a.timestamp.seconds - b.timestamp.seconds);
             const totalDistance = runs.reduce((acc, run) => acc + ((run.endMileage ?? 0) - run.startMileage > 0 ? (run.endMileage ?? 0) - run.startMileage : 0), 0);
             const totalDuration = lastRun.endTime ? lastRun.endTime.seconds - firstRun.startTime.seconds : 0;
-            aggregatedMap.set(key, { key, driverId: firstRun.driverId, driverName: firstRun.driverName, vehicleId: firstRun.vehicleId, shift: driver?.shift || 'N/A', date: format(firstRun.startTime.toDate(), 'dd/MM/yyyy'), startTime: firstRun.startTime, endTime: lastRun.endTime, totalDistance, totalDuration, stops: allStops, locationHistory: allLocations, originalRuns: runs, startMileage: firstRun.startMileage, status: 'COMPLETED' });
+            aggregatedMap.set(key, { key, driverId: firstRun.driverId, driverName: firstRun.driverName, vehicleId: firstRun.vehicleId, shift: driver?.shift || 'N/A', date: format(firstRun.startTime.toDate(), 'dd/MM/yyyy'), startTime: firstRun.startTime, endTime: lastRun.endTime ?? null, totalDistance, totalDuration, stops: allStops, locationHistory: allLocations, originalRuns: runs, startMileage: firstRun.startMileage, status: 'COMPLETED' });
         });
         return aggregatedMap;
     }, [filteredRuns, users]);
@@ -1138,8 +1328,10 @@ const RoteirizacaoTab = () => {
     const [isEditing, setIsEditing] = useState(false);
     const [editingRouteId, setEditingRouteId] = useState<string | null>(null);
     const [selectedAdditionalDates, setSelectedAdditionalDates] = useState<string[]>([]);
+    const [isFixedNewRoute, setIsFixedNewRoute] = useState(false);
     const [viewMode, setViewMode] = useState<'daily' | 'calendar'>('daily');
     const [vehicleFilter, setVehicleFilter] = useState<string>('all');
+    const [selectedShift, setSelectedShift] = useState<string>('Turno 1');
 
     const fetchVehicles = useCallback(async () => {
         const companyId = localStorage.getItem('companyId');
@@ -1167,13 +1359,20 @@ const RoteirizacaoTab = () => {
         setIsLoading(true);
         try {
             const routesCol = collection(firestore, `companies/${companyId}/sectors/${sectorId}/routes`);
+            
+            // Fetch date-specific routes
             const start = format(startOfMonth(selectedDate), 'yyyy-MM-dd');
             const end = format(endOfMonth(selectedDate), 'yyyy-MM-dd');
+            const qRange = query(routesCol, where('date', '>=', start), where('date', '<=', end));
+            const snapshotRange = await getDocs(qRange);
+            const listRange = snapshotRange.docs.map(doc => ({ id: doc.id, ...doc.data() } as PlannedRoute));
 
-            const q = query(routesCol, where('date', '>=', start), where('date', '<=', end));
-            const snapshot = await getDocs(q);
-            const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PlannedRoute));
-            setRoutes(list);
+            // Fetch fixed routes
+            const qFixed = query(routesCol, where('date', '==', 'fixed'));
+            const snapshotFixed = await getDocs(qFixed);
+            const listFixed = snapshotFixed.docs.map(doc => ({ id: doc.id, ...doc.data() } as PlannedRoute));
+
+            setRoutes([...listRange, ...listFixed]);
         } catch (error) {
             console.error(error);
             toast({ variant: 'destructive', title: 'Erro', description: 'Erro ao carregar rotas.' });
@@ -1241,27 +1440,43 @@ const RoteirizacaoTab = () => {
 
         setIsSaving(true);
         try {
-            const datesToSave = [format(selectedDate, 'yyyy-MM-dd'), ...selectedAdditionalDates];
-            // Save in batches of 5 dates to avoid 'Transaction too big' error
-            for (let i = 0; i < datesToSave.length; i += 5) {
-                const batch = writeBatch(firestore);
-                const chunk = datesToSave.slice(i, i + 5);
+            const shiftSuffix = `_${selectedShift.replace(' ', '')}`;
+            if (isFixedNewRoute) {
+                const routeId = `fixed_${newRouteVehicle}${shiftSuffix}`;
+                const routeRef = doc(firestore, `companies/${companyId}/sectors/${sectorId}/routes`, routeId);
+                await setDoc(routeRef, {
+                    vehicleId: newRouteVehicle,
+                    date: 'fixed',
+                    shift: selectedShift,
+                    isFixed: true,
+                    trips: newTrips
+                });
+            } else {
+                const datesToSave = [format(selectedDate, 'yyyy-MM-dd'), ...selectedAdditionalDates];
+                // Save in batches of 5 dates to avoid 'Transaction too big' error
+                for (let i = 0; i < datesToSave.length; i += 5) {
+                    const batch = writeBatch(firestore);
+                    const chunk = datesToSave.slice(i, i + 5);
 
-                for (const dateStr of chunk) {
-                    const routeId = isEditing && dateStr === format(selectedDate, 'yyyy-MM-dd')
-                        ? editingRouteId!
-                        : `${dateStr}_${newRouteVehicle}_${Math.random().toString(36).substr(2, 5)}`;
+                    for (const dateStr of chunk) {
+                        const routeId = isEditing && dateStr === format(selectedDate, 'yyyy-MM-dd')
+                            ? editingRouteId!
+                            : `${dateStr}_${newRouteVehicle}${shiftSuffix}`;
 
-                    const routeRef = doc(firestore, `companies/${companyId}/sectors/${sectorId}/routes`, routeId);
-                    batch.set(routeRef, {
-                        vehicleId: newRouteVehicle,
-                        trips: newTrips
-                    });
+                        const routeRef = doc(firestore, `companies/${companyId}/sectors/${sectorId}/routes`, routeId);
+                        batch.set(routeRef, {
+                            vehicleId: newRouteVehicle,
+                            date: dateStr,
+                            shift: selectedShift,
+                            isFixed: false,
+                            trips: newTrips
+                        });
+                    }
+                    await batch.commit();
                 }
-                await batch.commit();
             }
 
-            toast({ title: 'Sucesso', description: isEditing ? 'Rota atualizada!' : 'Rota(s) salva(s) com sucesso!' });
+            toast({ title: 'Sucesso', description: isEditing ? 'Rota atualizada!' : (isFixedNewRoute ? 'Rota fixa salva!' : 'Rota(s) salva(s) com sucesso!') });
             resetForm();
             fetchRoutes();
         } catch (error) {
@@ -1277,13 +1492,17 @@ const RoteirizacaoTab = () => {
         setIsEditing(false);
         setEditingRouteId(null);
         setSelectedAdditionalDates([]);
+        setIsFixedNewRoute(false);
     };
 
     const handleEditRoute = (route: PlannedRoute) => {
         setNewRouteVehicle(route.vehicleId);
         setNewTrips(route.trips);
-        setSelectedDate(new Date(route.date + 'T12:00:00'));
+        setSelectedDate(new Date(route.date === 'fixed' ? format(new Date(), 'yyyy-MM-dd') + 'T12:00:00' : route.date + 'T12:00:00'));
         setIsEditing(true);
+        setIsEditing(true);
+        setIsFixedNewRoute(!!route.isFixed);
+        setSelectedShift(route.shift || 'Turno 1');
         setEditingRouteId(route.id);
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
@@ -1302,7 +1521,10 @@ const RoteirizacaoTab = () => {
         }
     };
 
-    const routesForSelectedDate = routes.filter(r => r.date === format(selectedDate, 'yyyy-MM-dd'));
+    const routesForSelectedDate = routes.filter(r => 
+        (r.date === format(selectedDate, 'yyyy-MM-dd') || r.date === 'fixed') &&
+        (r.shift === selectedShift || (!r.shift && selectedShift === 'Turno 1'))
+    );
 
     const CalendarView = () => {
         const days = eachDayOfInterval({
@@ -1413,7 +1635,33 @@ const RoteirizacaoTab = () => {
                                         <SelectContent>{vehicles.map(v => <SelectItem key={v.id} value={v.id}>{v.id} - {v.model}</SelectItem>)}</SelectContent>
                                     </Select>
                                 </div>
+                                {!isEditing && (
+                                    <div className="flex items-center justify-between space-x-2 bg-primary/5 p-4 rounded-xl border-2 border-primary/20 shadow-sm col-span-2 md:col-span-1">
+                                        <div className="space-y-0.5">
+                                            <Label htmlFor="fixed-route-dashboard" className="text-sm font-bold cursor-pointer">
+                                                Rota Fixa (Diária)
+                                            </Label>
+                                            <p className="text-[10px] text-muted-foreground">Repetir todo dia para este caminhão.</p>
+                                        </div>
+                                        <Switch 
+                                            id="fixed-route-dashboard" 
+                                            checked={isFixedNewRoute}
+                                            onCheckedChange={setIsFixedNewRoute}
+                                        />
+                                    </div>
+                                )}
                                 <div className="space-y-2">
+                                    <Label>Turno</Label>
+                                    <Select value={selectedShift} onValueChange={setSelectedShift}>
+                                        <SelectTrigger><SelectValue placeholder="Selecione o Turno" /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="Turno 1">Turno 1</SelectItem>
+                                            <SelectItem value="Turno 2">Turno 2</SelectItem>
+                                            <SelectItem value="Turno 3">Turno 3</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className={cn("space-y-2", isFixedNewRoute && "opacity-50 pointer-events-none")}>
                                     <div className="flex justify-between items-end">
                                         <Label>Repetir para Datas (Opcional)</Label>
                                         <div className="flex gap-1">
@@ -1499,7 +1747,10 @@ const RoteirizacaoTab = () => {
                                     .map(route => (
                                         <Card key={route.id} className="overflow-hidden border-primary/20">
                                             <div className="bg-primary/5 p-3 flex justify-between items-center border-b">
-                                                <span className="font-bold text-sm flex items-center gap-2"><Truck className="w-4 h-4" /> {route.vehicleId}</span>
+                                                <span className="font-bold text-sm flex items-center gap-2">
+                                                    <Truck className="w-4 h-4" /> {route.vehicleId}
+                                                    {route.isFixed && <Badge variant="secondary" className="text-[10px] h-4">DIÁRIA</Badge>}
+                                                </span>
                                                 <div className="flex gap-1">
                                                     <Button variant="ghost" size="icon" className="h-8 w-8 text-primary" onClick={() => handleEditRoute(route)}><Edit className="w-4 h-4" /></Button>
                                                     <AlertDialog>

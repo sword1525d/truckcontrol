@@ -14,8 +14,23 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Plus, Trash2, Calendar, Truck, MapPin, Clock } from 'lucide-react';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay } from 'date-fns';
+import { 
+  Loader2, 
+  Plus, 
+  Trash2, 
+  Calendar, 
+  Truck, 
+  MapPin, 
+  Clock, 
+  ChevronRight, 
+  Edit3, 
+  Eye, 
+  LayoutDashboard, 
+  Settings2,
+  CheckCircle2,
+  AlertCircle
+} from 'lucide-react';
+import { format, startOfMonth, endOfMonth, startOfDay, endOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
   Select,
@@ -24,6 +39,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
+import { Progress } from "@/components/ui/progress";
 
 type Stop = {
   name: string;
@@ -41,7 +59,9 @@ type Route = {
   id: string;
   vehicleId: string;
   trips: Trip[];
-  date: string; // ISO string YYYY-MM-DD
+  date: string; // ISO string YYYY-MM-DD or 'fixed'
+  shift: string; // 'Turno 1', 'Turno 2', 'Turno 3'
+  isFixed?: boolean;
 };
 
 export default function RoutingPage() {
@@ -51,24 +71,18 @@ export default function RoutingPage() {
   const [vehicles, setVehicles] = useState<{id: string, model: string}[]>([]);
   const [routes, setRoutes] = useState<Route[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [selectedShift, setSelectedShift] = useState<string>('Turno 1');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
   const sectorName = typeof window !== 'undefined' ? localStorage.getItem('sectorName') : '';
   const isAuthorized = sectorName?.toUpperCase().includes('MILKRUN') && sectorName?.toUpperCase() !== 'MILKRUN ASTEC';
 
-  if (!isAuthorized) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
-        <h1 className="text-2xl font-bold text-destructive">Acesso não autorizado</h1>
-        <p className="text-muted-foreground text-center max-w-sm">O seu setor atual ({sectorName}) não possui acesso ao módulo de roteirização.</p>
-      </div>
-    );
-  }
-
-  // New Route Form State
+  // Form State
   const [newRouteVehicle, setNewRouteVehicle] = useState('');
   const [newTrips, setNewTrips] = useState<Trip[]>([]);
+  const [isFixedNewRoute, setIsFixedNewRoute] = useState(false);
+  const [editingRouteId, setEditingRouteId] = useState<string | null>(null);
 
   const fetchVehicles = useCallback(async () => {
     const companyId = localStorage.getItem('companyId');
@@ -99,12 +113,15 @@ export default function RoutingPage() {
       const start = format(startOfMonth(selectedDate), 'yyyy-MM-dd');
       const end = format(endOfMonth(selectedDate), 'yyyy-MM-dd');
       
-      const q = query(routesCol, where('date', '>=', start), where('date', '<=', end));
-      const snapshot = await getDocs(q);
-      const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Route));
-      setRoutes(list);
+      const qRange = query(routesCol, where('date', '>=', start), where('date', '<=', end));
+      const qFixed = query(routesCol, where('date', '==', 'fixed'));
+      
+      const [snapRange, snapFixed] = await Promise.all([getDocs(qRange), getDocs(qFixed)]);
+      
+      const listRange = snapRange.docs.map(doc => ({ id: doc.id, ...doc.data() } as Route));
+      const listFixed = snapFixed.docs.map(doc => ({ id: doc.id, ...doc.data() } as Route));
+      setRoutes([...listRange, ...listFixed]);
     } catch (error) {
-      console.error(error);
       toast({ variant: 'destructive', title: 'Erro', description: 'Erro ao carregar rotas.' });
     } finally {
       setIsLoading(false);
@@ -170,25 +187,43 @@ export default function RoutingPage() {
 
     setIsSaving(true);
     try {
-      const dateStr = format(selectedDate, 'yyyy-MM-dd');
-      const routeId = `${dateStr}_${newRouteVehicle}`;
+      const dateStr = isFixedNewRoute ? 'fixed' : format(selectedDate, 'yyyy-MM-dd');
+      const shiftSuffix = `_${selectedShift.replace(' ', '')}`;
+      const routeId = isFixedNewRoute ? `fixed_${newRouteVehicle}${shiftSuffix}` : `${dateStr}_${newRouteVehicle}${shiftSuffix}`;
       const routeRef = doc(firestore, `companies/${companyId}/sectors/${sectorId}/routes`, routeId);
       
       await setDoc(routeRef, {
         vehicleId: newRouteVehicle,
         date: dateStr,
+        shift: selectedShift,
+        isFixed: isFixedNewRoute,
         trips: newTrips
       });
 
-      toast({ title: 'Sucesso', description: 'Rota salva com sucesso!' });
-      setNewRouteVehicle('');
-      setNewTrips([]);
+      toast({ title: 'Sucesso', description: isFixedNewRoute ? 'Rota fixa salva!' : 'Rota salva com sucesso!' });
+      resetForm();
       fetchRoutes();
     } catch (error) {
       toast({ variant: 'destructive', title: 'Erro', description: 'Erro ao salvar rota.' });
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const resetForm = () => {
+    setNewRouteVehicle('');
+    setNewTrips([]);
+    setIsFixedNewRoute(false);
+    setEditingRouteId(null);
+  };
+
+  const handleEditRoute = (route: Route) => {
+    setNewRouteVehicle(route.vehicleId);
+    setNewTrips(route.trips);
+    setIsFixedNewRoute(!!route.isFixed);
+    setSelectedShift(route.shift || 'Turno 1');
+    setEditingRouteId(route.id);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleDeleteRoute = async (routeId: string) => {
@@ -207,7 +242,19 @@ export default function RoutingPage() {
     }
   };
 
-  const routesForSelectedDate = routes.filter(r => r.date === format(selectedDate, 'yyyy-MM-dd'));
+  const routesForSelectedDate = routes.filter(r => 
+    (r.date === format(selectedDate, 'yyyy-MM-dd') || r.date === 'fixed') && 
+    (r.shift === selectedShift || (!r.shift && selectedShift === 'Turno 1'))
+  );
+
+  if (!isAuthorized) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
+        <h1 className="text-2xl font-bold text-destructive">Acesso não autorizado</h1>
+        <p className="text-muted-foreground text-center max-w-sm">O seu setor atual ({sectorName}) não possui acesso ao módulo de roteirização.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto p-4 space-y-8">
@@ -228,29 +275,60 @@ export default function RoutingPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Formulário de Criação */}
-        <Card className="lg:col-span-2">
+        {/* Formulário de Criação/Edição */}
+        <Card className="lg:col-span-2 shadow-md">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Plus className="w-5 h-5" /> Nova Roteirização
+              {editingRouteId ? <Edit3 className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
+              {editingRouteId ? 'Editar Programação' : 'Nova Roteirização'}
             </CardTitle>
             <CardDescription>
               Programação para o dia {format(selectedDate, "dd 'de' MMMM", { locale: ptBR })}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="space-y-2">
-              <Label>Veículo</Label>
-              <Select value={newRouteVehicle} onValueChange={setNewRouteVehicle}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione o veículo" />
-                </SelectTrigger>
-                <SelectContent>
-                  {vehicles.map(v => (
-                    <SelectItem key={v.id} value={v.id}>{v.id} - {v.model}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Veículo</Label>
+                <Select value={newRouteVehicle} onValueChange={setNewRouteVehicle}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o veículo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {vehicles.map(v => (
+                      <SelectItem key={v.id} value={v.id}>{v.id} - {v.model}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Turno</Label>
+                <Select value={selectedShift} onValueChange={setSelectedShift}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o Turno" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Turno 1">Turno 1</SelectItem>
+                    <SelectItem value="Turno 2">Turno 2</SelectItem>
+                    <SelectItem value="Turno 3">Turno 3</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            
+            <div className="flex items-center justify-between space-x-2 bg-primary/5 p-4 rounded-xl border-2 border-primary/20 shadow-sm">
+              <div className="space-y-0.5">
+                <Label htmlFor="fixed-route-standalone" className="text-base font-bold cursor-pointer">
+                  Programação Fixa (Diária)
+                </Label>
+                <p className="text-xs text-muted-foreground">Esta rota aparecerá todos os dias para o caminhão selecionado.</p>
+              </div>
+              <Switch 
+                id="fixed-route-standalone" 
+                checked={isFixedNewRoute}
+                onCheckedChange={setIsFixedNewRoute}
+              />
             </div>
 
             <div className="space-y-4">
@@ -303,7 +381,7 @@ export default function RoutingPage() {
                             <Input 
                               type="time" 
                               value={stop.plannedDeparture}
-                              onChange={(handleUpdateStop.bind(null, trip.id, sIndex, 'plannedDeparture') as any)}
+                              onChange={(e) => handleUpdateStop(trip.id, sIndex, 'plannedDeparture', e.target.value)}
                               className="w-full"
                             />
                           </div>
@@ -321,42 +399,53 @@ export default function RoutingPage() {
               ))}
             </div>
 
-            <Button className="w-full h-12 text-lg" onClick={handleSaveRoute} disabled={isSaving || !newRouteVehicle}>
-              {isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Salvar Roteirização
-            </Button>
+            <div className="flex gap-4">
+              <Button className="flex-1 h-12 text-lg" onClick={handleSaveRoute} disabled={isSaving || !newRouteVehicle}>
+                {isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                {editingRouteId ? 'Atualizar Roteirização' : 'Salvar Roteirização'}
+              </Button>
+              {editingRouteId && (
+                <Button variant="outline" className="h-12" onClick={resetForm}>Cancelar</Button>
+              )}
+            </div>
           </CardContent>
         </Card>
 
         {/* Lista de Rotas Salvas */}
         <div className="space-y-4">
           <h2 className="text-xl font-bold flex items-center gap-2">
-            <Truck className="w-5 h-5" /> Rotas do Dia
+            <Truck className="w-5 h-5" /> Programadas
           </h2>
           {isLoading ? (
             <div className="flex justify-center p-8"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
           ) : routesForSelectedDate.length === 0 ? (
             <p className="text-muted-foreground text-center py-8 border rounded-lg border-dashed">
-              Nenhuma rota programada para este dia.
+              Nenhuma rota programada para este turno.
             </p>
           ) : (
             routesForSelectedDate.map(route => (
               <Card key={route.id} className="overflow-hidden">
                 <div className="bg-primary/5 p-3 flex justify-between items-center border-b">
-                  <span className="font-bold flex items-center gap-2">
+                  <span className="font-bold flex items-center gap-2 text-sm">
                     <Truck className="w-4 h-4" /> {route.vehicleId}
+                    {route.isFixed && <Badge variant="secondary" className="text-[10px] h-4">DIÁRIA</Badge>}
                   </span>
-                  <Button variant="ghost" size="icon" onClick={() => handleDeleteRoute(route.id)}>
-                    <Trash2 className="w-4 h-4 text-destructive" />
-                  </Button>
+                  <div className="flex gap-1">
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleEditRoute(route)}>
+                      <Edit3 className="w-4 h-4 text-primary" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleDeleteRoute(route.id)}>
+                      <Trash2 className="w-4 h-4 text-destructive" />
+                    </Button>
+                  </div>
                 </div>
                 <CardContent className="p-4 space-y-4">
                   {route.trips.map((trip, idx) => (
                     <div key={idx} className="space-y-2">
-                      <p className="text-sm font-bold text-primary">{trip.name}</p>
+                      <p className="text-xs font-bold text-primary">{trip.name}</p>
                       <div className="space-y-1 border-l-2 border-primary/20 ml-2 pl-3">
                         {trip.stops.map((stop, sIdx) => (
-                          <div key={sIdx} className="text-xs flex justify-between">
+                          <div key={sIdx} className="text-[10px] flex justify-between">
                             <span>{stop.name}</span>
                             <span className="text-muted-foreground">{stop.plannedArrival} - {stop.plannedDeparture}</span>
                           </div>
