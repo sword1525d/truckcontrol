@@ -2,7 +2,7 @@
 'use client';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useFirebase } from '@/firebase';
-import { collection, onSnapshot, query, where, Timestamp, getDocs, getDoc, doc, setDoc, deleteDoc, collectionGroup, orderBy, writeBatch } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, Timestamp, getDocs, getDoc, doc, setDoc, deleteDoc, collectionGroup, orderBy, writeBatch, updateDoc } from 'firebase/firestore';
 import {
     Card,
     CardContent,
@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { Loader2, Truck, User, Wrench, PlayCircle, Route, Timer, X, Hourglass, MapIcon, Milestone, Maximize, Car, Package, Warehouse, CheckCircle, Clock, Calendar as CalendarIcon, Fuel, ClipboardCheck, Building, Download, Trash2, FileText, EyeOff, MapPin, Plus, ArrowLeft, ArrowRight, Edit, Check } from 'lucide-react';
+import { Loader2, Truck, User, Wrench, PlayCircle, Route, Timer, X, Hourglass, MapIcon, Milestone, Maximize, Car, Package, Warehouse, CheckCircle, CheckCircle2, Clock, Calendar as CalendarIcon, Fuel, ClipboardCheck, Building, Download, Trash2, FileText, EyeOff, MapPin, Plus, ArrowLeft, ArrowRight, Edit, Edit3, Check, ChevronRight, AlertCircle, LayoutDashboard, Copy } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -183,6 +183,10 @@ export type Run = {
     stops: Stop[];
     sectorId?: string;
     locationHistory?: LocationPoint[];
+    tripId?: string | null;
+    tripName?: string | null;
+    shift?: string;
+    routeId?: string | null;
 };
 
 export type AggregatedRun = {
@@ -249,6 +253,7 @@ export type Segment = {
 type UserData = {
     name: string;
     isAdmin: boolean;
+    isOP?: boolean;
     companyId: string;
     sectorId: string;
     matricula: string;
@@ -284,7 +289,7 @@ const AcompanhamentoTab = ({ activeTab }: { activeTab: string }) => {
     const [isOverviewLoading, setIsOverviewLoading] = useState(true);
     const [isFleetMapOpen, setIsFleetMapOpen] = useState(false);
     const [activeTrucks, setActiveTrucks] = useState<{ id: string; latitude: number; longitude: number }[]>([]);
-    const [selectedShift, setSelectedShift] = useState<string>('Turno 1');
+    const [selectedShift, setSelectedShift] = useState<string>('1° NORMAL');
     const [dailyProgrammedRoutes, setDailyProgrammedRoutes] = useState<PlannedRoute[]>([]);
     const [vehicles, setVehicles] = useState<{id: string, model: string}[]>([]);
 
@@ -375,7 +380,19 @@ const AcompanhamentoTab = ({ activeTab }: { activeTab: string }) => {
                 setIsOverviewLoading(false);
             });
 
-            return () => unsubscribeRuns();
+            const usersCol = collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/users`);
+            const unsubscribeUsers = onSnapshot(usersCol, (snapshot) => {
+                const usersMap = new Map<string, FirestoreUser>();
+                snapshot.forEach(doc => {
+                    usersMap.set(doc.id, { id: doc.id, ...doc.data() } as FirestoreUser);
+                });
+                setUsers(usersMap);
+            });
+
+            return () => {
+                unsubscribeRuns();
+                unsubscribeUsers();
+            }
         }, (error) => {
             console.error("Error fetching vehicles: ", error);
             toast({ variant: 'destructive', title: 'Erro ao buscar veículos' });
@@ -392,8 +409,8 @@ const AcompanhamentoTab = ({ activeTab }: { activeTab: string }) => {
         allRuns.forEach(run => {
             const driver = users.get(run.driverId);
             const runDate = format(run.startTime.toDate(), 'yyyy-MM-dd');
-            // Using shift from run if available, otherwise from user
-            const shift = (run as any).shift || driver?.shift || 'Turno 1';
+            let shift = (run as any).shift || driver?.shift || '1° NORMAL';
+
             const key = `${run.vehicleId}-${shift}-${runDate}`;
             if (!groupedRuns.has(key)) groupedRuns.set(key, []);
             groupedRuns.get(key)!.push(run);
@@ -415,11 +432,16 @@ const AcompanhamentoTab = ({ activeTab }: { activeTab: string }) => {
             const totalDistance = (endMileage && startMileage) ? endMileage - startMileage : 0;
             const status = runs.some(r => r.status === 'IN_PROGRESS') ? 'IN_PROGRESS' : 'COMPLETED';
             
-            const shift = (firstRun as any).shift || driver?.shift || 'Turno 1';
+            let shift = (firstRun as any).shift || driver?.shift || '1° NORMAL';
+
+
             const runDateStr = format(firstRun.startTime.toDate(), 'yyyy-MM-dd');
             
-            // Find matched planned route
-            const planned = dailyProgrammedRoutes.find(pr => pr.vehicleId === firstRun.vehicleId && (pr.date === runDateStr || pr.date === 'fixed') && (pr.shift === shift || (!pr.shift && shift === 'Turno 1')));
+            // Find matched planned route by routeId or by vehicle/date/shift
+            const planned = dailyProgrammedRoutes.find(pr => {
+                if ((firstRun as any).routeId && pr.id === (firstRun as any).routeId) return true;
+                return pr.vehicleId === firstRun.vehicleId && (pr.date === runDateStr || pr.date === 'fixed') && (pr.shift === shift || (!pr.shift && shift === '1° NORMAL'));
+            });
 
             aggregated.push({ 
                 key, 
@@ -443,7 +465,7 @@ const AcompanhamentoTab = ({ activeTab }: { activeTab: string }) => {
 
         // Second, add vehicles that have PLANNED routes but NO runs yet for the selected shift
         dailyProgrammedRoutes.forEach(route => {
-            const shift = route.shift || 'Turno 1';
+            const shift = route.shift || '1° NORMAL';
             if (shift !== selectedShift) return; // Only show for current selected shift in the dashboard
 
             const todayStr = format(new Date(), 'yyyy-MM-dd');
@@ -511,6 +533,25 @@ const AcompanhamentoTab = ({ activeTab }: { activeTab: string }) => {
         setHighlightedSegmentId(null);
     }
 
+    const handleCancelRun = async (runId: string) => {
+        const companyId = localStorage.getItem('companyId');
+        const sectorId = localStorage.getItem('sectorId');
+        if (!firestore || !companyId || !sectorId) return;
+
+        try {
+            const runRef = doc(firestore, `companies/${companyId}/sectors/${sectorId}/runs`, runId);
+            await updateDoc(runRef, {
+                status: 'CANCELED',
+                endTime: Timestamp.now()
+            });
+
+            toast({ title: 'Sucesso', description: 'O trajeto foi interrompido e cancelado.' });
+        } catch (error) {
+            console.error(error);
+            toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível cancelar o trajeto.' });
+        }
+    };
+
     const selectedRunForMap = useMemo(() => {
         if (!selectedRunKeyForMap) return null;
         return aggregatedRuns.find(run => run.key === selectedRunKeyForMap) || null;
@@ -529,6 +570,13 @@ const AcompanhamentoTab = ({ activeTab }: { activeTab: string }) => {
         parado: vehicleStatuses.filter(v => v.status === 'PARADO').length,
         emManutencao: vehicleStatuses.filter(v => v.status === 'EM_MANUTENCAO').length,
     };
+
+    const availableShifts = useMemo(() => {
+        const shifts = new Set<string>(['1° NORMAL', '2° NORMAL', '1° ESPECIAL', '2° ESPECIAL']);
+        users.forEach(u => { if (u.shift) shifts.add(u.shift); });
+        dailyProgrammedRoutes.forEach(r => { if (r.shift) shifts.add(r.shift); });
+        return Array.from(shifts).sort();
+    }, [users, dailyProgrammedRoutes]);
 
     return (
         <div className="space-y-6">
@@ -550,18 +598,18 @@ const AcompanhamentoTab = ({ activeTab }: { activeTab: string }) => {
                         <KpiCard title="Em Manutenção" value={kpis.emManutencao} icon={Wrench} />
                     </div>
 
-                    <div className="flex justify-between items-center bg-card p-4 rounded-xl border shadow-sm">
+                    <div className="flex justify-between items-center bg-card p-4 rounded-lg border shadow-sm">
                         <div className="flex items-center gap-4">
                             <h3 className="font-bold text-lg">Acompanhamento de Operação</h3>
                             <div className="h-6 w-px bg-muted" />
                             <Select value={selectedShift} onValueChange={setSelectedShift}>
-                                <SelectTrigger className="w-[160px]">
+                                <SelectTrigger className="w-[180px]">
                                     <SelectValue placeholder="Selecione o Turno" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="Turno 1">Turno 1</SelectItem>
-                                    <SelectItem value="Turno 2">Turno 2</SelectItem>
-                                    <SelectItem value="Turno 3">Turno 3</SelectItem>
+                                    {availableShifts.map(s => (
+                                        <SelectItem key={s} value={s}>{s}</SelectItem>
+                                    ))}
                                 </SelectContent>
                             </Select>
                         </div>
@@ -604,7 +652,16 @@ const AcompanhamentoTab = ({ activeTab }: { activeTab: string }) => {
                             <Accordion type="single" collapsible className="w-full space-y-4 shadow-sm" defaultValue={aggregatedRuns.find(r => r.status === 'IN_PROGRESS')?.key || aggregatedRuns[0]?.key}>
                                 {aggregatedRuns
                                     .filter(r => r.shift === selectedShift)
-                                    .map(run => <RunAccordionItem key={run.key} run={run} users={users} onViewRoute={() => handleViewRoute(run.key)} />)}
+                                    .map(run => (
+                                        <RunAccordionItem 
+                                            key={run.key} 
+                                            run={run} 
+                                            users={users} 
+                                            onViewRoute={() => handleViewRoute(run.key)} 
+                                            onCancelRun={handleCancelRun}
+                                            isOP={user?.isOP}
+                                        />
+                                    ))}
                             </Accordion>
                         )}
                     </div>
@@ -693,7 +750,13 @@ const VehicleStatusCard = ({ vehicle }: { vehicle: any }) => {
     )
 };
 
-const RunAccordionItem = ({ run, users, onViewRoute }: { run: AggregatedRun, users: Map<string, FirestoreUser>, onViewRoute: () => void }) => {
+const RunAccordionItem = ({ run, users, onViewRoute, onCancelRun, isOP }: { 
+    run: AggregatedRun, 
+    users: Map<string, FirestoreUser>, 
+    onViewRoute: () => void,
+    onCancelRun?: (runId: string) => void,
+    isOP?: boolean
+}) => {
     const isCompletedRun = run.status === 'COMPLETED';
     const isPlannedRun = run.status === 'PLANNED';
     
@@ -710,6 +773,7 @@ const RunAccordionItem = ({ run, users, onViewRoute }: { run: AggregatedRun, use
     }
     
     const progress = isCompletedRun ? 100 : (totalStops > 0 ? (completedStops / totalStops) * 100 : 0);
+    const activeRun = run.originalRuns.find(r => r.status === 'IN_PROGRESS');
     const currentStop = run.stops.find(s => s.status === 'IN_PROGRESS');
     const driver = users.get(run.driverId);
     const formatFirebaseTime = (ts: FirebaseTimestamp | null | undefined) => ts ? format(new Date(ts.seconds * 1000), 'HH:mm') : '--:--';
@@ -755,19 +819,43 @@ const RunAccordionItem = ({ run, users, onViewRoute }: { run: AggregatedRun, use
                             <MapPin className="h-3 w-3 mr-1.5" />
                             {isCompletedRun ? `Finalizado às ${formatFirebaseTime(run.endTime)}` : 
                              isPlannedRun ? "Rota Programada" : 
-                             (currentStop ? currentStop.name : 'Em Trânsito...')}
+                             (activeRun?.tripName ? `${activeRun.tripName}: ${currentStop?.name || 'Iniciando'}` : (currentStop ? currentStop.name : 'Em Trânsito...'))}
                         </Badge>
                     </div>
                 </div>
-            </AccordionTrigger>
+                        </AccordionTrigger>
             <AccordionContent className="p-4 pt-0">
                 <div className="space-y-4 mt-4">
                     <div className="flex justify-between items-center mb-2">
                         <h4 className="font-semibold">{isPlannedRun ? 'Roteirização Programada' : 'Acompanhamento em Tempo Real'}</h4>
                         {!isPlannedRun && (
-                            <Button variant="outline" size="sm" onClick={onViewRoute}>
-                                <Route className="mr-2 h-4 w-4" /> Ver No Mapa
-                            </Button>
+                            <div className="flex gap-2">
+                                {activeRun && onCancelRun && isOP && (
+                                    <AlertDialog>
+                                        <AlertDialogTrigger asChild>
+                                            <Button variant="ghost" size="sm" className="text-destructive h-8 px-2 font-bold flex items-center gap-1.5 hover:bg-destructive/10">
+                                                <X className="h-4 w-4" /> Cancelar
+                                            </Button>
+                                        </AlertDialogTrigger>
+                                        <AlertDialogContent>
+                                            <AlertDialogHeader>
+                                                <AlertDialogTitle className="text-destructive font-black uppercase">Cancelar este trajeto?</AlertDialogTitle>
+                                                <AlertDialogDescription>
+                                                    Esta ação irá interromper a corrida de <strong>{run.driverName}</strong> no veículo <strong>{run.vehicleId}</strong>.
+                                                    Os dados já registrados serão mantidos mas a corrida será encerrada imediatamente.
+                                                </AlertDialogDescription>
+                                            </AlertDialogHeader>
+                                            <AlertDialogFooter>
+                                                <AlertDialogCancel>Voltar</AlertDialogCancel>
+                                                <AlertDialogAction onClick={() => onCancelRun(activeRun.id)} className="bg-destructive hover:bg-destructive shadow-lg font-bold">Encerrar Agora</AlertDialogAction>
+                                            </AlertDialogFooter>
+                                        </AlertDialogContent>
+                                    </AlertDialog>
+                                )}
+                                <Button variant="outline" size="sm" onClick={onViewRoute} className="h-8">
+                                    <Route className="mr-2 h-4 w-4" /> Ver No Mapa
+                                </Button>
+                            </div>
                         )}
                     </div>
                     
@@ -804,9 +892,92 @@ const RunDetailsContent = ({ run, onSegmentClick, highlightedSegmentId }: { run:
     const getStatusInfo = (status: StopStatus) => ({
         'COMPLETED': { icon: CheckCircle, color: 'text-green-500', label: 'Concluído' }, 'IN_PROGRESS': { icon: PlayCircle, color: 'text-blue-500', label: 'Em Andamento' }, 'PENDING': { icon: Clock, color: 'text-gray-500', label: 'Pendente' }, 'CANCELED': { icon: X, color: 'text-red-500', label: 'Cancelado' }
     })[status] || { icon: Clock, color: 'text-gray-500', label: 'Pendente' };
+
     const formatFirebaseTime = (ts: FirebaseTimestamp | null) => ts ? format(new Date(ts.seconds * 1000), 'HH:mm') : '--:--';
     let segmentCounter = 0;
 
+    // IF there is a planned route, we show the PLAN structure
+    if (run.plannedRoute) {
+        return (
+            <div className="space-y-6 mt-4">
+                {run.plannedRoute.trips.map((plannedTrip, tripIdx) => {
+                    const matchedRun = run.originalRuns.find(r => r.tripId === plannedTrip.id);
+                    const isFullyCompleted = matchedRun?.status === 'COMPLETED';
+                    const isInProgress = matchedRun?.status === 'IN_PROGRESS';
+                    const isPlanned = !matchedRun;
+
+                    return (
+                        <div key={plannedTrip.id} className={cn(
+                            "p-4 rounded-xl border transition-all",
+                            isFullyCompleted ? "bg-green-50/30 border-green-100" :
+                            isInProgress ? "bg-blue-50/30 border-blue-100 ring-1 ring-blue-100" : "bg-muted/10 border-dashed"
+                        )}>
+                            <div className="flex justify-between items-center mb-4">
+                                <div className="flex items-center gap-3">
+                                    <div className={cn(
+                                        "w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs",
+                                        isFullyCompleted ? "bg-green-500 text-white" :
+                                        isInProgress ? "bg-blue-500 text-white animate-pulse" : "bg-muted text-muted-foreground"
+                                    )}>
+                                        {tripIdx + 1}
+                                    </div>
+                                    <div>
+                                        <h5 className="font-bold text-sm">{plannedTrip.name}</h5>
+                                        <p className="text-[10px] uppercase font-black text-muted-foreground tracking-tighter">
+                                            {isFullyCompleted ? 'VIAGEM CONCLUÍDA' : isInProgress ? 'VIAGEM EM ANDAMENTO' : 'PROGRAMADA'}
+                                        </p>
+                                    </div>
+                                </div>
+                                {matchedRun && (
+                                    <div className="text-right text-[10px] text-muted-foreground">
+                                        <p>Início: {formatFirebaseTime(matchedRun.startTime)}</p>
+                                        {matchedRun.endTime && <p>Fim: {formatFirebaseTime(matchedRun.endTime)}</p>}
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="space-y-4 ml-4 border-l-2 border-muted pl-6">
+                                {plannedTrip.stops.map((plannedStop, stopIdx) => {
+                                    const actualStop = matchedRun?.stops.find(s => s.name === plannedStop.name);
+                                    const status = actualStop?.status || 'PENDING';
+                                    const { icon: Icon, color, label } = getStatusInfo(status);
+                                    const isCompleted = status === 'COMPLETED';
+
+                                    return (
+                                        <div key={stopIdx} className="relative">
+                                            <div className={cn(
+                                                "absolute -left-[31px] top-1 w-2.5 h-2.5 rounded-full border-2 bg-background",
+                                                isCompleted ? "border-green-500 bg-green-500" : 
+                                                status === 'IN_PROGRESS' ? "border-blue-500 animate-pulse" : "border-muted"
+                                            )} />
+                                            <div className="flex justify-between items-start">
+                                                <div>
+                                                    <p className={cn("text-xs font-bold", !isCompleted && status !== 'IN_PROGRESS' && "text-muted-foreground")}>
+                                                        {plannedStop.name}
+                                                    </p>
+                                                    <div className="flex gap-2 text-[10px] text-muted-foreground">
+                                                        <span>Programado: {plannedStop.plannedArrival}</span>
+                                                        {actualStop?.arrivalTime && (
+                                                            <span className="text-primary font-bold">Real: {formatFirebaseTime(actualStop.arrivalTime)}</span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <Badge variant="outline" className={cn("text-[9px] h-4", color.replace('text-', 'bg-').replace('500', '100') + ' ' + color)}>
+                                                    {label}
+                                                </Badge>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        );
+    }
+
+    // Fallback for runs without a planned route (Manual / Fixed sector)
     return (
         <div className="space-y-2">
             {run.originalRuns.map((originalRun, runIndex) => {
@@ -817,6 +988,10 @@ const RunDetailsContent = ({ run, onSegmentClick, highlightedSegmentId }: { run:
                 return (
                     <div key={originalRun.id}>
                         {idleTime && parseFloat(idleTime) > 0 && <div className="flex items-center gap-4 p-3 rounded-md bg-amber-50 dark:bg-amber-900/20 my-2"><Hourglass className="h-6 w-6 flex-shrink-0 text-amber-500" /><div className="flex-1"><p className="font-medium">Tempo Parado</p><p className="text-xs text-muted-foreground">O veículo ficou parado entre as corridas.</p></div><div className="text-right text-sm text-muted-foreground"><p><strong>{idleTime}</strong></p></div></div>}
+                        <div className="px-2 py-1 mb-2 bg-muted/30 rounded flex justify-between items-center">
+                            <span className="text-[10px] font-black uppercase text-muted-foreground">{originalRun.tripName || 'Trajeto Manual'}</span>
+                            <span className="text-[10px] text-muted-foreground">{formatFirebaseTime(originalRun.startTime)}</span>
+                        </div>
                         {originalRun.stops.map((stop) => {
                             const { icon: Icon, color, label } = getStatusInfo(stop.status);
                             if (stop.status === 'CANCELED') return null;
@@ -869,7 +1044,7 @@ const AnaliseTab = ({ activeTab }: { activeTab: string }) => {
     const [allRuns, setAllRuns] = useState<Run[]>([]);
 
     // Filter states
-    const [selectedShift, setSelectedShift] = useState<string>('Todos');
+    const [selectedShift, setSelectedShift] = useState<string>('1° NORMAL');
     const [selectedVehicle, setSelectedVehicle] = useState<string>('all');
     const [selectedDriver, setSelectedDriver] = useState<string>('all');
     const [selectedSector, setSelectedSector] = useState<string>('all');
@@ -994,7 +1169,7 @@ const AnaliseTab = ({ activeTab }: { activeTab: string }) => {
                 <div className="flex w-full flex-wrap items-center justify-center gap-2">
                     <DateFilter date={date} setDate={setDate} />
                     {isSuperAdmin && <SectorFilter sectors={allSectors} selectedSector={selectedSector} onSectorChange={setSelectedSector} />}
-                    <ShiftFilter selectedShift={selectedShift} onShiftChange={setSelectedShift} />
+                    <ShiftFilter selectedShift={selectedShift} onShiftChange={setSelectedShift} availableShifts={['1° NORMAL', '2° NORMAL', '1° ESPECIAL', '2° ESPECIAL']} />
                     <VehicleFilter vehicles={vehicleList} selectedVehicle={selectedVehicle} onVehicleChange={setSelectedVehicle} />
                     <DriverFilter drivers={driverList} selectedDriver={selectedDriver} onDriverChange={setSelectedDriver} />
                 </div>
@@ -1036,7 +1211,7 @@ const HistoricoTab = ({ activeTab }: { activeTab: string }) => {
     const pageSize = 30;
 
     // Filter states
-    const [selectedShift, setSelectedShift] = useState<string>('Todos');
+    const [selectedShift, setSelectedShift] = useState<string>('1° NORMAL');
     const [selectedVehicle, setSelectedVehicle] = useState<string>('all');
     const [selectedDriver, setSelectedDriver] = useState<string>('all');
     const [selectedSector, setSelectedSector] = useState<string>('all');
@@ -1253,7 +1428,7 @@ const HistoricoTab = ({ activeTab }: { activeTab: string }) => {
                 <div className="flex w-full flex-wrap items-center justify-center gap-2">
                     <DateFilter date={date} setDate={setDate} />
                     {isSuperAdmin && <SectorFilter sectors={allSectors} selectedSector={selectedSector} onSectorChange={setSelectedSector} />}
-                    <ShiftFilter selectedShift={selectedShift} onShiftChange={setSelectedShift} />
+                    <ShiftFilter selectedShift={selectedShift} onShiftChange={setSelectedShift} availableShifts={['1° NORMAL', '2° NORMAL', '1° ESPECIAL', '2° ESPECIAL']} />
                     <VehicleFilter vehicles={vehicleList} selectedVehicle={selectedVehicle} onVehicleChange={setSelectedVehicle} />
                     <DriverFilter drivers={driverList} selectedDriver={selectedDriver} onDriverChange={setSelectedDriver} />
                 </div>
@@ -1312,703 +1487,104 @@ const HistoricoTab = ({ activeTab }: { activeTab: string }) => {
     );
 };
 
-// --- Componente da Aba: Roteirização ---
-const RoteirizacaoTab = () => {
-    const { firestore } = useFirebase();
-    const { toast } = useToast();
-
-    const [vehicles, setVehicles] = useState<{ id: string, model: string }[]>([]);
-    const [routes, setRoutes] = useState<PlannedRoute[]>([]);
-    const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-    const [isLoading, setIsLoading] = useState(true);
-    const [isSaving, setIsSaving] = useState(false);
-
-    const [newRouteVehicle, setNewRouteVehicle] = useState('');
-    const [newTrips, setNewTrips] = useState<PlannedTrip[]>([]);
-    const [isEditing, setIsEditing] = useState(false);
-    const [editingRouteId, setEditingRouteId] = useState<string | null>(null);
-    const [selectedAdditionalDates, setSelectedAdditionalDates] = useState<string[]>([]);
-    const [isFixedNewRoute, setIsFixedNewRoute] = useState(false);
-    const [viewMode, setViewMode] = useState<'daily' | 'calendar'>('daily');
-    const [vehicleFilter, setVehicleFilter] = useState<string>('all');
-    const [selectedShift, setSelectedShift] = useState<string>('Turno 1');
-
-    const fetchVehicles = useCallback(async () => {
-        const companyId = localStorage.getItem('companyId');
-        const sectorId = localStorage.getItem('sectorId');
-        if (!firestore || !companyId || !sectorId) return;
-
-        try {
-            const vehiclesCol = collection(firestore, `companies/${companyId}/sectors/${sectorId}/vehicles`);
-            const snapshot = await getDocs(vehiclesCol);
-            const list = snapshot.docs
-                .map(doc => ({ id: doc.id, ...(doc.data() as any) }))
-                .filter(v => v.isTruck)
-                .map(v => ({ id: v.id, model: v.model }));
-            setVehicles(list);
-        } catch (error) {
-            toast({ variant: 'destructive', title: 'Erro', description: 'Erro ao carregar veículos.' });
-        }
-    }, [firestore, toast]);
-
-    const fetchRoutes = useCallback(async () => {
-        const companyId = localStorage.getItem('companyId');
-        const sectorId = localStorage.getItem('sectorId');
-        if (!firestore || !companyId || !sectorId) return;
-
-        setIsLoading(true);
-        try {
-            const routesCol = collection(firestore, `companies/${companyId}/sectors/${sectorId}/routes`);
-            
-            // Fetch date-specific routes
-            const start = format(startOfMonth(selectedDate), 'yyyy-MM-dd');
-            const end = format(endOfMonth(selectedDate), 'yyyy-MM-dd');
-            const qRange = query(routesCol, where('date', '>=', start), where('date', '<=', end));
-            const snapshotRange = await getDocs(qRange);
-            const listRange = snapshotRange.docs.map(doc => ({ id: doc.id, ...doc.data() } as PlannedRoute));
-
-            // Fetch fixed routes
-            const qFixed = query(routesCol, where('date', '==', 'fixed'));
-            const snapshotFixed = await getDocs(qFixed);
-            const listFixed = snapshotFixed.docs.map(doc => ({ id: doc.id, ...doc.data() } as PlannedRoute));
-
-            setRoutes([...listRange, ...listFixed]);
-        } catch (error) {
-            console.error(error);
-            toast({ variant: 'destructive', title: 'Erro', description: 'Erro ao carregar rotas.' });
-        } finally {
-            setIsLoading(false);
-        }
-    }, [firestore, selectedDate, toast]);
-
-    useEffect(() => {
-        fetchVehicles();
-        fetchRoutes();
-    }, [fetchVehicles, fetchRoutes]);
-
-    const handleAddTrip = () => {
-        const newTrip: PlannedTrip = {
-            id: Math.random().toString(36).substr(2, 9),
-            name: `Viagem ${newTrips.length + 1}`,
-            stops: [{ name: '', plannedArrival: '', plannedDeparture: '' }]
-        };
-        setNewTrips([...newTrips, newTrip]);
-    };
-
-    const handleAddStop = (tripId: string) => {
-        setNewTrips(newTrips.map(trip => {
-            if (trip.id === tripId) {
-                return { ...trip, stops: [...trip.stops, { name: '', plannedArrival: '', plannedDeparture: '' }] };
-            }
-            return trip;
-        }));
-    };
-
-    const handleUpdateStop = (tripId: string, stopIndex: number, field: keyof PlannedStop, value: string) => {
-        setNewTrips(newTrips.map(trip => {
-            if (trip.id === tripId) {
-                const newStops = [...trip.stops];
-                newStops[stopIndex] = { ...newStops[stopIndex], [field]: value };
-                return { ...trip, stops: newStops };
-            }
-            return trip;
-        }));
-    };
-
-    const handleRemoveStop = (tripId: string, stopIndex: number) => {
-        setNewTrips(newTrips.map(trip => {
-            if (trip.id === tripId) {
-                return { ...trip, stops: trip.stops.filter((_, i) => i !== stopIndex) };
-            }
-            return trip;
-        }));
-    };
-
-    const handleRemoveTrip = (tripId: string) => {
-        setNewTrips(newTrips.filter(t => t.id !== tripId));
-    };
-
-    const handleSaveRoute = async () => {
-        const companyId = localStorage.getItem('companyId');
-        const sectorId = localStorage.getItem('sectorId');
-        if (!firestore || !companyId || !sectorId || !newRouteVehicle) return;
-
-        if (newTrips.length === 0) {
-            toast({ variant: 'destructive', title: 'Erro', description: 'Adicione pelo menos uma viagem.' });
-            return;
-        }
-
-        setIsSaving(true);
-        try {
-            const shiftSuffix = `_${selectedShift.replace(' ', '')}`;
-            if (isFixedNewRoute) {
-                const routeId = `fixed_${newRouteVehicle}${shiftSuffix}`;
-                const routeRef = doc(firestore, `companies/${companyId}/sectors/${sectorId}/routes`, routeId);
-                await setDoc(routeRef, {
-                    vehicleId: newRouteVehicle,
-                    date: 'fixed',
-                    shift: selectedShift,
-                    isFixed: true,
-                    trips: newTrips
-                });
-            } else {
-                const datesToSave = [format(selectedDate, 'yyyy-MM-dd'), ...selectedAdditionalDates];
-                // Save in batches of 5 dates to avoid 'Transaction too big' error
-                for (let i = 0; i < datesToSave.length; i += 5) {
-                    const batch = writeBatch(firestore);
-                    const chunk = datesToSave.slice(i, i + 5);
-
-                    for (const dateStr of chunk) {
-                        const routeId = isEditing && dateStr === format(selectedDate, 'yyyy-MM-dd')
-                            ? editingRouteId!
-                            : `${dateStr}_${newRouteVehicle}${shiftSuffix}`;
-
-                        const routeRef = doc(firestore, `companies/${companyId}/sectors/${sectorId}/routes`, routeId);
-                        batch.set(routeRef, {
-                            vehicleId: newRouteVehicle,
-                            date: dateStr,
-                            shift: selectedShift,
-                            isFixed: false,
-                            trips: newTrips
-                        });
-                    }
-                    await batch.commit();
-                }
-            }
-
-            toast({ title: 'Sucesso', description: isEditing ? 'Rota atualizada!' : (isFixedNewRoute ? 'Rota fixa salva!' : 'Rota(s) salva(s) com sucesso!') });
-            resetForm();
-            fetchRoutes();
-        } catch (error) {
-            toast({ variant: 'destructive', title: 'Erro', description: 'Erro ao salvar rota.' });
-        } finally {
-            setIsSaving(false);
-        }
-    };
-
-    const resetForm = () => {
-        setNewRouteVehicle('');
-        setNewTrips([]);
-        setIsEditing(false);
-        setEditingRouteId(null);
-        setSelectedAdditionalDates([]);
-        setIsFixedNewRoute(false);
-    };
-
-    const handleEditRoute = (route: PlannedRoute) => {
-        setNewRouteVehicle(route.vehicleId);
-        setNewTrips(route.trips);
-        setSelectedDate(new Date(route.date === 'fixed' ? format(new Date(), 'yyyy-MM-dd') + 'T12:00:00' : route.date + 'T12:00:00'));
-        setIsEditing(true);
-        setIsEditing(true);
-        setIsFixedNewRoute(!!route.isFixed);
-        setSelectedShift(route.shift || 'Turno 1');
-        setEditingRouteId(route.id);
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    };
-
-    const handleDeleteRoute = async (routeId: string) => {
-        const companyId = localStorage.getItem('companyId');
-        const sectorId = localStorage.getItem('sectorId');
-        if (!firestore || !companyId || !sectorId) return;
-
-        try {
-            await deleteDoc(doc(firestore, `companies/${companyId}/sectors/${sectorId}/routes`, routeId));
-            toast({ title: 'Sucesso', description: 'Rota excluída.' });
-            fetchRoutes();
-        } catch (error) {
-            toast({ variant: 'destructive', title: 'Erro', description: 'Erro ao excluir rota.' });
-        }
-    };
-
-    const routesForSelectedDate = routes.filter(r => 
-        (r.date === format(selectedDate, 'yyyy-MM-dd') || r.date === 'fixed') &&
-        (r.shift === selectedShift || (!r.shift && selectedShift === 'Turno 1'))
-    );
-
-    const CalendarView = () => {
-        const days = eachDayOfInterval({
-            start: startOfMonth(selectedDate),
-            end: endOfMonth(selectedDate)
-        });
-
-        const startDay = getDay(days[0]);
-        const padding = Array(startDay).fill(null);
-
-        return (
-            <div className="bg-card border rounded-xl p-6 shadow-sm">
-                <div className="flex justify-between items-center mb-6">
-                    <h3 className="font-bold text-lg">{format(selectedDate, 'MMMM yyyy', { locale: ptBR })}</h3>
-                    <div className="flex gap-1">
-                        <Button variant="outline" size="icon" onClick={() => setSelectedDate(subMonths(selectedDate, 1))}><ArrowLeft className="w-4 h-4" /></Button>
-                        <Button variant="outline" size="icon" onClick={() => setSelectedDate(addMonths(selectedDate, 1))}><ArrowRight className="w-4 h-4" /></Button>
-                    </div>
-                </div>
-                <div className="grid grid-cols-7 gap-1 text-center mb-2">
-                    {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'].map(d => (
-                        <span key={d} className="text-[10px] font-black uppercase text-muted-foreground">{d}</span>
-                    ))}
-                </div>
-                <div className="grid grid-cols-7 gap-1">
-                    {padding.map((_, i) => <div key={`p-${i}`} className="h-12" />)}
-                    {days.map(day => {
-                        const dateStr = format(day, 'yyyy-MM-dd');
-                        const dayRoutes = routes.filter(r => r.date === dateStr);
-                        const isSelected = format(selectedDate, 'yyyy-MM-dd') === dateStr;
-                        const isToday = format(new Date(), 'yyyy-MM-dd') === dateStr;
-
-                        return (
-                            <button
-                                key={dateStr}
-                                onClick={() => setSelectedDate(day)}
-                                className={`h-12 rounded-lg flex flex-col items-center justify-center gap-1 transition-all ${isSelected ? 'bg-primary text-primary-foreground shadow-md' :
-                                        isToday ? 'bg-primary/10 text-primary' : 'hover:bg-muted'
-                                    }`}
-                            >
-                                <span className="text-sm font-bold">{format(day, 'd')}</span>
-                                <div className="flex gap-0.5">
-                                    {dayRoutes.slice(0, 3).map((_, i) => (
-                                        <div key={i} className={`w-1 h-1 rounded-full ${isSelected ? 'bg-white' : 'bg-primary'}`} />
-                                    ))}
-                                </div>
-                            </button>
-                        );
-                    })}
-                </div>
-            </div>
-        );
-    };
-
-    if (isLoading && routes.length === 0) {
-        return (
-            <div className="space-y-6">
-                <div className="flex justify-between items-center"><Skeleton className="h-10 w-48" /><Skeleton className="h-10 w-32" /></div>
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    <Card className="lg:col-span-2"><Skeleton className="h-[500px] w-full" /></Card>
-                    <Skeleton className="h-[500px] w-full" />
-                </div>
-            </div>
-        );
-    }
-
+const ShiftFilter = ({ selectedShift, onShiftChange, availableShifts }: any) => {
     return (
-        <div className="space-y-8">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div>
-                    <h2 className="text-2xl font-bold">Roteirização</h2>
-                    <p className="text-muted-foreground text-sm">Defina as rotas e paradas dos motoristas.</p>
-                </div>
-                <div className="flex items-center gap-2 bg-card p-2 rounded-lg border shadow-sm">
-                    <CalendarIcon className="w-5 h-5 text-primary" />
-                    <Input
-                        type="date"
-                        value={format(selectedDate, 'yyyy-MM-dd')}
-                        onChange={(e) => setSelectedDate(new Date(e.target.value + 'T12:00:00'))}
-                        className="border-none focus-visible:ring-0 w-36 h-8 text-sm p-0"
-                    />
-                </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <div className="lg:col-span-2 space-y-8">
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                            <div>
-                                <CardTitle className="flex items-center gap-2 text-lg">
-                                    {isEditing ? <Edit className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
-                                    {isEditing ? 'Editar Programação' : 'Nova Programação'}
-                                </CardTitle>
-                                <CardDescription>
-                                    {isEditing ? `Alterando rota do dia ${format(selectedDate, 'dd/MM')}` : `Defina paradas para ${format(selectedDate, "dd 'de' MMMM", { locale: ptBR })}`}
-                                </CardDescription>
-                            </div>
-                            {isEditing && (
-                                <Button variant="ghost" size="sm" onClick={resetForm}>Cancelar Edição</Button>
-                            )}
-                        </CardHeader>
-                        <CardContent className="space-y-6">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label>Veículo</Label>
-                                    <Select value={newRouteVehicle} onValueChange={setNewRouteVehicle}>
-                                        <SelectTrigger><SelectValue placeholder="Selecione o veículo" /></SelectTrigger>
-                                        <SelectContent>{vehicles.map(v => <SelectItem key={v.id} value={v.id}>{v.id} - {v.model}</SelectItem>)}</SelectContent>
-                                    </Select>
-                                </div>
-                                {!isEditing && (
-                                    <div className="flex items-center justify-between space-x-2 bg-primary/5 p-4 rounded-xl border-2 border-primary/20 shadow-sm col-span-2 md:col-span-1">
-                                        <div className="space-y-0.5">
-                                            <Label htmlFor="fixed-route-dashboard" className="text-sm font-bold cursor-pointer">
-                                                Rota Fixa (Diária)
-                                            </Label>
-                                            <p className="text-[10px] text-muted-foreground">Repetir todo dia para este caminhão.</p>
-                                        </div>
-                                        <Switch 
-                                            id="fixed-route-dashboard" 
-                                            checked={isFixedNewRoute}
-                                            onCheckedChange={setIsFixedNewRoute}
-                                        />
-                                    </div>
-                                )}
-                                <div className="space-y-2">
-                                    <Label>Turno</Label>
-                                    <Select value={selectedShift} onValueChange={setSelectedShift}>
-                                        <SelectTrigger><SelectValue placeholder="Selecione o Turno" /></SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="Turno 1">Turno 1</SelectItem>
-                                            <SelectItem value="Turno 2">Turno 2</SelectItem>
-                                            <SelectItem value="Turno 3">Turno 3</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className={cn("space-y-2", isFixedNewRoute && "opacity-50 pointer-events-none")}>
-                                    <div className="flex justify-between items-end">
-                                        <Label>Repetir para Datas (Opcional)</Label>
-                                        <div className="flex gap-1">
-                                            <Button variant="outline" size="sm" className="h-6 text-[10px]" onClick={() => {
-                                                const next5 = Array.from({ length: 5 }, (_, i) => format(addDays(selectedDate, i + 1), 'yyyy-MM-dd'));
-                                                setSelectedAdditionalDates([...new Set([...selectedAdditionalDates, ...next5])]);
-                                            }}>+5 dias</Button>
-                                            <Button variant="outline" size="sm" className="h-6 text-[10px]" onClick={() => setSelectedAdditionalDates([])}>Limpar</Button>
-                                        </div>
-                                    </div>
-                                    <Input
-                                        type="date"
-                                        onChange={(e) => {
-                                            if (e.target.value && !selectedAdditionalDates.includes(e.target.value)) {
-                                                setSelectedAdditionalDates([...selectedAdditionalDates, e.target.value]);
-                                            }
-                                        }}
-                                    />
-                                    <div className="flex flex-wrap gap-1 mt-1">
-                                        {selectedAdditionalDates.map(d => (
-                                            <Badge key={d} variant="secondary" className="gap-1">
-                                                {format(new Date(d + 'T12:00:00'), 'dd/MM')}
-                                                <X className="w-3 h-3 cursor-pointer" onClick={() => setSelectedAdditionalDates(selectedAdditionalDates.filter(x => x !== d))} />
-                                            </Badge>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="space-y-4">
-                                <div className="flex justify-between items-center">
-                                    <span className="text-base font-semibold">Viagens e Paradas</span>
-                                    <Button variant="outline" size="sm" onClick={handleAddTrip}><Plus className="w-4 h-4 mr-1" /> Add Viagem</Button>
-                                </div>
-
-                                {newTrips.map((trip, tIndex) => (
-                                    <div key={trip.id} className="border rounded-lg p-4 space-y-4 bg-muted/30">
-                                        <div className="flex justify-between items-center">
-                                            <Input value={trip.name} onChange={(e) => { const next = [...newTrips]; next[tIndex].name = e.target.value; setNewTrips(next); }} className="max-w-[200px] font-bold h-8" />
-                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleRemoveTrip(trip.id)}><Trash2 className="w-4 h-4" /></Button>
-                                        </div>
-                                        <div className="space-y-3">
-                                            {trip.stops.map((stop, sIndex) => (
-                                                <div key={sIndex} className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end border-b pb-3 last:border-0">
-                                                    <div className="md:col-span-2 space-y-1"><span className="text-[10px] uppercase font-bold text-muted-foreground block">Ponto de Parada</span><Input placeholder="Ex: PINTURA ABS" value={stop.name} onChange={(e) => handleUpdateStop(trip.id, sIndex, 'name', e.target.value)} className="h-8" /></div>
-                                                    <div className="space-y-1"><span className="text-[10px] uppercase font-bold text-muted-foreground block">Ch. Prevista</span><Input type="time" value={stop.plannedArrival} onChange={(e) => handleUpdateStop(trip.id, sIndex, 'plannedArrival', e.target.value)} className="h-8" /></div>
-                                                    <div className="flex gap-1">
-                                                        <div className="flex-1 space-y-1"><span className="text-[10px] uppercase font-bold text-muted-foreground block">Sa. Prevista</span><Input type="time" value={stop.plannedDeparture} onChange={(e) => handleUpdateStop(trip.id, sIndex, 'plannedDeparture', e.target.value)} className="h-8" /></div>
-                                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleRemoveStop(trip.id, sIndex)}><Trash2 className="w-4 h-4" /></Button>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                            <Button variant="ghost" size="sm" className="w-full border-dashed border-2 h-8" onClick={() => handleAddStop(trip.id)}><Plus className="w-3 h-3 mr-1" /> Add Parada</Button>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                            <Button className="w-full h-10" onClick={handleSaveRoute} disabled={isSaving || !newRouteVehicle}>
-                                {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : isEditing ? <Check className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
-                                {isEditing ? 'Atualizar Rota' : selectedAdditionalDates.length > 0 ? `Salvar para ${selectedAdditionalDates.length + 1} dias` : 'Salvar Programação'}
-                            </Button>
-                        </CardContent>
-                    </Card>
-
-                    <div className="space-y-4">
-                        <div className="flex justify-between items-center">
-                            <h3 className="text-lg font-bold flex items-center gap-2"><Truck className="w-5 h-5" /> Programadas ({routesForSelectedDate.length})</h3>
-                            <Select value={vehicleFilter} onValueChange={setVehicleFilter}>
-                                <SelectTrigger className="w-[140px] h-8 text-xs"><SelectValue placeholder="Filtrar veículo" /></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">Todos</SelectItem>
-                                    {vehicles.map(v => <SelectItem key={v.id} value={v.id}>{v.id}</SelectItem>)}
-                                </SelectContent>
-                            </Select>
-                        </div>
-
-                        {routesForSelectedDate.filter(r => vehicleFilter === 'all' || r.vehicleId === vehicleFilter).length === 0 ? (
-                            <div className="text-muted-foreground text-center py-12 border rounded-lg border-dashed flex flex-col items-center gap-2"><CalendarIcon className="h-8 w-8 opacity-20" /><p className="text-sm">Nenhuma rota para hoje.</p></div>
-                        ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {routesForSelectedDate
-                                    .filter(r => vehicleFilter === 'all' || r.vehicleId === vehicleFilter)
-                                    .map(route => (
-                                        <Card key={route.id} className="overflow-hidden border-primary/20">
-                                            <div className="bg-primary/5 p-3 flex justify-between items-center border-b">
-                                                <span className="font-bold text-sm flex items-center gap-2">
-                                                    <Truck className="w-4 h-4" /> {route.vehicleId}
-                                                    {route.isFixed && <Badge variant="secondary" className="text-[10px] h-4">DIÁRIA</Badge>}
-                                                </span>
-                                                <div className="flex gap-1">
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-primary" onClick={() => handleEditRoute(route)}><Edit className="w-4 h-4" /></Button>
-                                                    <AlertDialog>
-                                                        <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 text-destructive"><Trash2 className="w-4 h-4" /></Button></AlertDialogTrigger>
-                                                        <AlertDialogContent>
-                                                            <AlertDialogHeader><AlertDialogTitle>Excluir Rota?</AlertDialogTitle><AlertDialogDescription>Deseja realmente excluir a programação do veículo {route.vehicleId}?</AlertDialogDescription></AlertDialogHeader>
-                                                            <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteRoute(route.id)}>Excluir</AlertDialogAction></AlertDialogFooter>
-                                                        </AlertDialogContent>
-                                                    </AlertDialog>
-                                                </div>
-                                            </div>
-                                            <CardContent className="p-3 space-y-4">
-                                                {route.trips.map((trip, idx) => (
-                                                    <div key={idx} className="space-y-1.5">
-                                                        <p className="text-[10px] font-black uppercase text-primary/70">{trip.name}</p>
-                                                        <div className="space-y-1 border-l-2 border-primary/20 ml-1 pl-2">
-                                                            {trip.stops.map((stop, sIdx) => (
-                                                                <div key={sIdx} className="text-xs flex justify-between items-center bg-muted/30 p-1 rounded px-2">
-                                                                    <span className="font-medium">{stop.name}</span>
-                                                                    <span className="text-[10px] text-muted-foreground font-mono">{stop.plannedArrival} - {stop.plannedDeparture}</span>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </CardContent>
-                                        </Card>
-                                    ))}
-                            </div>
-                        )}
-                    </div>
-                </div>
-
-                <div className="space-y-6">
-                    <CalendarView />
-                    <Card>
-                        <CardHeader><CardTitle className="text-sm font-bold">Resumo do Mês</CardTitle></CardHeader>
-                        <CardContent className="space-y-4">
-                            {vehicles.map(v => {
-                                const vehicleRoutes = routes.filter(r => r.vehicleId === v.id);
-                                return (
-                                    <div key={v.id} className="flex justify-between items-center text-sm">
-                                        <span>{v.id}</span>
-                                        <Badge variant="outline">{vehicleRoutes.length} dias programados</Badge>
-                                    </div>
-                                );
-                            })}
-                        </CardContent>
-                    </Card>
-                </div>
-            </div>
-        </div>
+        <Select value={selectedShift} onValueChange={onShiftChange}>
+            <SelectTrigger className="w-[180px] h-9">
+                <SelectValue placeholder="Filtrar por Turno" />
+            </SelectTrigger>
+            <SelectContent>
+                <SelectItem value="TODOS">Todos os Turnos</SelectItem>
+                {availableShifts.map((s: string) => (
+                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                ))}
+            </SelectContent>
+        </Select>
     );
 };
 
-// --- Componente da Aba: Abastecimentos ---
-const AbastecimentosTab = ({ activeTab }: { activeTab: string }) => {
-    const { firestore } = useFirebase();
-    const { toast } = useToast();
-    const [user, setUser] = useState<UserData | null>(null);
-    const [users, setUsers] = useState<Map<string, FirestoreUser>>(new Map());
-    const [allRefuels, setAllRefuels] = useState<any[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [date, setDate] = useState<DateRange | undefined>({ from: startOfDay(subDays(new Date(), 6)), to: endOfDay(new Date()) });
-
-    useEffect(() => {
-        const storedUser = localStorage.getItem('user');
-        const companyId = localStorage.getItem('companyId');
-        const sectorId = localStorage.getItem('sectorId');
-        const matricula = localStorage.getItem('matricula');
-        if (storedUser && companyId && sectorId && matricula) setUser({ ...JSON.parse(storedUser), companyId, sectorId, matricula });
-    }, []);
-
-    useEffect(() => {
-        const fetchRefuelData = async () => {
-            if (!firestore || !user || activeTab !== 'abastecimentos') return;
-            setIsLoading(true);
-            try {
-                const usersSnapshot = await getDocs(collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/users`));
-                const usersMap = new Map<string, FirestoreUser>();
-                usersSnapshot.forEach(doc => usersMap.set(doc.id, { id: doc.id, ...doc.data() } as FirestoreUser));
-                setUsers(usersMap);
-
-                const refuelsQuery = query(collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/refuels`), orderBy('timestamp', 'desc'));
-                const querySnapshot = await getDocs(refuelsQuery);
-                setAllRefuels(querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-            } catch (error) { toast({ variant: 'destructive', title: 'Erro ao buscar abastecimentos' }); } finally { setIsLoading(false); }
-        };
-
-        fetchRefuelData();
-    }, [firestore, user, toast, activeTab]);
-
-    const filteredRefuels = useMemo(() => allRefuels.filter(refuel => {
-        const refuelDate = new Date(refuel.timestamp.seconds * 1000);
-        return date?.from && refuelDate >= startOfDay(date.from) && refuelDate <= endOfDay(date.to || date.from);
-    }), [allRefuels, date]);
-
-    if (isLoading) {
-        return (
-            <Card>
-                <CardHeader>
-                    <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
-                        <div className="space-y-2"><Skeleton className="h-6 w-48" /><Skeleton className="h-4 w-64" /></div>
-                        <Skeleton className="h-10 w-48" />
-                    </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    {[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-12 w-full" />)}
-                </CardContent>
-            </Card>
-        );
-    }
-
-    return (
-        <Card>
-            <CardHeader>
-                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
-                    <div>
-                        <CardTitle>Registros de Abastecimento</CardTitle>
-                        <CardDescription>Lista de todos os abastecimentos no período selecionado.</CardDescription>
-                    </div>
-                    <DateFilter date={date} setDate={setDate} />
-                </div>
-            </CardHeader>
-            <CardContent>
-                <div className="overflow-auto max-h-[60vh]"><Table><TableHeader><TableRow><TableHead>Data</TableHead><TableHead>Veículo</TableHead><TableHead>Motorista</TableHead><TableHead>Litros</TableHead><TableHead className="text-right">Valor</TableHead></TableRow></TableHeader><TableBody>{filteredRefuels.length > 0 ? filteredRefuels.map(refuel => <RefuelTableRow key={refuel.id} refuel={refuel} driver={users.get(refuel.driverId)} />) : <TableRow><TableCell colSpan={5} className="text-center h-24">Nenhum abastecimento encontrado</TableCell></TableRow>}</TableBody></Table></div>
-            </CardContent>
-        </Card>
-    );
-};
-
-// --- Componente da Aba: Checklists ---
-const ChecklistsTab = ({ activeTab }: { activeTab: string }) => {
-    const { firestore } = useFirebase();
-    const { toast } = useToast();
-    const [user, setUser] = useState<UserData | null>(null);
-    const [users, setUsers] = useState<Map<string, FirestoreUser>>(new Map());
-    const [isSuperAdmin, setIsSuperAdmin] = useState(false);
-    const [allChecklists, setAllChecklists] = useState<any[]>([]);
-    const [isChecklistsLoading, setIsChecklistsLoading] = useState(true);
-    const [date, setDate] = useState<DateRange | undefined>({ from: startOfDay(subDays(new Date(), 6)), to: endOfDay(new Date()) });
-    const [selectedVehicle, setSelectedVehicle] = useState<string>('all');
-    const [selectedChecklist, setSelectedChecklist] = useState<any | null>(null);
-
-    useEffect(() => {
-        const storedUser = localStorage.getItem('user'); const companyId = localStorage.getItem('companyId'); const sectorId = localStorage.getItem('sectorId'); const matricula = localStorage.getItem('matricula');
-        if (storedUser && companyId && sectorId && matricula) { setUser({ ...JSON.parse(storedUser), companyId, sectorId, matricula }); if (matricula === '801231') setIsSuperAdmin(true); }
-    }, []);
-
-    useEffect(() => {
-        const fetchChecklistData = async () => {
-            if (!firestore || !user || activeTab !== 'checklists') return;
-
-            setIsChecklistsLoading(true);
-            try {
-                const usersSnapshot = await getDocs(collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/users`));
-                const usersMap = new Map<string, FirestoreUser>();
-                usersSnapshot.forEach(doc => usersMap.set(doc.id, { id: doc.id, ...doc.data() } as FirestoreUser));
-                setUsers(usersMap);
-
-                const checklistsQuery = query(collectionGroup(firestore, 'checklists'));
-                const querySnapshot = await getDocs(checklistsQuery);
-                const checklists = querySnapshot.docs.map(doc => ({ id: doc.id, path: doc.ref.path, ...doc.data() as any }));
-
-                const companyPath = `companies/${user.companyId}/sectors/${user.sectorId}/`;
-                const filteredAndSorted = checklists
-                    .filter(c => c.path.startsWith(companyPath))
-                    .sort((a, b) => b.timestamp.seconds - a.timestamp.seconds);
-
-                setAllChecklists(filteredAndSorted);
-            } catch (error) {
-                console.error("Error fetching checklists:", error);
-                toast({ variant: 'destructive', title: 'Erro ao buscar checklists' });
-            } finally {
-                setIsChecklistsLoading(false);
-            }
-        };
-
-        fetchChecklistData();
-    }, [firestore, user, toast, activeTab]);
-
-    const handleDelete = async (path: string) => {
-        if (!firestore || !isSuperAdmin) return;
-        try {
-            await deleteDoc(doc(firestore, path)); toast({ title: 'Sucesso', description: 'Checklist deletado.' });
-            setAllChecklists(prev => prev.filter(c => c.path !== path));
-        } catch (error) { toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível deletar.' }); }
-    };
-
-    const { filteredChecklists, vehicleList } = useMemo(() => {
-        const vehicles = new Set<string>(); allChecklists.forEach(c => vehicles.add(c.vehicleId));
-        const filtered = allChecklists.filter(c => {
-            const cDate = new Date(c.timestamp.seconds * 1000);
-            if (!(date?.from && cDate >= startOfDay(date.from) && cDate <= endOfDay(date.to || date.from))) return false;
-            if (selectedVehicle !== 'all' && c.vehicleId !== selectedVehicle) return false;
-            return true;
-        });
-        return { filteredChecklists: filtered, vehicleList: Array.from(vehicles).sort() };
-    }, [allChecklists, date, selectedVehicle]);
-
-    if (isChecklistsLoading) {
-        return (
-            <Card>
-                <CardHeader>
-                    <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
-                        <div className="space-y-2"><Skeleton className="h-6 w-48" /><Skeleton className="h-4 w-64" /></div>
-                        <div className="flex gap-2"><Skeleton className="h-10 w-32" /><Skeleton className="h-10 w-48" /></div>
-                    </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    {[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-12 w-full" />)}
-                </CardContent>
-            </Card>
-        );
-    }
-
-    return (
-        <Card>
-            <CardHeader>
-                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
-                    <div>
-                        <CardTitle>Registros de Checklist</CardTitle>
-                        <CardDescription>Lista de checklists preenchidos no período.</CardDescription>
-                    </div>
-                    <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                        <VehicleFilter vehicles={vehicleList} selectedVehicle={selectedVehicle} onVehicleChange={setSelectedVehicle} />
-                        <DateFilter date={date} setDate={setDate} />
-                    </div>
-                </div>
-            </CardHeader>
-            <CardContent>
-                <div className="overflow-auto max-h-[60vh]"><Table><TableHeader><TableRow><TableHead>Data</TableHead><TableHead>Veículo</TableHead><TableHead>Motorista</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader><TableBody>{filteredChecklists.length > 0 ? filteredChecklists.map(c => <ChecklistTableRow key={c.id} checklist={c} driver={users.get(c.driverId)} onViewDetails={() => setSelectedChecklist(c)} isSuperAdmin={isSuperAdmin} onDelete={handleDelete} />) : <TableRow><TableCell colSpan={5} className="text-center h-24">Nenhum checklist encontrado</TableCell></TableRow>}</TableBody></Table></div>
-            </CardContent>
-            <ChecklistDetailsDialog checklist={selectedChecklist} isOpen={selectedChecklist !== null} onClose={() => setSelectedChecklist(null)} />
-        </Card>
-    );
-};
-
-const ChartCard = ({ title, description, children, className }: { title: string, description: string, children: React.ReactNode, className?: string }) => (
-    <Card className={className}><CardHeader><CardTitle>{title}</CardTitle><CardDescription>{description}</CardDescription></CardHeader><CardContent><ResponsiveContainer width="100%" height={300}>{children}</ResponsiveContainer></CardContent></Card>
-);
-
-const HistoryTableRow = ({ run, users, onViewDetails, isSuperAdmin, onDelete }: { run: Run, users: Map<string, FirestoreUser>, onViewDetails: () => void, isSuperAdmin: boolean, onDelete: () => void }) => {
-    const driver = users.get(run.driverId);
-    const distance = run.endMileage ? run.endMileage - run.startMileage : 0;
-    const getInitials = (name: string) => name.split(' ').map(n => n[0]).slice(0, 2).join('');
-    return (<TableRow><TableCell><div className="flex items-center gap-2"><Truck className="h-4 w-4 text-muted-foreground" />{run.vehicleId}</div></TableCell><TableCell><div className="font-medium flex items-center gap-2"><Avatar className="h-6 w-6"><AvatarImage src={driver?.photoURL} alt={run.driverName} /><AvatarFallback className="text-xs">{getInitials(run.driverName)}</AvatarFallback></Avatar>{run.driverName}</div></TableCell><TableCell>{driver?.shift || 'N/A'}</TableCell><TableCell>{run.stops.map(s => s.name).join(', ')}</TableCell><TableCell>{distance > 0 ? `${distance.toFixed(1)} km` : '0.0 km'}</TableCell><TableCell>{format(run.startTime.toDate(), 'dd/MM/yyyy')}</TableCell><TableCell className="text-right space-x-2"><Button variant="outline" size="sm" onClick={onViewDetails}><Route className="mr-2 h-4 w-4" />Ver Detalhes</Button>{isSuperAdmin && (<AlertDialog><AlertDialogTrigger asChild><Button variant="destructive" size="sm"><Trash2 className="h-4 w-4 mr-1" /> Deletar</Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Você tem certeza?</AlertDialogTitle><AlertDialogDescription>Esta ação não pode ser desfeita. Isto irá apagar permanentemente a corrida do motorista {run.driverName} para {run.stops.map(s => s.name).join(', ')}.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={onDelete}>Confirmar</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>)}</TableCell></TableRow>);
-};
-const DateFilter = ({ date, setDate }: { date: DateRange | undefined, setDate: (date: DateRange | undefined) => void }) => (<Popover><PopoverTrigger asChild><Button id="date" variant={"outline"} className="w-full justify-start text-left font-normal sm:w-auto"><CalendarIcon className="mr-2 h-4 w-4" />{date?.from ? (date.to ? `${format(date.from, "dd/MM/y", { locale: ptBR })} - ${format(date.to, "dd/MM/y", { locale: ptBR })}` : format(date.from, "dd/MM/y", { locale: ptBR })) : <span>Selecione um período</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0" align="center"><Calendar initialFocus mode="range" defaultMonth={date?.from} selected={date} onSelect={setDate} numberOfMonths={2} locale={ptBR} /></PopoverContent></Popover>);
-const ShiftFilter = ({ selectedShift, onShiftChange }: { selectedShift: string, onShiftChange: (shift: string) => void }) => (<Select value={selectedShift} onValueChange={onShiftChange}><SelectTrigger className="w-full sm:w-auto"><SelectValue placeholder="Filtrar por turno" /></SelectTrigger><SelectContent>{Object.values({ TODOS: 'Todos', PRIMEIRO_NORMAL: '1° NORMAL', SEGUNDO_NORMAL: '2° NORMAL', PRIMEIRO_ESPECIAL: '1° ESPECIAL', SEGUNDO_ESPECIAL: '2° ESPECIAL' }).map(turno => (<SelectItem key={turno} value={turno}>{turno}</SelectItem>))}</SelectContent></Select>);
 const SectorFilter = ({ sectors, selectedSector, onSectorChange }: { sectors: SectorInfo[], selectedSector: string, onSectorChange: (sector: string) => void }) => (<Select value={selectedSector} onValueChange={onSectorChange}><SelectTrigger className="w-full sm:w-auto"><SelectValue placeholder="Filtrar por setor" /></SelectTrigger><SelectContent><SelectItem value="all"><Building className="h-4 w-4 inline-block mr-2" />Todos os Setores</SelectItem>{sectors.map(s => (<SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>))}</SelectContent></Select>);
 const VehicleFilter = ({ vehicles, selectedVehicle, onVehicleChange }: { vehicles: string[], selectedVehicle: string, onVehicleChange: (vehicle: string) => void }) => (<Select value={selectedVehicle} onValueChange={onVehicleChange}><SelectTrigger className="w-full sm:w-auto"><SelectValue placeholder="Filtrar por veículo" /></SelectTrigger><SelectContent><SelectItem value="all"><Truck className="h-4 w-4 inline-block mr-2" />Todos os Veículos</SelectItem>{vehicles.map(v => (<SelectItem key={v} value={v}><Truck className="h-4 w-4 inline-block mr-2" />{v}</SelectItem>))}</SelectContent></Select>);
-const DriverFilter = ({ drivers, selectedDriver, onDriverChange }: { drivers: FirestoreUser[], selectedDriver: string, onDriverChange: (driver: string) => void }) => (<Select value={selectedDriver} onValueChange={onDriverChange}><SelectTrigger className="w-full sm:w-auto"><SelectValue placeholder="Filtrar por motorista" /></SelectTrigger><SelectContent><SelectItem value="all"><User className="h-4 w-4 inline-block mr-2" />Todos os Motoristas</SelectItem>{drivers.map(d => (<SelectItem key={d.id} value={d.id}><User className="h-4 w-4 inline-block mr-2" />{d.name}</SelectItem>))}</SelectContent></Select>);
 
-const RefuelTableRow = ({ refuel, driver }: { refuel: any, driver?: FirestoreUser }) => {
+const DriverFilter = ({ drivers, selectedDriver, onDriverChange }: { drivers: FirestoreUser[], selectedDriver: string, onDriverChange: (driver: string) => void }) => (
+    <Select value={selectedDriver} onValueChange={onDriverChange}>
+        <SelectTrigger className="w-full sm:w-auto">
+            <SelectValue placeholder="Filtrar por motorista" />
+        </SelectTrigger>
+        <SelectContent>
+            <SelectItem value="all"><User className="h-4 w-4 inline-block mr-2" />Todos os Motoristas</SelectItem>
+            {drivers.map(d => (
+                <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+            ))}
+        </SelectContent>
+    </Select>
+);
+
+const DateFilter = ({ date, setDate }: { date: DateRange | undefined, setDate: (date: DateRange | undefined) => void }) => (
+    <div className="grid gap-2">
+        <Popover>
+            <PopoverTrigger asChild>
+                <Button id="date" variant={"outline"} className={cn("w-[260px] justify-start text-left font-normal", !date && "text-muted-foreground")}>
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {date?.from ? (date.to ? (<>{format(date.from, "LLL dd, y", { locale: ptBR })} - {format(date.to, "LLL dd, y", { locale: ptBR })}</>) : (format(date.from, "LLL dd, y", { locale: ptBR }))) : (<span>Selecione uma data</span>)}
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+                <Calendar initialFocus mode="range" defaultMonth={date?.from} selected={date} onSelect={setDate} numberOfMonths={2} locale={ptBR} />
+            </PopoverContent>
+        </Popover>
+    </div>
+);
+
+const ChartCard = ({ title, description, children, className }: { title: string, description: string, children: React.ReactNode, className?: string }) => (
+    <Card className={cn("flex flex-col", className)}>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+            <div className="space-y-1">
+                <CardTitle className="text-base font-medium">{title}</CardTitle>
+                <CardDescription className="text-xs">{description}</CardDescription>
+            </div>
+        </CardHeader>
+        <CardContent className="flex-1 pb-4">
+            <div className="h-[250px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                    {children as any}
+                </ResponsiveContainer>
+            </div>
+        </CardContent>
+    </Card>
+);
+const AbastecimentosTableRow = ({ refuel, driver }: { refuel: any, driver?: FirestoreUser }) => {
     const getInitials = (name: string) => name.split(' ').map(n => n[0]).slice(0, 2).join('');
     return (
         <TableRow><TableCell>{format(new Date(refuel.timestamp.seconds * 1000), 'dd/MM/yy HH:mm')}</TableCell><TableCell><div className="flex items-center gap-2"><Truck className="h-4 w-4 text-muted-foreground" />{refuel.vehicleId}</div></TableCell><TableCell><div className="font-medium flex items-center gap-2"><Avatar className="h-6 w-6"><AvatarImage src={driver?.photoURL} alt={refuel.driverName} /><AvatarFallback className="text-xs">{getInitials(refuel.driverName)}</AvatarFallback></Avatar>{refuel.driverName}</div></TableCell><TableCell><div className="flex items-center gap-2"><Fuel className="h-4 w-4 text-muted-foreground" />{refuel.liters.toFixed(2)} L</div></TableCell><TableCell className="text-right font-medium">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(refuel.amount)}</TableCell></TableRow>
+    );
+};
+
+const HistoryTableRow = ({ run, users, onViewDetails, isSuperAdmin, onDelete }: { run: Run, users: Map<string, FirestoreUser>, onViewDetails: () => void, isSuperAdmin: boolean, onDelete: () => void }) => {
+    const driver = users.get(run.driverId);
+    const getInitials = (name: string) => name.split(' ').map(n => n[0]).slice(0, 2).join('');
+    const distance = run.endMileage && run.startMileage ? run.endMileage - run.startMileage : 0;
+    
+    return (
+        <TableRow key={run.id} className="cursor-pointer hover:bg-muted/50 transition-colors" onClick={onViewDetails}>
+            <TableCell><div className="flex items-center gap-2"><Truck className="h-4 w-4 text-muted-foreground" />{run.vehicleId}</div></TableCell>
+            <TableCell><div className="font-medium flex items-center gap-2"><Avatar className="h-6 w-6"><AvatarImage src={driver?.photoURL} alt={run.driverName} /><AvatarFallback className="text-xs">{getInitials(run.driverName)}</AvatarFallback></Avatar>{run.driverName}</div></TableCell>
+            <TableCell><Badge variant="secondary" className="text-[10px]">{driver?.shift || 'N/A'}</Badge></TableCell>
+            <TableCell><div className="text-xs max-w-[200px] truncate">{run.stops.slice(-1)[0]?.name || 'N/A'}</div></TableCell>
+            <TableCell><div className="flex items-center gap-1 font-medium">{distance > 0 ? `${distance.toFixed(1)} km` : '--'}</div></TableCell>
+            <TableCell><div className="text-xs">{format(run.startTime.toDate(), 'dd/MM/yy HH:mm')}</div></TableCell>
+            <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                <div className="flex justify-end gap-2">
+                    <Button variant="ghost" size="sm" onClick={onViewDetails}><FileText className="h-4 w-4" /></Button>
+                    {isSuperAdmin && (
+                        <AlertDialog>
+                            <AlertDialogTrigger asChild><Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10"><Trash2 className="h-4 w-4" /></Button></AlertDialogTrigger>
+                            <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle><AlertDialogDescription>Deseja realmente excluir este registro de corrida? Esta ação não pode ser desfeita.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={onDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Confirmar</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+                        </AlertDialog>
+                    )}
+                </div>
+            </TableCell>
+        </TableRow>
     );
 };
 
@@ -2094,13 +1670,14 @@ export default function DashboardPage() {
             </div>
 
             <Tabs defaultValue="acompanhamento" className="w-full" onValueChange={setActiveTab}>
-                <TabsList className={cn("grid w-full", isMobile ? "grid-cols-2" : "grid-cols-6")}>
+                <TabsList className={cn("grid w-full", isMobile ? "grid-cols-3" : "grid-cols-7")}>
                     <TabsTrigger value="acompanhamento">Acompanhamento</TabsTrigger>
                     <TabsTrigger value="roteirizacao">Roteirização</TabsTrigger>
                     <TabsTrigger value="analise">Análise</TabsTrigger>
                     <TabsTrigger value="historico">Histórico</TabsTrigger>
                     <TabsTrigger value="abastecimentos">Abastecimentos</TabsTrigger>
                     <TabsTrigger value="checklists">Checklists</TabsTrigger>
+                    <TabsTrigger value="configuracoes">Configurações</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="acompanhamento" className="mt-6">
@@ -2121,6 +1698,9 @@ export default function DashboardPage() {
                 <TabsContent value="checklists" className="mt-6">
                     <ChecklistsTab activeTab={activeTab} />
                 </TabsContent>
+                <TabsContent value="configuracoes" className="mt-6">
+                    <ConfiguracoesTab />
+                </TabsContent>
             </Tabs>
         </div>
     );
@@ -2129,3 +1709,638 @@ export default function DashboardPage() {
 
 
 
+const RoteirizacaoTab = () => {
+    const { firestore } = useFirebase();
+    const { toast } = useToast();
+    
+    const [vehicles, setVehicles] = useState<{id: string, model: string}[]>([]);
+    const [routes, setRoutes] = useState<PlannedRoute[]>([]);
+    const [availableShifts, setAvailableShifts] = useState<string[]>(['1° NORMAL', '2° NORMAL', '1° ESPECIAL', '2° ESPECIAL']);
+    const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+    const [selectedShift, setSelectedShift] = useState<string>('1° NORMAL');
+    const [isLoading, setIsLoading] = useState(true);
+    const [isSaving, setIsSaving] = useState(false);
+  
+    const [sectorName, setSectorName] = useState('');
+    const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
+  
+    useEffect(() => {
+      const sn = localStorage.getItem('sectorName') || '';
+      setSectorName(sn);
+      setIsAuthorized(sn.toUpperCase().includes('MILKRUN') && sn.toUpperCase() !== 'MILKRUN ASTEC');
+    }, []);
+  
+    // Form State
+    const [newRouteVehicle, setNewRouteVehicle] = useState('');
+    const [newTrips, setNewTrips] = useState<PlannedTrip[]>([]);
+    const [isFixedNewRoute, setIsFixedNewRoute] = useState(false);
+    const [editingRouteId, setEditingRouteId] = useState<string | null>(null);
+  
+    const fetchVehicles = useCallback(async () => {
+      const companyId = localStorage.getItem('companyId');
+      const sectorId = localStorage.getItem('sectorId');
+      if (!firestore || !companyId || !sectorId) return;
+  
+      try {
+        const vehiclesCol = collection(firestore, `companies/${companyId}/sectors/${sectorId}/vehicles`);
+        const snapshot = await getDocs(vehiclesCol);
+        const list = snapshot.docs
+          .map(doc => ({ id: doc.id, ...(doc.data() as any) }))
+          .filter(v => v.isTruck)
+          .map(v => ({ id: v.id, model: v.model }));
+        setVehicles(list);
+      } catch (error) {
+        toast({ variant: 'destructive', title: 'Erro', description: 'Erro ao carregar veículos.' });
+      }
+    }, [firestore, toast]);
+  
+    const fetchAvailableShifts = useCallback(async () => {
+      const companyId = localStorage.getItem('companyId');
+      const sectorId = localStorage.getItem('sectorId');
+      if (!firestore || !companyId || !sectorId) return;
+  
+      try {
+        const usersCol = collection(firestore, `companies/${companyId}/sectors/${sectorId}/users`);
+        const snapshot = await getDocs(usersCol);
+        
+        const shifts = new Set<string>();
+        snapshot.docs.forEach(doc => {
+          const data = doc.data();
+          if (data.shift) shifts.add(data.shift);
+        });
+  
+        if (shifts.size > 0) {
+          const sorted = Array.from(shifts).sort();
+          setAvailableShifts(sorted);
+        }
+      } catch (error) {
+        console.error("Erro ao buscar turnos: ", error);
+      }
+    }, [firestore]);
+  
+    const fetchRoutes = useCallback(async () => {
+      const companyId = localStorage.getItem('companyId');
+      const sectorId = localStorage.getItem('sectorId');
+      if (!firestore || !companyId || !sectorId) return;
+  
+      setIsLoading(true);
+      try {
+        const routesCol = collection(firestore, `companies/${companyId}/sectors/${sectorId}/routes`);
+        const start = format(startOfMonth(selectedDate), 'yyyy-MM-dd');
+        const end = format(endOfMonth(selectedDate), 'yyyy-MM-dd');
+        
+        const qRange = query(routesCol, where('date', '>=', start), where('date', '<=', end));
+        const qFixed = query(routesCol, where('date', '==', 'fixed'));
+        
+        const [snapRange, snapFixed] = await Promise.all([getDocs(qRange), getDocs(qFixed)]);
+        
+        const listRange = snapRange.docs.map(doc => ({ id: doc.id, ...doc.data() } as PlannedRoute));
+        const listFixed = snapFixed.docs.map(doc => ({ id: doc.id, ...doc.data() } as PlannedRoute));
+        setRoutes([...listRange, ...listFixed]);
+      } catch (error) {
+        toast({ variant: 'destructive', title: 'Erro', description: 'Erro ao carregar rotas.' });
+      } finally {
+        setIsLoading(false);
+      }
+    }, [firestore, selectedDate, toast]);
+  
+    useEffect(() => {
+      fetchVehicles();
+      fetchRoutes();
+      fetchAvailableShifts();
+    }, [fetchVehicles, fetchRoutes, fetchAvailableShifts]);
+  
+    // Collision detection & auto-loading
+    useEffect(() => {
+      if (!newRouteVehicle || editingRouteId) return;
+  
+      const dateStr = isFixedNewRoute ? 'fixed' : format(selectedDate, 'yyyy-MM-dd');
+      const existing = routes.find(r => 
+        r.vehicleId === newRouteVehicle && 
+        r.date === dateStr && 
+        r.shift === selectedShift
+      );
+  
+      if (existing) {
+        setNewTrips(existing.trips);
+        setIsFixedNewRoute(!!existing.isFixed);
+        setEditingRouteId(existing.id);
+        toast({ title: 'Editando plano existente', description: `Já existe uma programação para ${newRouteVehicle} neste turno.` });
+      }
+    }, [newRouteVehicle, selectedDate, selectedShift, isFixedNewRoute, routes, editingRouteId, toast]);
+  
+    const handleAddTrip = () => {
+      const newTrip: PlannedTrip = {
+        id: Math.random().toString(36).substr(2, 9),
+        name: `Viagem ${newTrips.length + 1}`,
+        stops: [{ name: '', plannedArrival: '', plannedDeparture: '' }]
+      };
+      setNewTrips([...newTrips, newTrip]);
+    };
+  
+    const handleAddStop = (tripId: string) => {
+      setNewTrips(newTrips.map(trip => {
+        if (trip.id === tripId) {
+          return { ...trip, stops: [...trip.stops, { name: '', plannedArrival: '', plannedDeparture: '' }] };
+        }
+        return trip;
+      }));
+    };
+  
+    const handleUpdateStop = (tripId: string, stopIndex: number, field: keyof PlannedStop, value: string) => {
+      setNewTrips(newTrips.map(trip => {
+        if (trip.id === tripId) {
+          const newStops = [...trip.stops];
+          newStops[stopIndex] = { ...newStops[stopIndex], [field]: value };
+          return { ...trip, stops: newStops };
+        }
+        return trip;
+      }));
+    };
+  
+    const handleRemoveStop = (tripId: string, stopIndex: number) => {
+      setNewTrips(newTrips.map(trip => {
+        if (trip.id === tripId) {
+          return { ...trip, stops: trip.stops.filter((_, i) => i !== stopIndex) };
+        }
+        return trip;
+      }));
+    };
+  
+    const handleRemoveTrip = (tripId: string) => {
+      setNewTrips(newTrips.filter(t => t.id !== tripId));
+    };
+  
+    const handleCloneTrip = (trip: PlannedTrip) => {
+      const clonedTrip: PlannedTrip = {
+        ...trip,
+        id: Math.random().toString(36).substr(2, 9),
+        name: `${trip.name} (Cópia)`,
+        stops: trip.stops.map(s => ({ ...s }))
+      };
+      setNewTrips([...newTrips, clonedTrip]);
+      toast({ title: 'Viagem Clonada', description: `Sua nova viagem '${clonedTrip.name}' foi adicionada à lista.` });
+    };
+  
+    const handleMoveTrip = (index: number, direction: 'up' | 'down') => {
+      const next = [...newTrips];
+      const targetIndex = direction === 'up' ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= next.length) return;
+      
+      [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
+      setNewTrips(next);
+    };
+  
+    const handleSaveRoute = async () => {
+      const companyId = localStorage.getItem('companyId');
+      const sectorId = localStorage.getItem('sectorId');
+      if (!firestore || !companyId || !sectorId || !newRouteVehicle) return;
+  
+      if (newTrips.length === 0) {
+        toast({ variant: 'destructive', title: 'Erro', description: 'Adicione pelo menos uma viagem.' });
+        return;
+      }
+  
+      setIsSaving(true);
+      try {
+        const dateStr = isFixedNewRoute ? 'fixed' : format(selectedDate, 'yyyy-MM-dd');
+        const shiftSuffix = `_${selectedShift.replace(' ', '')}`;
+        const routeId = isFixedNewRoute ? `fixed_${newRouteVehicle}${shiftSuffix}` : `${dateStr}_${newRouteVehicle}${shiftSuffix}`;
+        const routeRef = doc(firestore, `companies/${companyId}/sectors/${sectorId}/routes`, routeId);
+        
+        await setDoc(routeRef, {
+          vehicleId: newRouteVehicle,
+          date: dateStr,
+          shift: selectedShift,
+          isFixed: isFixedNewRoute,
+          trips: newTrips
+        });
+  
+        toast({ title: 'Sucesso', description: isFixedNewRoute ? 'Rota fixa salva!' : 'Rota salva com sucesso!' });
+        resetForm();
+        fetchRoutes();
+      } catch (error) {
+        toast({ variant: 'destructive', title: 'Erro', description: 'Erro ao salvar rota.' });
+      } finally {
+        setIsSaving(false);
+      }
+    };
+  
+    const resetForm = () => {
+      setNewRouteVehicle('');
+      setNewTrips([]);
+      setIsFixedNewRoute(false);
+      setEditingRouteId(null);
+    };
+  
+    const handleEditRoute = (route: PlannedRoute) => {
+      setNewRouteVehicle(route.vehicleId);
+      setNewTrips(route.trips);
+      setIsFixedNewRoute(!!route.isFixed);
+      setSelectedShift(route.shift || '1° NORMAL');
+      setEditingRouteId(route.id);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+  
+    const handleDeleteRoute = async (routeId: string) => {
+      const companyId = localStorage.getItem('companyId');
+      const sectorId = localStorage.getItem('sectorId');
+      if (!firestore || !companyId || !sectorId) return;
+  
+      if (!confirm('Deseja realmente excluir esta rota?')) return;
+  
+      try {
+        await deleteDoc(doc(firestore, `companies/${companyId}/sectors/${sectorId}/routes`, routeId));
+        toast({ title: 'Sucesso', description: 'Rota excluída.' });
+        fetchRoutes();
+      } catch (error) {
+        toast({ variant: 'destructive', title: 'Erro', description: 'Erro ao excluir rota.' });
+      }
+    };
+  
+    const routesForSelectedDate = routes.filter(r => 
+      (r.date === format(selectedDate, 'yyyy-MM-dd') || r.date === 'fixed') && 
+      (r.shift === selectedShift || (!r.shift && selectedShift === '1° NORMAL'))
+    );
+  
+    if (isAuthorized === null) {
+      return (
+        <div className="flex justify-center items-center h-64 font-bold">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" /> Carregando acesso...
+        </div>
+      );
+    }
+  
+    if (!isAuthorized) {
+      return (
+        <div className="flex flex-col items-center justify-center py-12 space-y-4 border rounded-lg border-dashed bg-destructive/5 text-destructive">
+          <AlertCircle className="h-10 w-10" />
+          <h3 className="text-xl font-bold">Acesso não autorizado</h3>
+          <p className="text-center max-w-sm px-4">O seu setor ({sectorName}) não possui acesso ao módulo de roteirização.</p>
+        </div>
+      );
+    }
+
+    return (
+        <div className="space-y-6">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-muted/30 p-4 rounded-lg border">
+                <div>
+                <h2 className="text-2xl font-bold text-primary">Gestão de Rotas</h2>
+                <p className="text-sm text-muted-foreground">Planejamento diário e fixo dos veículos.</p>
+                </div>
+                <div className="flex items-center gap-2 bg-card p-2 rounded-lg border shadow-sm">
+                <CalendarIcon className="w-5 h-5 text-primary" />
+                <Input 
+                    type="date" 
+                    value={format(selectedDate, 'yyyy-MM-dd')}
+                    onChange={(e) => setSelectedDate(new Date(e.target.value + 'T12:00:00'))}
+                    className="border-none focus-visible:ring-0 p-0 h-8 font-bold"
+                />
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <Card className="lg:col-span-2 shadow-sm border-t-4 border-primary">
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                    {editingRouteId ? <Edit3 className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
+                    {editingRouteId ? 'Editar Programação' : 'Nova Roteirização'}
+                    </CardTitle>
+                    <CardDescription>
+                    Programação para {format(selectedDate, "dd 'de' MMMM", { locale: ptBR })}
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                        <Label>Veículo</Label>
+                        <Select value={newRouteVehicle} onValueChange={setNewRouteVehicle}>
+                        <SelectTrigger>
+                            <SelectValue placeholder="Selecione o veículo" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {vehicles.map(v => (
+                            <SelectItem key={v.id} value={v.id}>{v.id} - {v.model}</SelectItem>
+                            ))}
+                        </SelectContent>
+                        </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label>Turno</Label>
+                        <Select value={selectedShift} onValueChange={setSelectedShift}>
+                        <SelectTrigger className="h-10">
+                            <SelectValue placeholder="Selecione o turno" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {availableShifts.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                        </SelectContent>
+                        </Select>
+                    </div>
+                    </div>
+                    
+                    <div className="flex items-center justify-between space-x-2 bg-primary/5 p-4 rounded-lg border shadow-sm hover:bg-primary/10 transition-colors">
+                    <div className="space-y-0.5" onClick={() => setIsFixedNewRoute(!isFixedNewRoute)}>
+                        <Label htmlFor="fixed-route-standalone" className="text-base font-bold cursor-pointer">
+                        Programação Fixa (Diária)
+                        </Label>
+                        <p className="text-xs text-muted-foreground">Esta rota aparecerá todos os dias para o caminhão selecionado.</p>
+                    </div>
+                    <Switch 
+                        id="fixed-route-standalone" 
+                        checked={isFixedNewRoute}
+                        onCheckedChange={setIsFixedNewRoute}
+                    />
+                    </div>
+
+                    <div className="space-y-4">
+                    <div className="flex justify-between items-center pb-2 border-b">
+                        <Label className="text-lg font-semibold">Viagens e Paradas</Label>
+                        <Button variant="outline" size="sm" onClick={handleAddTrip}>
+                        <Plus className="w-4 h-4 mr-1" /> Add Viagem
+                        </Button>
+                    </div>
+
+                    {newTrips.map((trip, tIndex) => (
+                        <div key={trip.id} className="border rounded-lg p-4 space-y-4 bg-muted/20">
+                        <div className="flex justify-between items-center">
+                            <div className="flex items-center gap-2">
+                            <div className="flex flex-col gap-0.5">
+                                <Button variant="ghost" size="icon" className="h-4 w-4" onClick={() => handleMoveTrip(tIndex, 'up')} disabled={tIndex === 0}>
+                                    <ArrowLeft className="w-3 h-3 rotate-90" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-4 w-4" onClick={() => handleMoveTrip(tIndex, 'down')} disabled={tIndex === newTrips.length - 1}>
+                                    <ArrowLeft className="w-3 h-3 -rotate-90" />
+                                </Button>
+                            </div>
+                            <Input 
+                                value={trip.name} 
+                                onChange={(e) => {
+                                const next = [...newTrips];
+                                next[tIndex].name = e.target.value;
+                                setNewTrips(next);
+                                }}
+                                className="max-w-[200px] font-bold"
+                            />
+                            </div>
+                            <div className="flex gap-1">
+                                <Button variant="ghost" size="icon" onClick={() => handleCloneTrip(trip)} title="Clonar Viagem">
+                                    <Copy className="w-4 h-4 text-primary" />
+                                </Button>
+                                <Button variant="ghost" size="icon" onClick={() => handleRemoveTrip(trip.id)} title="Remover Viagem">
+                                    <Trash2 className="w-4 h-4 text-destructive" />
+                                </Button>
+                            </div>
+                        </div>
+
+                        <div className="space-y-3 pl-4 border-l-2 border-primary/20 bg-muted/10 p-4 rounded-r-lg">
+                            {trip.stops.map((stop, sIdx) => (
+                            <div key={sIdx} className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end border-b pb-3 last:border-0 border-primary/10">
+                                <div className="md:col-span-2 space-y-1">
+                                <Label className="text-[10px] uppercase font-bold text-muted-foreground">Ponto de Parada</Label>
+                                <Input 
+                                    placeholder="Ex: PINTURA ABS" 
+                                    value={stop.name}
+                                    onChange={(e) => handleUpdateStop(trip.id, sIdx, 'name', e.target.value)}
+                                    className="h-8"
+                                />
+                                </div>
+                                <div className="space-y-1">
+                                <Label className="text-[10px] uppercase font-bold text-muted-foreground">Chegada</Label>
+                                <Input 
+                                    type="time" 
+                                    value={stop.plannedArrival}
+                                    onChange={(e) => handleUpdateStop(trip.id, sIdx, 'plannedArrival', e.target.value)}
+                                    className="h-8"
+                                />
+                                </div>
+                                <div className="flex gap-1">
+                                <div className="flex-1 space-y-1">
+                                    <Label className="text-[10px] uppercase font-bold text-muted-foreground">Saída</Label>
+                                    <Input 
+                                    type="time" 
+                                    value={stop.plannedDeparture}
+                                    onChange={(e) => handleUpdateStop(trip.id, sIdx, 'plannedDeparture', e.target.value)}
+                                    className="h-8 w-full"
+                                    />
+                                </div>
+                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleRemoveStop(trip.id, sIdx)}>
+                                    <Trash2 className="w-3 h-3 text-destructive" />
+                                </Button>
+                                </div>
+                            </div>
+                            ))}
+                            <Button variant="ghost" size="sm" className="w-full border-dashed border-2 hover:bg-primary/5 py-1" onClick={() => handleAddStop(trip.id)}>
+                            <Plus className="w-3 h-3 mr-1" /> Add Parada
+                            </Button>
+                        </div>
+                        </div>
+                    ))}
+                    </div>
+
+                    <div className="flex gap-4 pt-4">
+                    <Button className="flex-1 h-12 text-lg font-bold" onClick={handleSaveRoute} disabled={isSaving || !newRouteVehicle}>
+                        {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
+                        {editingRouteId ? 'Atualizar Programação' : 'Finalizar Roteirização'}
+                    </Button>
+                    {editingRouteId && (
+                        <Button variant="outline" className="h-12" onClick={resetForm}>Cancelar</Button>
+                    )}
+                    </div>
+                </CardContent>
+                </Card>
+
+                <div className="space-y-4">
+                <h2 className="text-xl font-bold flex items-center gap-2 text-primary tracking-tight">
+                    <LayoutDashboard className="w-5 h-5" /> Ativas no Turno
+                </h2>
+                {isLoading ? (
+                    <div className="flex justify-center p-8"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
+                ) : routesForSelectedDate.length === 0 ? (
+                    <p className="text-muted-foreground text-center py-12 border rounded-lg border-dashed bg-muted/20">
+                    Sem programações para {selectedShift}.
+                    </p>
+                ) : (
+                    routesForSelectedDate.map(route => (
+                    <Card key={route.id} className="overflow-hidden border-l-4 border-l-primary shadow-sm hover:shadow-md transition-all">
+                        <div className="bg-primary/5 p-3 flex justify-between items-center border-b">
+                        <span className="font-extrabold flex items-center gap-2 text-sm uppercase">
+                            <Truck className="w-4 h-4 text-primary" /> {route.vehicleId}
+                            {route.isFixed && <Badge variant="secondary" className="text-[10px] h-4 bg-primary/10 text-primary border-primary/20">DIÁRIA</Badge>}
+                        </span>
+                        <div className="flex gap-1">
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleEditRoute(route)}>
+                            <Edit3 className="w-4 h-4 text-primary" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleDeleteRoute(route.id)}>
+                            <Trash2 className="w-4 h-4 text-destructive" />
+                            </Button>
+                        </div>
+                        </div>
+                        <CardContent className="p-4 space-y-4">
+                        {route.trips.map((trip, idx) => (
+                            <div key={idx} className="space-y-1.5">
+                            <p className="text-[11px] font-black text-primary/80 uppercase tracking-wider">{trip.name}</p>
+                            <div className="space-y-1 border-l-2 border-primary/10 ml-1 pl-3">
+                                {trip.stops.map((stop, sIdx) => (
+                                <div key={sIdx} className="text-[10px] flex justify-between group">
+                                    <span className="font-medium group-hover:text-primary transition-colors">{stop.name}</span>
+                                    <span className="text-muted-foreground whitespace-nowrap">{stop.plannedArrival} - {stop.plannedDeparture}</span>
+                                </div>
+                                ))}
+                            </div>
+                            </div>
+                        ))}
+                        </CardContent>
+                    </Card>
+                    ))
+                )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const ConfiguracoesTab = () => {
+    const { firestore } = useFirebase();
+    const { toast } = useToast();
+    const [isDeleting, setIsDeleting] = useState(false);
+    const [confirmText, setConfirmText] = useState('');
+    const [user, setUser] = useState<any>(null);
+
+    useEffect(() => {
+        const storedUser = localStorage.getItem('user');
+        if (storedUser) setUser(JSON.parse(storedUser));
+    }, []);
+
+    const handleDeleteAllRuns = async () => {
+        if (!user?.isOP) {
+            toast({ variant: 'destructive', title: 'Acesso Negado', description: 'Apenas usuários OP podem apagar o banco de dados.' });
+            return;
+        }
+        const companyId = localStorage.getItem('companyId');
+        const sectorId = localStorage.getItem('sectorId');
+        if (!firestore || !companyId || !sectorId) return;
+
+        if (confirmText !== 'DELETAR') {
+            toast({ variant: 'destructive', title: 'Erro de validação', description: 'Digite DELETAR para confirmar.' });
+            return;
+        }
+
+        setIsDeleting(true);
+        try {
+            const runsCol = collection(firestore, `companies/${companyId}/sectors/${sectorId}/runs`);
+            const snapshot = await getDocs(runsCol);
+            
+            if (snapshot.empty) {
+                toast({ title: 'Aviso', description: 'Não há corridas para apagar.' });
+                return;
+            }
+
+            const batch = writeBatch(firestore);
+            snapshot.docs.forEach((d) => batch.delete(d.ref));
+            await batch.commit();
+
+            toast({ title: 'Sucesso', description: `${snapshot.size} corridas foram apagadas.` });
+            setConfirmText('');
+        } catch (error) {
+            console.error(error);
+            toast({ variant: 'destructive', title: 'Erro', description: 'Erro ao apagar corridas.' });
+        } finally {
+            setIsDeleting(false);
+        }
+    };
+
+    return (
+        <div className="space-y-6 max-w-4xl mx-auto">
+            <Card className="border-destructive/20 shadow-sm overflow-hidden rounded-lg">
+                <CardHeader className="bg-destructive/5 border-b border-destructive/10">
+                    <CardTitle className="text-destructive flex items-center gap-2 text-xl font-bold">
+                        <AlertCircle className="h-6 w-6" /> Zona Crítica Administrativa
+                    </CardTitle>
+                    <CardDescription>Ações irreversíveis que afetam os dados permanentes do setor.</CardDescription>
+                </CardHeader>
+                <CardContent className="pt-8 space-y-6">
+                    <div className="flex flex-col md:flex-row items-center justify-between gap-6 p-6 border-2 border-dashed rounded-lg bg-muted/20">
+                        <div className="space-y-1">
+                            <h4 className="font-bold text-lg">Apagar Banco de Corridas</h4>
+                            <p className="text-sm text-muted-foreground">Remove permanentemente todos os registros de corridas, histórico de GPS e quilometragem deste setor.</p>
+                        </div>
+                        <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                                <Button variant="destructive" className="font-bold h-12 px-6 shadow-lg shadow-destructive/20" disabled={!user?.isOP}>
+                                    <Trash2 className="h-5 w-5 mr-2" /> Resetar Corridas
+                                </Button>
+                            </AlertDialogTrigger>
+                            {!user?.isOP && (
+                                <p className="text-xs text-destructive mt-2 font-bold animate-pulse">Apenas OP pode resetar</p>
+                            )}
+                            <AlertDialogContent className="rounded-lg max-w-lg">
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle className="text-2xl font-bold text-destructive">Confirmação de Aniquilação</AlertDialogTitle>
+                                    <AlertDialogDescription className="text-base text-card-foreground">
+                                        Você está prestes a apagar permanentemente todas as corridas deste setor. Esta ação <strong>NÃO pode ser desfeita</strong> sob nenhuma circunstância.
+                                        
+                                        <div className="mt-6 p-4 bg-destructive/5 rounded-xl border border-destructive/20 space-y-3">
+                                            <Label htmlFor="confirm-delete-system" className="text-xs font-black uppercase text-destructive tracking-widest">Digite a palavra-chave para prosseguir:</Label>
+                                            <Input 
+                                                id="confirm-delete-system" 
+                                                placeholder="Digite DELETAR" 
+                                                value={confirmText} 
+                                                onChange={(e) => setConfirmText(e.target.value.toUpperCase())}
+                                                className="border-destructive/50 focus-visible:ring-destructive h-12 text-center text-xl font-black"
+                                            />
+                                        </div>
+                                    </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter className="mt-4">
+                                    <AlertDialogCancel onClick={() => setConfirmText('')} className="font-bold h-12">Manter meus dados</AlertDialogCancel>
+                                    <AlertDialogAction 
+                                        onClick={handleDeleteAllRuns} 
+                                        disabled={confirmText !== 'DELETAR' || isDeleting}
+                                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90 font-bold h-12 px-8"
+                                    >
+                                        {isDeleting ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : <Trash2 className="h-5 w-5 mr-2" />}
+                                        EXCLUIR TUDO
+                                    </AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        </AlertDialog>
+                    </div>
+                </CardContent>
+            </Card>
+        </div>
+    );
+};
+
+const AbastecimentosTab = ({ activeTab }: { activeTab: string }) => {
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Abastecimentos</CardTitle>
+                <CardDescription>Histórico de combustível da frota.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <div className="text-center py-12 text-muted-foreground border-t">
+                   Módulo de abastecimento em atualização.
+                </div>
+            </CardContent>
+        </Card>
+    );
+};
+
+const ChecklistsTab = ({ activeTab }: { activeTab: string }) => {
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Checklists de Veículos</CardTitle>
+                <CardDescription>Registros diários de conferência da frota.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <div className="text-center py-12 text-muted-foreground border-t">
+                   Módulo de checklist em atualização.
+                </div>
+            </CardContent>
+        </Card>
+    );
+};

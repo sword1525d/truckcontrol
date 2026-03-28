@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, CheckCircle2, Loader2, Milestone } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Loader2, Milestone, Truck, User, X } from 'lucide-react';
 import { OccupancySelector } from './OccupancySelector';
 import { Textarea } from '@/components/ui/textarea';
 
@@ -275,11 +275,11 @@ function ActiveRunContent() {
     const finalMileage = Number(mileage);
     const previousMileage = currentStopIndex > 0 ? (run.stops[currentStopIndex - 1].mileageAtStop || run.startMileage) : run.startMileage;
 
-    if (finalMileage < previousMileage) {
+    if (finalMileage <= previousMileage) {
       toast({ 
         variant: 'destructive', 
         title: 'KM Inválido', 
-        description: `A quilometragem não pode ser inferior à última registrada (${previousMileage} km).` 
+        description: `A quilometragem deve ser superior à última registrada (${previousMileage} km).` 
       });
       return;
     }
@@ -378,6 +378,27 @@ function ActiveRunContent() {
     }
   }
 
+  const handleCancelRun = async () => {
+    if (!run || !firestore || !runId) return;
+
+    try {
+        const companyId = localStorage.getItem('companyId');
+        const sectorId = localStorage.getItem('sectorId');
+        const runRef = doc(firestore, `companies/${companyId}/sectors/${sectorId}/runs`, runId);
+
+        await updateDoc(runRef, {
+            status: 'CANCELED',
+            endTime: new Date()
+        });
+
+        toast({ title: 'Trajeto Cancelado', description: 'O trajeto foi descartado com sucesso.' });
+        router.push('/dashboard-truck');
+    } catch (error) {
+        console.error("Erro ao cancelar trajeto: ", error);
+        toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível cancelar o trajeto.' });
+    }
+  }
+
   if (isLoading || !run || run.stops.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
@@ -394,35 +415,82 @@ function ActiveRunContent() {
 
   return (
     <div className="container mx-auto p-4 sm:p-6 lg:p-8 max-w-4xl">
-        <div className="flex items-center gap-4 mb-6">
-            <Button variant="outline" size="icon" onClick={() => router.push('/dashboard-truck')}>
-                <ArrowLeft />
-            </Button>
-            <div>
-                <h1 className="text-2xl font-bold">Trajeto Ativo</h1>
-                <p className="text-muted-foreground">Veículo: {run.vehicleId} | Motorista: {run.driverName}</p>
-                {run.tripName && <Badge variant="secondary" className="mt-1">{run.tripName}</Badge>}
+        <div className="mb-6 space-y-5">
+            <div className="flex items-center justify-between">
+                <Button variant="outline" size="icon" onClick={() => router.push('/dashboard-truck')} className="rounded-full shadow-sm">
+                    <ArrowLeft className="h-5 w-5" />
+                </Button>
+                
+                <div className="flex gap-2">
+                    <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                            <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground gap-2 h-9 px-3">
+                                <ArrowLeft className="w-4 h-4" /> Sair
+                            </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent className="rounded-2xl">
+                            <AlertDialogHeader>
+                                <AlertDialogTitle>Deseja sair deste trajeto?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    O trajeto continuará em aberto. Você poderá retomá-lo mais tarde no menu inicial.
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel className="rounded-xl">Continuar aqui</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => router.push('/dashboard-truck')} className="bg-orange-600 hover:bg-orange-700 rounded-xl">Sair agora</AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+
+                    <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                            <Button variant="destructive" size="sm" className="h-9 px-4 font-bold shadow-sm">
+                                <X className="mr-2 h-4 w-4" /> Cancelar Trajeto
+                            </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent className="rounded-2xl border-destructive/20">
+                            <AlertDialogHeader>
+                                <AlertDialogTitle className="text-destructive">Deseja CANCELAR este trajeto?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    Esta ação irá descartar todos os registros desta corrida. Use apenas se você iniciou o trajeto por engano.
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel className="rounded-xl">Voltar</AlertDialogCancel>
+                                <AlertDialogAction onClick={handleCancelRun} className="bg-destructive hover:bg-destructive text-destructive-foreground rounded-xl">Confirmar Cancelamento</AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+                </div>
             </div>
-            <div className="ml-auto">
-              <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                      <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive gap-2">
-                        <ArrowLeft className="w-4 h-4" /> Sair Temporariamente
-                      </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                      <AlertDialogHeader>
-                          <AlertDialogTitle>Deseja sair deste trajeto?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                              O trajeto continuará em aberto. Você poderá retomá-lo mais tarde no menu inicial.
-                          </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                          <AlertDialogCancel>Continuar aqui</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => router.push('/dashboard-truck')} className="bg-orange-600 hover:bg-orange-700">Sair agora</AlertDialogAction>
-                      </AlertDialogFooter>
-                  </AlertDialogContent>
-              </AlertDialog>
+
+            <div className="space-y-2">
+                <div className="flex items-baseline justify-between flex-wrap gap-2">
+                    <h1 className="text-3xl font-black tracking-tight text-foreground">Trajeto Ativo</h1>
+                    {run.tripName && (
+                        <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 font-bold px-3 py-1">
+                            {run.tripName}
+                        </Badge>
+                    )}
+                </div>
+                
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm bg-muted/30 p-3 rounded-xl border border-dashed">
+                    <div className="flex items-center gap-2">
+                        <div className="bg-primary/10 p-1.5 rounded-lg">
+                            <Truck className="h-4 w-4 text-primary" />
+                        </div>
+                        <span className="font-bold">{run.vehicleId}</span>
+                    </div>
+                    
+                    <div className="hidden sm:block w-px h-4 bg-border" />
+                    
+                    <div className="flex items-center gap-2">
+                        <div className="bg-primary/10 p-1.5 rounded-lg">
+                            <User className="h-4 w-4 text-primary" />
+                        </div>
+                        <span className="font-medium text-muted-foreground">{run.driverName}</span>
+                    </div>
+                </div>
             </div>
         </div>
 

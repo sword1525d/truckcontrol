@@ -121,7 +121,14 @@ export function Header() {
         <div className="flex items-center justify-between h-16">
           <Link href={dashboardPath} className="flex items-center gap-3">
             <Truck className="h-7 w-7 text-primary" />
-            <h1 className="text-xl font-bold text-foreground">Frotacontrol</h1>
+            
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-bold text-foreground">Frotacontrol</h1>
+              <div className="flex items-center gap-1.5 pt-1">
+                <span className="text-[10px] font-medium italic opacity-50">by</span>
+                <img src="/logo_lsl.png" alt="LSL" className="h-4 w-auto" />
+              </div>
+            </div>
           </Link>
 
           <div className="flex items-center gap-4">
@@ -151,10 +158,16 @@ export function Header() {
                     <DropdownMenuSeparator />
                     
                     {userIsAdmin ? (
-                       <DropdownMenuItem onClick={() => router.push('/dashboard')}>
-                          <LayoutDashboard className="mr-2 h-4 w-4" />
-                          <span>Painel de Controle</span>
-                      </DropdownMenuItem>
+                       <>
+                          <DropdownMenuItem onClick={() => router.push('/dashboard/profile')}>
+                             <UserIcon className="mr-2 h-4 w-4" />
+                             <span>Meu Perfil</span>
+                         </DropdownMenuItem>
+                         <DropdownMenuItem onClick={() => router.push('/dashboard')}>
+                            <LayoutDashboard className="mr-2 h-4 w-4" />
+                            <span>Painel de Controle</span>
+                        </DropdownMenuItem>
+                      </>
                     ) : (
                        <DropdownMenuItem onClick={() => router.push('/dashboard-truck')}>
                         <UserIcon className="mr-2 h-4 w-4" />

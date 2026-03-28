@@ -16,17 +16,18 @@ export function Footer() {
 
   return (
     <>
-      <footer 
-        className="w-full py-4 px-4 sm:px-6 lg:px-8 text-center text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors"
+      <footer
+        className="fixed bottom-0 w-full bg-background py-3 px-4 text-center text-[11px] text-muted-foreground cursor-pointer hover:text-foreground transition-colors z-30 flex items-center justify-center gap-3"
         onClick={() => setIsModalOpen(true)}
       >
-        EQUIPE DE PROJETOS - DVP MAO
+        <img src="/logo_projetos.svg" alt="Logo Projetos" className="h-5 w-auto opacity-70 hover:opacity-100 transition-opacity" />
+        <span className="font-medium">PROJETOS - DIVISÃO DE PEÇAS</span>
       </footer>
 
       <AlertDialog open={isModalOpen} onOpenChange={setIsModalOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Equipe de Projetos - DVP MAO</AlertDialogTitle>
+            <AlertDialogTitle>Projetos - Divisão de Peças</AlertDialogTitle>
             <AlertDialogDescription asChild>
                 <div className="text-sm text-foreground pt-4 space-y-3 text-left">
                     <p><span className="font-semibold text-primary">Desenvolvedor:</span> Lucas de Lima</p>

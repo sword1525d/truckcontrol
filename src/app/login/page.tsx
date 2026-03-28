@@ -16,6 +16,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Header } from '@/components/header';
+import { Footer } from '@/components/footer';
 import {
   Select,
   SelectContent,
@@ -122,7 +123,10 @@ export default function LoginPage() {
     if (!firestore || !auth) return;
     setIsLoading(true);
     try {
-      const email = `${data.email}@frotacontrol.com`;
+      let email = data.email;
+      if (!email.includes('@')) {
+          email = `${email}@frotacontrol.com`;
+      }
       let password = data.password;
       if (password.length < 6) {
         password = password.padStart(6, '0');
@@ -274,9 +278,9 @@ export default function LoginPage() {
                   name="email"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Matrícula</FormLabel>
+                      <FormLabel>Matrícula ou E-mail</FormLabel>
                       <FormControl>
-                        <Input placeholder="Sua matrícula" {...field} />
+                        <Input placeholder="Sua matrícula ou e-mail" autoComplete="off" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -289,7 +293,7 @@ export default function LoginPage() {
                     <FormItem>
                       <FormLabel>Senha</FormLabel>
                       <FormControl>
-                        <Input type="password" placeholder="Sua senha" {...field} />
+                        <Input type="password" placeholder="Sua senha" autoComplete="off" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -304,6 +308,7 @@ export default function LoginPage() {
           </CardContent>
         </Card>
       </div>
+      <Footer />
     </>
   );
 }

@@ -70,6 +70,8 @@ const userEditSchema = z.object({
   truck: z.boolean(),
   shift: z.string().min(1, 'O turno é obrigatório'),
   photoURL: z.string().url('URL da foto inválida').optional().or(z.literal('')),
+  isOP: z.boolean().default(false),
+  email: z.string().email('E-mail inválido').optional().or(z.literal('')),
 });
 
 const userCreateSchema = z.object({
@@ -79,6 +81,8 @@ const userCreateSchema = z.object({
   role: z.string().min(1, "A função é obrigatória"),
   shift: z.string().min(1, "O turno é obrigatório"),
   photoURL: z.string().url('URL da foto inválida').optional().or(z.literal('')),
+  isOP: z.boolean().default(false),
+  email: z.string().email('E-mail inválido').optional().or(z.literal('')),
 });
 
 type UserEditForm = z.infer<typeof userEditSchema>;
@@ -90,9 +94,10 @@ interface UserManagementProps {
   onDelete: (type: 'user', id: string) => void;
   onUpdate: () => void;
   session: { companyId: string; sectorId: string };
+  currentUser: FirestoreUser | null;
 }
 
-export const UserManagement = ({ users, onDelete, onUpdate, session }: UserManagementProps) => {
+export const UserManagement = ({ users, onDelete, onUpdate, session, currentUser }: UserManagementProps) => {
   const { firestore, auth } = useFirebase();
   const { toast } = useToast();
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -113,6 +118,7 @@ export const UserManagement = ({ users, onDelete, onUpdate, session }: UserManag
       role: '',
       shift: '',
       photoURL: '',
+      isOP: false,
     }
   });
 
@@ -124,6 +130,8 @@ export const UserManagement = ({ users, onDelete, onUpdate, session }: UserManag
       truck: user.truck,
       shift: user.shift || '',
       photoURL: user.photoURL || '',
+      isOP: user.isOP || false,
+      email: user.email || '',
     });
     setIsEditDialogOpen(true);
   };
@@ -137,7 +145,8 @@ export const UserManagement = ({ users, onDelete, onUpdate, session }: UserManag
           password = password.padStart(6, '0');
         }
 
-        const email = `${data.userMatricula}@frotacontrol.com`;
+        const isPrivileged = data.role !== ROLES.MOTORISTA || data.isOP;
+        const email = (isPrivileged && data.email) ? data.email : `${data.userMatricula}@frotacontrol.com`;
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
 
@@ -148,6 +157,8 @@ export const UserManagement = ({ users, onDelete, onUpdate, session }: UserManag
             isAdmin: data.role === ROLES.ADMINISTRADOR || data.role === ROLES.AMBOS,
             shift: data.shift,
             photoURL: data.photoURL || '',
+            isOP: data.isOP,
+            email: data.email || null,
         });
 
         toast({ title: 'Sucesso', description: 'Usuário cadastrado com sucesso!' });
@@ -176,6 +187,8 @@ export const UserManagement = ({ users, onDelete, onUpdate, session }: UserManag
         truck: data.truck,
         shift: data.shift,
         photoURL: data.photoURL || '',
+        isOP: data.isOP,
+        email: data.email || null,
       });
       toast({ title: 'Sucesso', description: 'Usuário atualizado.' });
       onUpdate();
@@ -202,9 +215,11 @@ export const UserManagement = ({ users, onDelete, onUpdate, session }: UserManag
           <TableHeader>
             <TableRow>
               <TableHead>Nome</TableHead>
+              <TableHead>E-mail</TableHead>
               <TableHead>Turno</TableHead>
               <TableHead>Admin</TableHead>
               <TableHead>Motorista</TableHead>
+              <TableHead>É OP?</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
@@ -220,9 +235,11 @@ export const UserManagement = ({ users, onDelete, onUpdate, session }: UserManag
                         {user.name}
                     </div>
                 </TableCell>
+                <TableCell className="text-xs text-muted-foreground">{user.email || '-'}</TableCell>
                 <TableCell>{user.shift || 'N/A'}</TableCell>
                 <TableCell>{user.isAdmin ? 'Sim' : 'Não'}</TableCell>
                 <TableCell>{user.truck ? 'Sim' : 'Não'}</TableCell>
+                <TableCell>{user.isOP ? 'Sim' : 'Não'}</TableCell>
                 <TableCell className="text-right space-x-2">
                   <Button variant="outline" size="sm" onClick={() => handleEditClick(user)}>
                     <Edit className="h-4 w-4 mr-1" /> Editar
@@ -293,6 +310,29 @@ export const UserManagement = ({ users, onDelete, onUpdate, session }: UserManag
                  {editForm.formState.errors.shift && <p className="text-sm text-destructive mt-1">{editForm.formState.errors.shift.message}</p>}
             </div>
 
+            {currentUser?.isOP && (
+              <div className="space-y-2">
+                <Label htmlFor="emailEdit" className="text-sm font-bold text-primary">E-mail (Acesso OP)</Label>
+                <Input id="emailEdit" placeholder="ex: usuario@empresa.com" {...editForm.register('email')} />
+              </div>
+            )}
+
+            <div className="flex items-center space-x-2">
+              <Controller
+                name="isOP"
+                control={editForm.control}
+                render={({ field }) => (
+                  <Switch 
+                    id="isOP" 
+                    checked={field.value} 
+                    onCheckedChange={field.onChange} 
+                    disabled={!currentUser?.isOP}
+                  />
+                )}
+              />
+              <Label htmlFor="isOP" className={!currentUser?.isOP ? "text-muted-foreground" : "font-bold"}>É OP? (Superior ao Admin)</Label>
+            </div>
+            
             <div className="flex items-center space-x-2">
               <Controller
                 name="isAdmin"
@@ -303,6 +343,7 @@ export const UserManagement = ({ users, onDelete, onUpdate, session }: UserManag
               />
               <Label htmlFor="isAdmin">É Administrador?</Label>
             </div>
+
             <div className="flex items-center space-x-2">
               <Controller
                 name="truck"
@@ -352,6 +393,14 @@ export const UserManagement = ({ users, onDelete, onUpdate, session }: UserManag
                     {createForm.formState.errors.photoURL && <p className="text-sm text-destructive mt-1">{createForm.formState.errors.photoURL.message}</p>}
                  </div>
 
+                {currentUser?.isOP && (
+                  <div>
+                      <Label htmlFor="userEmail" className="font-bold text-primary">E-mail (Acesso OP)</Label>
+                      <Input id="userEmail" placeholder="ex: adm@empresa.com" {...createForm.register('email')} />
+                      {createForm.formState.errors.email && <p className="text-sm text-destructive mt-1">{createForm.formState.errors.email.message}</p>}
+                  </div>
+                )}
+
                 <div>
                   <Label htmlFor="userPassword">Senha</Label>
                   <Input id="userPassword" type="password" {...createForm.register('userPassword')} placeholder="Senha do Usuário" />
@@ -395,6 +444,21 @@ export const UserManagement = ({ users, onDelete, onUpdate, session }: UserManag
                       />
                       {createForm.formState.errors.shift && <p className="text-sm text-destructive mt-1">{createForm.formState.errors.shift.message}</p>}
                      </div>
+                </div>
+                <div className="flex items-center space-x-2 p-3 bg-primary/5 rounded-lg border border-primary/10">
+                    <Controller
+                        name="isOP"
+                        control={createForm.control}
+                        render={({ field }) => (
+                            <Switch 
+                                id="isOPCreate" 
+                                checked={field.value} 
+                                onCheckedChange={field.onChange} 
+                                disabled={!currentUser?.isOP}
+                            />
+                        )}
+                    />
+                    <Label htmlFor="isOPCreate" className={!currentUser?.isOP ? "text-muted-foreground" : "font-bold text-primary"}>É OP? (Acesso Total)</Label>
                 </div>
                 <DialogFooter>
                     <DialogClose asChild>

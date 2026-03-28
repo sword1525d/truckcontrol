@@ -168,3 +168,28 @@
     opacity: 0;
   }
 }
+
+/* Mobile Data Protection (No Copy/Save) */
+@media (max-width: 1024px) {
+  * {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Allow input interaction */
+  input, textarea {
+    -webkit-user-select: text;
+    -moz-user-select: text;
+    -ms-user-select: text;
+    user-select: text;
+  }
+
+  img {
+    pointer-events: none;
+    -webkit-user-drag: none;
+  }
+}

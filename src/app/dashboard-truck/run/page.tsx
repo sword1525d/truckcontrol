@@ -18,6 +18,17 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { useToast } from '@/hooks/use-toast';
 import { ArrowLeft, Loader2, Play, Clock, MapPin, Truck, Milestone, ClipboardCheck } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
@@ -54,6 +65,7 @@ type Route = {
   vehicleId: string;
   trips: RouteTrip[];
   date: string;
+  shift?: string;
   isFixed?: boolean;
 };
 
@@ -200,23 +212,34 @@ export default function TruckRunPage() {
 
     if (!firestore || !user || !isMilkrun || isMilkrunAstec) return;
 
+    const normalizeShift = (s: string | undefined): string => {
+      if (!s) return '1° NORMAL';
+      return s;
+    };
+
     const todayStr = format(new Date(), 'yyyy-MM-dd');
     const routesCol = collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/routes`);
     const q = query(routesCol, where('date', 'in', [todayStr, 'fixed']));
 
     const unsubscribe = onSnapshot(q, (snapshot: any) => {
       const routes = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as Route));
-      // Prioritize specific date routes over fixed routes if both exist for same truck
-      const seenVehicles = new Set();
-      const filteredRoutes = routes.sort((a: any, b: any) => {
-        if (a.date !== 'fixed' && b.date === 'fixed') return -1;
-        if (a.date === 'fixed' && b.date !== 'fixed') return 1;
-        return 0;
-      }).filter((r: any) => {
-        if (seenVehicles.has(r.vehicleId)) return false;
-        seenVehicles.add(r.vehicleId);
-        return true;
-      });
+      const driverShift = normalizeShift((user as any).shift);
+      
+      // Filter by driver's shift and prioritize date-specific routes over fixed routes
+      const seenKeys = new Set();
+      const filteredRoutes = routes
+        .filter((r: Route) => normalizeShift(r.shift) === driverShift)
+        .sort((a: any, b: any) => {
+          if (a.date !== 'fixed' && b.date === 'fixed') return -1;
+          if (a.date === 'fixed' && b.date !== 'fixed') return 1;
+          return 0;
+        })
+        .filter((r: Route) => {
+          const key = r.vehicleId; // Within the same shift, we only want one route per vehicle
+          if (seenKeys.has(key)) return false;
+          seenKeys.add(key);
+          return true;
+        });
 
       setMilkrunRoutes(filteredRoutes);
     });
@@ -335,11 +358,11 @@ export default function TruckRunPage() {
       return;
     }
 
-    if (chosenVehicle && chosenVehicle.lastMileage !== undefined && currentMileage < chosenVehicle.lastMileage) {
+    if (chosenVehicle && chosenVehicle.lastMileage !== undefined && currentMileage <= chosenVehicle.lastMileage) {
       toast({
         variant: 'destructive',
         title: 'KM Inválido',
-        description: `A quilometragem não pode ser inferior à última registrada (${chosenVehicle.lastMileage} km).`
+        description: `A quilometragem deve ser maior que a última registrada (${chosenVehicle.lastMileage} km).`
       });
       return;
     }
@@ -398,8 +421,10 @@ export default function TruckRunPage() {
         driverId: user.id,
         driverName: user.name,
         vehicleId: finalVehicleId,
+        routeId: milkrunTrip && vehicleRoute ? vehicleRoute.id : null,
         tripId: milkrunTrip?.id || null,
         tripName: milkrunTrip?.name || null,
+        shift: milkrunTrip && vehicleRoute ? (vehicleRoute.shift || 'Turno 1') : (authUser?.photoURL ? (authUser as any).shift : 'Turno 1'), // photoURL is sometimes used to see if object is full or not, but better grab shift directly
         startMileage: Number(mileage),
         startTime: serverTimestamp(),
         status: 'IN_PROGRESS' as const,
@@ -407,6 +432,11 @@ export default function TruckRunPage() {
         endTime: null,
         endMileage: null,
       };
+
+      // Since the auth may be limited, let's try getting shift from local state if available
+      if (!newRun.shift && (user as any).shift) {
+          newRun.shift = (user as any).shift;
+      }
 
       const docRef = await addDoc(runsCol, newRun);
 
@@ -438,7 +468,8 @@ export default function TruckRunPage() {
 
   const isMilkrunAstec = user?.sectorName?.toUpperCase() === 'MILKRUN ASTEC';
   const vehicleRoute = milkrunRoutes.find(r => r.vehicleId === selectedVehicle);
-  const showProgrammed = !isMilkrunAstec && vehicleRoute && vehicleRoute.trips.length > 0;
+  const showProgrammed = !isMilkrunAstec && vehicleRoute && vehicleRoute.trips.length > 0 && activeTab === 'programmed';
+  const hasRouteAvailable = !isMilkrunAstec && vehicleRoute && vehicleRoute.trips.length > 0;
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-black">
@@ -577,31 +608,63 @@ export default function TruckRunPage() {
                               {isMine ? 'RETOMAR MINHA VIAGEM' : `ASSUMIR DE: ${existingRun.driverName}`}
                             </Button>
                           ) : (
-                            <Button 
-                              className={cn("w-full text-md font-bold h-12 gap-2 shadow-sm", isCompleted && "bg-muted text-muted-foreground")} 
-                              onClick={() => handleStartRun(trip, selectedVehicle)}
-                              disabled={isSubmitting || !mileage || isCompleted}
-                            >
-                              <Play className="w-4 h-4 fill-current" /> {isCompleted ? 'VIAGEM CONCLUÍDA' : 'INICIAR ESTA ROTA'}
-                            </Button>
+                            <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                    <Button 
+                                      className={cn("w-full text-md font-bold h-12 gap-2 shadow-sm", isCompleted && "bg-muted text-muted-foreground")} 
+                                      disabled={isSubmitting || !mileage || isCompleted}
+                                    >
+                                      <Play className="w-4 h-4 fill-current" /> {isCompleted ? 'VIAGEM CONCLUÍDA' : 'INICIAR ESTA ROTA'}
+                                    </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                        <AlertDialogTitle>Deseja iniciar esta viagem?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                            Você está prestes a iniciar a {trip.name} com o veículo {selectedVehicle}.
+                                        </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                        <AlertDialogCancel>Voltar</AlertDialogCancel>
+                                        <AlertDialogAction onClick={() => handleStartRun(trip, selectedVehicle)}>Confirmar e Iniciar</AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </AlertDialogContent>
+                            </AlertDialog>
                           )}
                         </CardContent>
                       </Card>
                     );
                   })}
                   
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="w-full text-muted-foreground text-[10px] font-bold uppercase py-4"
-                    onClick={() => setHasValidated(true)} 
-                  >
-                    Ou iniciar trajeto manual (não listado acima)
-                  </Button>
+                  <div className="pt-4 border-t border-dashed">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="w-full text-muted-foreground text-[10px] font-bold uppercase h-10 border-dashed"
+                        onClick={() => setActiveTab('manual')} 
+                      >
+                        <MapPin className="w-3 h-3 mr-2" /> Outro trajeto manual (fora da roteirização)
+                      </Button>
+                  </div>
                 </div>
               </section>
             ) : (
-              <Card className="shadow-md overflow-hidden">
+              <section className="space-y-4">
+                {hasRouteAvailable && (
+                    <div className="flex justify-between items-center bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800">
+                        <p className="text-[10px] font-bold text-blue-700 dark:text-blue-300">MODO MANUAL ATIVADO</p>
+                        <Button 
+                            variant="ghost" 
+                            size="sm"
+                            className="h-6 text-[10px] font-black text-blue-600 hover:text-blue-700 p-0"
+                            onClick={() => setActiveTab('programmed')}
+                        >
+                            VOLTAR PARA ROTEIRIZAÇÃO →
+                        </Button>
+                    </div>
+                )}
+                <Card className="shadow-md overflow-hidden">
+
                 <CardHeader className="bg-muted/30 pb-3">
                   <h2 className="text-sm font-bold flex items-center gap-2">
                     <MapPin className="w-4 h-4 text-primary" /> SELECIONE O DESTINO
@@ -640,16 +703,34 @@ export default function TruckRunPage() {
                     </Select>
                   </div>
 
-                  <Button
-                    className="w-full text-lg h-14 mt-4 shadow-lg font-bold"
-                    onClick={() => activeRunId ? handleResumeRun(activeRunId, user.id) : handleStartRun()}
-                    disabled={(!activeRunId && (!selectedVehicle || !mileage || !stopPoint)) || isSubmitting}
-                  >
-                    {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : (activeRunId ? <Clock className="mr-2 h-5 w-5" /> : <Play className="mr-2 h-5 w-5 fill-current" />)}
-                    {activeRunId ? 'RETOMAR TRAJETO ATUAL' : 'INICIAR TRAJETO'}
-                  </Button>
+                  <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                          <Button
+                            className="w-full text-lg h-14 mt-4 shadow-lg font-bold"
+                            disabled={(!activeRunId && (!selectedVehicle || !mileage || !stopPoint)) || isSubmitting}
+                          >
+                            {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : (activeRunId ? <Clock className="mr-2 h-5 w-5" /> : <Play className="mr-2 h-5 w-5 fill-current" />)}
+                            {activeRunId ? 'RETOMAR TRAJETO ATUAL' : 'INICIAR TRAJETO'}
+                          </Button>
+                      </AlertDialogTrigger>
+                      {!activeRunId && (
+                           <AlertDialogContent>
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle>Confirmar início de trajeto?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                        Destino: {stopPoint} no veículo {selectedVehicle}.
+                                    </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel>Voltar</AlertDialogCancel>
+                                    <AlertDialogAction onClick={() => handleStartRun()}>Confirmar</AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                      )}
+                  </AlertDialog>
                 </CardContent>
               </Card>
+              </section>
             )}
           </div>
         )}

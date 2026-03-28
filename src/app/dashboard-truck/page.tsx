@@ -135,7 +135,7 @@ export default function DashboardTruckPage() {
   return (
     <div className="bg-background flex flex-col flex-grow">
       <Header />
-      <main className="flex-grow container mx-auto p-4 sm:p-6 lg:p-8 flex flex-col">
+      <main className="flex-grow container mx-auto p-4 sm:p-6 lg:p-8 flex flex-col pb-24">
         <div className="max-w-4xl w-full mx-auto flex-grow flex flex-col sm:justify-center">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6 flex-grow sm:flex-grow-0">
                 

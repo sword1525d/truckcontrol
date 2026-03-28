@@ -24,6 +24,8 @@ export type FirestoreUser = {
   matricula: string;
   shift?: string;
   photoURL?: string;
+  isOP?: boolean;
+  email?: string;
 };
 
 export type VehicleStatusEnum = 'PARADO' | 'EM_CORRIDA' | 'EM_MANUTENCAO';
@@ -57,6 +59,7 @@ const AdminManagementPage = () => {
   const [vehicles, setVehicles] = useState<FirestoreVehicle[]>([]);
   const [activeRuns, setActiveRuns] = useState<{ [key: string]: boolean }>({});
   const [isLoading, setIsLoading] = useState(true);
+  const [currentUser, setCurrentUser] = useState<FirestoreUser | null>(null);
 
   useEffect(() => {
     const companyId = localStorage.getItem('companyId');
@@ -64,6 +67,10 @@ const AdminManagementPage = () => {
 
     if (companyId && sectorId) {
       setSession({ companyId, sectorId });
+      const storedUserData = localStorage.getItem('user');
+      if (storedUserData) {
+          setCurrentUser(JSON.parse(storedUserData));
+      }
     } else {
       toast({ variant: 'destructive', title: 'Sessão inválida', description: 'Faça login novamente.' });
       router.push('/login');
@@ -87,6 +94,7 @@ const AdminManagementPage = () => {
                 matricula: 'N/A', // Placeholder - Ideally this is stored in the doc
                 shift: data.shift,
                 photoURL: data.photoURL,
+                isOP: data.isOP || false,
             } as FirestoreUser
         });
         setUsers(userList.sort((a,b) => a.name.localeCompare(b.name)));
@@ -195,6 +203,7 @@ const AdminManagementPage = () => {
                   onDelete={handleDelete}
                   onUpdate={fetchData}
                   session={session}
+                  currentUser={currentUser}
                 />
               )}
             </CardContent>
