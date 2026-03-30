@@ -24,6 +24,7 @@ import { Button } from '@/components/ui/button';
 import dynamic from 'next/dynamic';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
+import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
@@ -271,7 +272,7 @@ const RealTimeMap = dynamic(() => import('./RealTimeMap'), {
 
 
 // --- Componente da Aba: Acompanhamento ---
-const AcompanhamentoTab = ({ activeTab }: { activeTab: string }) => {
+const AcompanhamentoTab = ({ activeTab, isMilkrunAstec }: { activeTab: string, isMilkrunAstec?: boolean }) => {
     const { firestore } = useFirebase();
     const { toast } = useToast();
     const router = useRouter();
@@ -304,7 +305,7 @@ const AcompanhamentoTab = ({ activeTab }: { activeTab: string }) => {
         if (storedUser && companyId && sectorId && matricula) setUser({ ...JSON.parse(storedUser), companyId, sectorId, matricula });
     }, []);
 
-    // Effect for Overview and Tracking Data
+    // Combined listener for Vehicles and Runs
     useEffect(() => {
         if (!firestore || !user || activeTab !== 'acompanhamento') return;
 
@@ -320,17 +321,19 @@ const AcompanhamentoTab = ({ activeTab }: { activeTab: string }) => {
             setVehicles(snap.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) })));
         });
 
-        // Fetch Planned Routes for today
-        const fetchProgrammed = async () => {
-            const routesCol = collection(firestore, `companies/${companyId}/sectors/${sectorId}/routes`);
-            const todayStr = format(new Date(), 'yyyy-MM-dd');
-            const qDate = query(routesCol, where('date', '==', todayStr));
-            const qFixed = query(routesCol, where('date', '==', 'fixed'));
-            const [snapDate, snapFixed] = await Promise.all([getDocs(qDate), getDocs(qFixed)]);
-            const list = [...snapDate.docs, ...snapFixed.docs].map(doc => ({ id: doc.id, ...doc.data() } as PlannedRoute));
-            setDailyProgrammedRoutes(list);
-        };
-        fetchProgrammed();
+        // Fetch Planned Routes only if NOT Milkrun Astec
+        if (!isMilkrunAstec) {
+            const fetchProgrammed = async () => {
+                const routesCol = collection(firestore, `companies/${companyId}/sectors/${sectorId}/routes`);
+                const todayStr = format(new Date(), 'yyyy-MM-dd');
+                const qDate = query(routesCol, where('date', '==', todayStr));
+                const qFixed = query(routesCol, where('date', '==', 'fixed'));
+                const [snapDate, snapFixed] = await Promise.all([getDocs(qDate), getDocs(qFixed)]);
+                const list = [...snapDate.docs, ...snapFixed.docs].map(doc => ({ id: doc.id, ...doc.data() } as PlannedRoute));
+                setDailyProgrammedRoutes(list);
+            };
+            fetchProgrammed();
+        }
 
         // Fetch Users
         const usersCol = collection(firestore, `companies/${companyId}/sectors/${sectorId}/users`);
@@ -401,7 +404,7 @@ const AcompanhamentoTab = ({ activeTab }: { activeTab: string }) => {
         });
 
         return () => unsubscribeVehicles();
-    }, [firestore, user, toast, activeTab]);
+    }, [firestore, user, toast, activeTab, isMilkrunAstec]);
 
 
     const aggregatedRuns = useMemo(() => {
@@ -438,7 +441,7 @@ const AcompanhamentoTab = ({ activeTab }: { activeTab: string }) => {
             const runDateStr = format(firstRun.startTime.toDate(), 'yyyy-MM-dd');
             
             // Find matched planned route by routeId or by vehicle/date/shift
-            const planned = dailyProgrammedRoutes.find(pr => {
+            const planned = isMilkrunAstec ? undefined : dailyProgrammedRoutes.find(pr => {
                 if ((firstRun as any).routeId && pr.id === (firstRun as any).routeId) return true;
                 return pr.vehicleId === firstRun.vehicleId && (pr.date === runDateStr || pr.date === 'fixed') && (pr.shift === shift || (!pr.shift && shift === '1° NORMAL'));
             });
@@ -463,35 +466,37 @@ const AcompanhamentoTab = ({ activeTab }: { activeTab: string }) => {
             processedKeys.add(key);
         });
 
-        // Second, add vehicles that have PLANNED routes but NO runs yet for the selected shift
-        dailyProgrammedRoutes.forEach(route => {
-            const shift = route.shift || '1° NORMAL';
-            if (shift !== selectedShift) return; // Only show for current selected shift in the dashboard
+        // Second, add vehicles that have PLANNED routes but NO runs yet (only if NOT Milkrun Astec)
+        if (!isMilkrunAstec) {
+            dailyProgrammedRoutes.forEach(route => {
+                const shift = route.shift || '1° NORMAL';
+                if (shift !== selectedShift) return; 
 
-            const todayStr = format(new Date(), 'yyyy-MM-dd');
-            const key = `${route.vehicleId}-${shift}-${todayStr}`;
-            
-            if (!processedKeys.has(key)) {
-                aggregated.push({
-                    key,
-                    driverId: '',
-                    driverName: 'Aguardando Motorista',
-                    vehicleId: route.vehicleId,
-                    shift,
-                    date: format(new Date(), 'dd/MM/yyyy'),
-                    startTime: Timestamp.now(),
-                    endTime: null,
-                    totalDistance: 0,
-                    stops: [],
-                    locationHistory: [],
-                    originalRuns: [],
-                    startMileage: 0,
-                    status: 'PLANNED',
-                    plannedRoute: route
-                });
-                processedKeys.add(key);
-            }
-        });
+                const todayStr = format(new Date(), 'yyyy-MM-dd');
+                const key = `${route.vehicleId}-${shift}-${todayStr}`;
+                
+                if (!processedKeys.has(key)) {
+                    aggregated.push({
+                        key,
+                        driverId: '',
+                        driverName: 'Aguardando Motorista',
+                        vehicleId: route.vehicleId,
+                        shift,
+                        date: format(new Date(), 'dd/MM/yyyy'),
+                        startTime: Timestamp.now(),
+                        endTime: null,
+                        totalDistance: 0,
+                        stops: [],
+                        locationHistory: [],
+                        originalRuns: [],
+                        startMileage: 0,
+                        status: 'PLANNED',
+                        plannedRoute: route
+                    });
+                    processedKeys.add(key);
+                }
+            });
+        }
 
         return aggregated.sort((a, b) => {
             if (a.status === 'IN_PROGRESS' && b.status !== 'IN_PROGRESS') return -1;
@@ -500,7 +505,7 @@ const AcompanhamentoTab = ({ activeTab }: { activeTab: string }) => {
             if (a.status === 'PLANNED' && b.status === 'COMPLETED') return 1;
             return b.startTime.seconds - a.startTime.seconds;
         });
-    }, [allRuns, users, dailyProgrammedRoutes, selectedShift]);
+    }, [allRuns, users, dailyProgrammedRoutes, selectedShift, isMilkrunAstec]);
 
     useEffect(() => {
         const inProgressRuns = aggregatedRuns.filter(run => run.status === 'IN_PROGRESS');
@@ -578,6 +583,89 @@ const AcompanhamentoTab = ({ activeTab }: { activeTab: string }) => {
         return Array.from(shifts).sort();
     }, [users, dailyProgrammedRoutes]);
 
+    if (isMilkrunAstec) {
+        return (
+            <div className="space-y-6">
+                <div className="flex items-center justify-between mb-2">
+                    <h3 className="font-bold text-xl">Caminhões do Setor</h3>
+                    <Button variant="outline" size="sm" onClick={() => setIsFleetMapOpen(true)} disabled={activeTrucks.length === 0}>
+                        <MapIcon className="h-4 w-4 mr-2" />Mapa Frota
+                    </Button>
+                </div>
+
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    {vehicleStatuses.map(v => <VehicleStatusCard key={v.id} vehicle={v} />)}
+                </div>
+
+                <Separator className="my-8" />
+
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-bold text-xl">Acompanhamento das Corridas</h3>
+                    <p className="text-xs font-medium text-muted-foreground bg-muted p-1 px-3 rounded-full">{format(new Date(), 'dd/MM/yyyy')}</p>
+                </div>
+
+                {isLoading ? (
+                    <div className="flex justify-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+                ) : aggregatedRuns.length === 0 ? (
+                    <Card className="p-12 text-center border-dashed border-2">
+                        <CardDescription>Nenhuma corrida registrada hoje.</CardDescription>
+                    </Card>
+                ) : (
+                    <Accordion type="single" collapsible className="w-full space-y-4">
+                        {aggregatedRuns.map(run => (
+                            <RunAccordionItem 
+                                key={run.key} 
+                                run={run} 
+                                users={users} 
+                                onViewRoute={() => handleViewRoute(run.key)} 
+                                onCancelRun={handleCancelRun}
+                                isOP={user?.isOP}
+                            />
+                        ))}
+                    </Accordion>
+                )}
+                <Dialog open={selectedRunForMap !== null} onOpenChange={(isOpen) => !isOpen && handleCloseDialog()}>
+                    <DialogContent className="max-w-[90vw] lg:max-w-7xl w-full h-[90vh] flex flex-col p-0">
+                        {isClient && selectedRunForMap && (
+                            <>
+                                <DialogHeader className="p-6 pb-2 flex-row items-start justify-between">
+                                    <div>
+                                        <DialogTitle>Acompanhamento da Rota - {selectedRunForMap.driverName} ({selectedRunForMap.vehicleId})</DialogTitle>
+                                        <DialogDescription>Acompanhe em tempo real ou veja o trajeto detalhado.</DialogDescription>
+                                    </div>
+                                    <Button variant="ghost" size="icon" onClick={() => router.push(`/dashboard/map-view/${selectedRunForMap.key}`)}><Maximize className="h-5 w-5" /><span className="sr-only">Tela Cheia</span></Button>
+                                </DialogHeader>
+                                <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 p-6 pt-0 min-h-0">
+                                    <div className="lg:col-span-2 bg-muted rounded-md min-h-[300px] lg:min-h-0">
+                                        <RealTimeMap segments={displayedSegments} fullLocationHistory={selectedRunForMap.locationHistory?.map(p => ({ latitude: p.latitude, longitude: p.longitude })) || []} vehicleId={selectedRunForMap.vehicleId} />
+                                    </div>
+                                    <div className="lg:col-span-1 flex flex-col min-h-0">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <h4 className="font-semibold">Detalhes da Rota</h4>
+                                            {highlightedSegmentId && <Button variant="ghost" size="sm" onClick={() => setHighlightedSegmentId(null)}><EyeOff className="mr-2 h-4 w-4" /> Limpar</Button>}
+                                        </div>
+                                        <ScrollArea className="flex-1 -mr-6 pr-6"><RunDetailsContent run={selectedRunForMap} onSegmentClick={setHighlightedSegmentId} highlightedSegmentId={highlightedSegmentId} /></ScrollArea>
+                                    </div>
+                                </div>
+                            </>
+                        )}
+                    </DialogContent>
+                </Dialog>
+                <Dialog open={isFleetMapOpen} onOpenChange={setIsFleetMapOpen}>
+                    <DialogContent className="max-w-[90vw] w-full h-[90vh] flex flex-col p-2 sm:p-6">
+                        <DialogHeader>
+                            <DialogTitle>Localização da Frota Ativa</DialogTitle>
+                            <DialogDescription>Posição em tempo real dos caminhões que estão em corrida.</DialogDescription>
+                        </DialogHeader>
+                        <div className="flex-1 rounded-lg overflow-hidden">
+                            <RealTimeMap fleetData={activeTrucks} />
+                        </div>
+                    </DialogContent>
+                </Dialog>
+            </div>
+        );
+    }
+
     return (
         <div className="space-y-6">
             {isOverviewLoading ? (
@@ -598,30 +686,32 @@ const AcompanhamentoTab = ({ activeTab }: { activeTab: string }) => {
                         <KpiCard title="Em Manutenção" value={kpis.emManutencao} icon={Wrench} />
                     </div>
 
-                    <div className="flex justify-between items-center bg-card p-4 rounded-lg border shadow-sm">
-                        <div className="flex items-center gap-4">
-                            <h3 className="font-bold text-lg">Acompanhamento de Operação</h3>
-                            <div className="h-6 w-px bg-muted" />
-                            <Select value={selectedShift} onValueChange={setSelectedShift}>
-                                <SelectTrigger className="w-[180px]">
-                                    <SelectValue placeholder="Selecione o Turno" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {availableShifts.map(s => (
-                                        <SelectItem key={s} value={s}>{s}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                    {!isMilkrunAstec && (
+                        <div className="flex justify-between items-center bg-card p-4 rounded-lg border shadow-sm">
+                            <div className="flex items-center gap-4">
+                                <h3 className="font-bold text-lg">Acompanhamento de Operação</h3>
+                                <div className="h-6 w-px bg-muted" />
+                                <Select value={selectedShift} onValueChange={setSelectedShift}>
+                                    <SelectTrigger className="w-[180px]">
+                                        <SelectValue placeholder="Selecione o Turno" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {availableShifts.map(s => (
+                                            <SelectItem key={s} value={s}>{s}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <p className="text-sm text-muted-foreground">{format(new Date(), "dd 'de' MMMM", { locale: ptBR })}</p>
                         </div>
-                        <p className="text-sm text-muted-foreground">{format(new Date(), "dd 'de' MMMM", { locale: ptBR })}</p>
-                    </div>
+                    )}
 
                     <Card>
                         <CardHeader>
                             <div className="flex justify-between items-center">
                                 <div>
-                                    <CardTitle className="flex items-center gap-2"><Truck className="h-6 w-6" /> Status da Frota Ativa</CardTitle>
-                                    <CardDescription>Visão geral de todos os caminhões em operação no momento.</CardDescription>
+                                    <CardTitle className="flex items-center gap-2"><Truck className="h-6 w-6" /> Status da Frota</CardTitle>
+                                    <CardDescription>Visão geral de todos os caminhões do setor.</CardDescription>
                                 </div>
                                 <Button variant="outline" size="icon" onClick={() => setIsFleetMapOpen(true)} disabled={activeTrucks.length === 0}>
                                     <MapIcon className="h-5 w-5" />
@@ -640,18 +730,20 @@ const AcompanhamentoTab = ({ activeTab }: { activeTab: string }) => {
                         </CardContent>
                     </Card>
 
+                    <Separator className="my-6" />
+
                     <div className='mt-6'>
-                        {aggregatedRuns.filter(r => r.shift === selectedShift).length === 0 ? (
+                        {aggregatedRuns.filter(r => isMilkrunAstec ? true : r.shift === selectedShift).length === 0 ? (
                             <Card className="text-center p-12 border-dashed border-2">
                                 <CardHeader>
                                     <CardTitle>Nenhuma atividade para este turno</CardTitle>
-                                    <CardDescription>Não há motoristas em rota, corridas finalizadas ou rotas programadas para o {selectedShift}.</CardDescription>
+                                    <CardDescription>Não há motoristas em rota ou corridas finalizadas hoje.</CardDescription>
                                 </CardHeader>
                             </Card>
                         ) : (
                             <Accordion type="single" collapsible className="w-full space-y-4 shadow-sm" defaultValue={aggregatedRuns.find(r => r.status === 'IN_PROGRESS')?.key || aggregatedRuns[0]?.key}>
                                 {aggregatedRuns
-                                    .filter(r => r.shift === selectedShift)
+                                    .filter(r => isMilkrunAstec ? true : r.shift === selectedShift)
                                     .map(run => (
                                         <RunAccordionItem 
                                             key={run.key} 
@@ -665,15 +757,13 @@ const AcompanhamentoTab = ({ activeTab }: { activeTab: string }) => {
                             </Accordion>
                         )}
                     </div>
-
-
                 </>
             )}
 
             {isLoading ? (
                 <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
             ) : (
-                null /* Deletado o bloco duplicado do aggregatedRuns e colocado acima integrado */
+                null 
             )}
             <Dialog open={selectedRunForMap !== null} onOpenChange={(isOpen) => !isOpen && handleCloseDialog()}>
                 <DialogContent className="max-w-[90vw] lg:max-w-7xl w-full h-[90vh] flex flex-col p-0">
@@ -716,6 +806,7 @@ const AcompanhamentoTab = ({ activeTab }: { activeTab: string }) => {
         </div>
     );
 };
+
 
 const KpiCard = ({ title, value, icon: Icon }: { title: string; value: string | number; icon?: React.ElementType }) => (
     <Card>
@@ -1657,10 +1748,16 @@ const ChecklistDetailsDialog = ({ checklist, isOpen, onClose }: { checklist: any
 };
 
 
-// --- Componente Principal da Página ---
 export default function DashboardPage() {
     const isMobile = useIsMobile();
     const [activeTab, setActiveTab] = useState('acompanhamento');
+    const [sectorName, setSectorName] = useState('');
+
+    useEffect(() => {
+        setSectorName(localStorage.getItem('sectorName') || '');
+    }, []);
+
+    const isMilkrunAstec = sectorName.toUpperCase() === 'MILKRUN ASTEC';
 
     return (
         <div className="flex flex-col gap-6">
@@ -1670,22 +1767,24 @@ export default function DashboardPage() {
             </div>
 
             <Tabs defaultValue="acompanhamento" className="w-full" onValueChange={setActiveTab}>
-                <TabsList className={cn("grid w-full", isMobile ? "grid-cols-3" : "grid-cols-7")}>
+                <TabsList className={cn("grid w-full", isMobile ? "grid-cols-2" : (isMilkrunAstec ? "grid-cols-5" : "grid-cols-7"))}>
                     <TabsTrigger value="acompanhamento">Acompanhamento</TabsTrigger>
-                    <TabsTrigger value="roteirizacao">Roteirização</TabsTrigger>
+                    {!isMilkrunAstec && <TabsTrigger value="roteirizacao">Roteirização</TabsTrigger>}
                     <TabsTrigger value="analise">Análise</TabsTrigger>
                     <TabsTrigger value="historico">Histórico</TabsTrigger>
                     <TabsTrigger value="abastecimentos">Abastecimentos</TabsTrigger>
                     <TabsTrigger value="checklists">Checklists</TabsTrigger>
-                    <TabsTrigger value="configuracoes">Configurações</TabsTrigger>
+                    {!isMilkrunAstec && <TabsTrigger value="configuracoes">Configurações</TabsTrigger>}
                 </TabsList>
 
                 <TabsContent value="acompanhamento" className="mt-6">
-                    <AcompanhamentoTab activeTab={activeTab} />
+                    <AcompanhamentoTab activeTab={activeTab} isMilkrunAstec={isMilkrunAstec} />
                 </TabsContent>
-                <TabsContent value="roteirizacao" className="mt-6">
-                    <RoteirizacaoTab />
-                </TabsContent>
+                {!isMilkrunAstec && (
+                    <TabsContent value="roteirizacao" className="mt-6">
+                        <RoteirizacaoTab />
+                    </TabsContent>
+                )}
                 <TabsContent value="analise" className="mt-6">
                     <AnaliseTab activeTab={activeTab} />
                 </TabsContent>
@@ -1698,9 +1797,11 @@ export default function DashboardPage() {
                 <TabsContent value="checklists" className="mt-6">
                     <ChecklistsTab activeTab={activeTab} />
                 </TabsContent>
-                <TabsContent value="configuracoes" className="mt-6">
-                    <ConfiguracoesTab />
-                </TabsContent>
+                {!isMilkrunAstec && (
+                    <TabsContent value="configuracoes" className="mt-6">
+                        <ConfiguracoesTab />
+                    </TabsContent>
+                )}
             </Tabs>
         </div>
     );
@@ -2330,16 +2431,157 @@ const AbastecimentosTab = ({ activeTab }: { activeTab: string }) => {
 };
 
 const ChecklistsTab = ({ activeTab }: { activeTab: string }) => {
+    const { firestore } = useFirebase();
+    const { toast } = useToast();
+    const [user, setUser] = useState<any>(null);
+    const [users, setUsers] = useState<Map<string, FirestoreUser>>(new Map());
+    const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+    const [allChecklists, setAllChecklists] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [date, setDate] = useState<DateRange | undefined>({ from: startOfDay(subDays(new Date(), 6)), to: endOfDay(new Date()) });
+    const [selectedVehicle, setSelectedVehicle] = useState<string>('all');
+    const [selectedChecklist, setSelectedChecklist] = useState<any | null>(null);
+
+    useEffect(() => {
+        const storedUser = localStorage.getItem('user');
+        const companyId = localStorage.getItem('companyId');
+        const sectorId = localStorage.getItem('sectorId');
+        const matricula = localStorage.getItem('matricula');
+        if (storedUser && companyId && sectorId && matricula) {
+            setUser({ ...JSON.parse(storedUser), companyId, sectorId, matricula });
+            if (matricula === '801231') setIsSuperAdmin(true);
+        }
+    }, []);
+
+    const fetchUsers = useCallback(async () => {
+        if (!firestore || !user) return;
+        const usersSnapshot = await getDocs(collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/users`));
+        const usersMap = new Map<string, FirestoreUser>();
+        usersSnapshot.forEach(doc => usersMap.set(doc.id, { id: doc.id, ...doc.data() } as FirestoreUser));
+        setUsers(usersMap);
+    }, [firestore, user]);
+
+    const fetchChecklistData = useCallback(async () => {
+        if (!firestore || !user) return;
+        setIsLoading(true);
+        try {
+            // Using collectionGroup as requested, but filtering manually to avoid index errors
+            const checklistsQuery = query(collectionGroup(firestore, 'checklists'));
+            const querySnapshot = await getDocs(checklistsQuery);
+            const checklists = querySnapshot.docs.map(doc => ({ 
+                id: doc.id, 
+                path: doc.ref.path, 
+                ...doc.data() 
+            }));
+            
+            // Client-side filtering as per "igual era aqui"
+            const filtered = checklists
+                .filter(c => c.path.startsWith(`companies/${user.companyId}/sectors/${user.sectorId}/`))
+                .sort((a: any, b: any) => b.timestamp.seconds - a.timestamp.seconds);
+                
+            setAllChecklists(filtered);
+        } catch (error) {
+            console.error(error);
+            toast({ variant: 'destructive', title: 'Erro ao buscar checklists' });
+        } finally {
+            setIsLoading(false);
+        }
+    }, [firestore, user, toast]);
+
+    useEffect(() => {
+        if (user && activeTab === 'checklists') {
+            fetchUsers();
+            fetchChecklistData();
+        }
+    }, [user, activeTab, fetchChecklistData, fetchUsers]);
+
+    const handleDelete = async (path: string) => {
+        if (!firestore || !isSuperAdmin) return;
+        try {
+            await deleteDoc(doc(firestore, path));
+            toast({ title: 'Sucesso', description: 'Checklist deletado com sucesso.' });
+            setAllChecklists(prev => prev.filter(c => c.path !== path));
+        } catch (error) {
+            toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível deletar o checklist.' });
+        }
+    };
+
+    const { filteredChecklists, vehicleList } = useMemo(() => {
+        const vehicles = new Set<string>();
+        allChecklists.forEach(c => vehicles.add(c.vehicleId));
+        
+        const filtered = allChecklists.filter(c => {
+            const cDate = new Date(c.timestamp.seconds * 1000);
+            if (!(date?.from && cDate >= startOfDay(date.from) && cDate <= endOfDay(date.to || date.from))) return false;
+            if (selectedVehicle !== 'all' && c.vehicleId !== selectedVehicle) return false;
+            return true;
+        });
+        
+        return { 
+            filteredChecklists: filtered, 
+            vehicleList: Array.from(vehicles).sort() 
+        };
+    }, [allChecklists, date, selectedVehicle]);
+
+    if (isLoading) {
+        return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+    }
+
     return (
-        <Card>
+        <Card className="shadow-sm border-t-4 border-primary">
             <CardHeader>
-                <CardTitle>Checklists de Veículos</CardTitle>
-                <CardDescription>Registros diários de conferência da frota.</CardDescription>
+                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+                    <div>
+                        <CardTitle className="text-xl font-bold flex items-center gap-2">
+                            <ClipboardCheck className="h-6 w-6 text-primary" /> Histórico de Checklists
+                        </CardTitle>
+                        <CardDescription>Lista de checklists preenchidos no período.</CardDescription>
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                        <VehicleFilter vehicles={vehicleList} selectedVehicle={selectedVehicle} onVehicleChange={setSelectedVehicle} />
+                        <DateFilter date={date} setDate={setDate} />
+                    </div>
+                </div>
             </CardHeader>
             <CardContent>
-                <div className="text-center py-12 text-muted-foreground border-t">
-                   Módulo de checklist em atualização.
+                <div className="rounded-md border overflow-hidden">
+                    <Table>
+                        <TableHeader className="bg-muted/50">
+                            <TableRow>
+                                <TableHead className="font-bold">Data/Hora</TableHead>
+                                <TableHead className="font-bold">Veículo</TableHead>
+                                <TableHead className="font-bold">Motorista</TableHead>
+                                <TableHead className="font-bold">Status</TableHead>
+                                <TableHead className="text-right font-bold">Ações</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {filteredChecklists.length > 0 ? (
+                                filteredChecklists.map((item) => (
+                                    <ChecklistTableRow 
+                                        key={item.id} 
+                                        checklist={item} 
+                                        driver={users.get(item.driverId)}
+                                        onViewDetails={() => setSelectedChecklist(item)}
+                                        isSuperAdmin={isSuperAdmin}
+                                        onDelete={handleDelete}
+                                    />
+                                ))
+                            ) : (
+                                <TableRow>
+                                    <TableCell colSpan={5} className="text-center py-10 text-muted-foreground italic">
+                                        Nenhum checklist encontrado para este filtro.
+                                    </TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
+                    </Table>
                 </div>
+                <ChecklistDetailsDialog 
+                    checklist={selectedChecklist} 
+                    isOpen={selectedChecklist !== null} 
+                    onClose={() => setSelectedChecklist(null)} 
+                />
             </CardContent>
         </Card>
     );
