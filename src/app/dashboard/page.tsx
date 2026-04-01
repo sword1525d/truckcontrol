@@ -1330,13 +1330,8 @@ const HistoricoTab = ({ activeTab }: { activeTab: string }) => {
                 const usersMap = new Map<string, FirestoreUser>();
                 const sectorRefsToFetch: { id: string, name: string }[] = [];
 
-                if (isSuperAdmin) {
-                    const sectorsSnapshot = await getDocs(collection(firestore, `companies/${user.companyId}/sectors`));
-                    sectorsSnapshot.docs.forEach(doc => sectorRefsToFetch.push({ id: doc.id, name: doc.data().name as string }));
-                } else {
-                    const sectorSnap = await getDoc(doc(firestore, `companies/${user.companyId}/sectors`, user.sectorId));
-                    if (sectorSnap.exists()) sectorRefsToFetch.push({ id: sectorSnap.id, name: sectorSnap.data().name as string });
-                }
+                const sectorSnap = await getDoc(doc(firestore, `companies/${user.companyId}/sectors`, user.sectorId));
+                if (sectorSnap.exists()) sectorRefsToFetch.push({ id: sectorSnap.id, name: sectorSnap.data().name as string });
                 setAllSectors(sectorRefsToFetch);
 
                 const runsPromises = sectorRefsToFetch.map(async (sector) => {
@@ -1518,7 +1513,6 @@ const HistoricoTab = ({ activeTab }: { activeTab: string }) => {
             <div className="flex justify-center">
                 <div className="flex w-full flex-wrap items-center justify-center gap-2">
                     <DateFilter date={date} setDate={setDate} />
-                    {isSuperAdmin && <SectorFilter sectors={allSectors} selectedSector={selectedSector} onSectorChange={setSelectedSector} />}
                     <ShiftFilter selectedShift={selectedShift} onShiftChange={setSelectedShift} availableShifts={['1° NORMAL', '2° NORMAL', '1° ESPECIAL', '2° ESPECIAL']} />
                     <VehicleFilter vehicles={vehicleList} selectedVehicle={selectedVehicle} onVehicleChange={setSelectedVehicle} />
                     <DriverFilter drivers={driverList} selectedDriver={selectedDriver} onDriverChange={setSelectedDriver} />
@@ -2381,18 +2375,18 @@ const ConfiguracoesTab = () => {
                                     <AlertDialogTitle className="text-2xl font-bold text-destructive">Confirmação de Aniquilação</AlertDialogTitle>
                                     <AlertDialogDescription className="text-base text-card-foreground">
                                         Você está prestes a apagar permanentemente todas as corridas deste setor. Esta ação <strong>NÃO pode ser desfeita</strong> sob nenhuma circunstância.
-                                        
-                                        <div className="mt-6 p-4 bg-destructive/5 rounded-xl border border-destructive/20 space-y-3">
-                                            <Label htmlFor="confirm-delete-system" className="text-xs font-black uppercase text-destructive tracking-widest">Digite a palavra-chave para prosseguir:</Label>
-                                            <Input 
-                                                id="confirm-delete-system" 
-                                                placeholder="Digite DELETAR" 
-                                                value={confirmText} 
-                                                onChange={(e) => setConfirmText(e.target.value.toUpperCase())}
-                                                className="border-destructive/50 focus-visible:ring-destructive h-12 text-center text-xl font-black"
-                                            />
-                                        </div>
                                     </AlertDialogDescription>
+
+                                    <div className="mt-6 p-4 bg-destructive/5 rounded-xl border border-destructive/20 space-y-3">
+                                        <Label htmlFor="confirm-delete-system" className="text-xs font-black uppercase text-destructive tracking-widest">Digite a palavra-chave para prosseguir:</Label>
+                                        <Input 
+                                            id="confirm-delete-system" 
+                                            placeholder="Digite DELETAR" 
+                                            value={confirmText} 
+                                            onChange={(e) => setConfirmText(e.target.value.toUpperCase())}
+                                            className="border-destructive/50 focus-visible:ring-destructive h-12 text-center text-xl font-black"
+                                        />
+                                    </div>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter className="mt-4">
                                     <AlertDialogCancel onClick={() => setConfirmText('')} className="font-bold h-12">Manter meus dados</AlertDialogCancel>

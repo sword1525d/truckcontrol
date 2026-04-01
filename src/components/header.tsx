@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Truck, LogOut, Shield, User as UserIcon, Settings, LayoutDashboard, RefreshCcw, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
 import { useFirebase } from '@/firebase';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import {
@@ -33,6 +33,8 @@ import { Skeleton } from './ui/skeleton';
 export function Header() {
   const { user, auth, isUserLoading } = useFirebase();
   const router = useRouter();
+  const pathname = usePathname();
+  const isLoginPage = pathname === '/login';
   const [dashboardPath, setDashboardPath] = useState('#');
   const [userIsAdmin, setUserIsAdmin] = useState(false);
   const [matricula, setMatricula] = useState<string | null>(null);
@@ -132,11 +134,11 @@ export function Header() {
           </Link>
 
           <div className="flex items-center gap-4">
-            {isUserLoading && (
+            {!isLoginPage && isUserLoading && (
               <Skeleton className="h-9 w-9 rounded-full" />
             )}
 
-            {!isUserLoading && user && (
+            {!isLoginPage && !isUserLoading && user && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" className="relative h-8 w-8 rounded-full">

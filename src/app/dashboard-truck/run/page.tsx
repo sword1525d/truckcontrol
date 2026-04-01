@@ -175,15 +175,8 @@ export default function TruckRunPage() {
       
       const saved = localStorage.getItem(`recent_stops_${parsedUser.id}`);
       if (saved) setRecentStops(JSON.parse(saved));
-    } else if (!authUser && !isLoading) { // only redirect if auth is settled
-      toast({
-        variant: 'destructive',
-        title: 'Erro',
-        description: 'Sessão inválida. Faça login novamente.',
-      });
-      router.push('/login');
     }
-  }, [router, toast, authUser, isLoading]);
+  }, [authUser]);
 
   useEffect(() => {
     if (!firestore || !user) return;
@@ -424,7 +417,7 @@ export default function TruckRunPage() {
         routeId: milkrunTrip && vehicleRoute ? vehicleRoute.id : null,
         tripId: milkrunTrip?.id || null,
         tripName: milkrunTrip?.name || null,
-        shift: milkrunTrip && vehicleRoute ? (vehicleRoute.shift || 'Turno 1') : (authUser?.photoURL ? (authUser as any).shift : 'Turno 1'), // photoURL is sometimes used to see if object is full or not, but better grab shift directly
+        shift: milkrunTrip && vehicleRoute ? (vehicleRoute.shift || '1° NORMAL') : ((user as any).shift || '1° NORMAL'), // fix tracking fallback
         startMileage: Number(mileage),
         startTime: serverTimestamp(),
         status: 'IN_PROGRESS' as const,

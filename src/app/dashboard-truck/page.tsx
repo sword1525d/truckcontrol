@@ -31,19 +31,7 @@ export default function DashboardTruckPage() {
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isUserLoading) {
-      return; // Aguardar o estado de autenticação ser resolvido
-    }
-
-    if (!authUser) {
-      toast({
-        variant: 'destructive',
-        title: 'Sessão Expirada',
-        description: 'Por favor, faça login novamente.',
-      });
-      router.push('/login');
-      return;
-    }
+    if (!authUser || isUserLoading) return;
 
     const storedUser = localStorage.getItem('user');
     const companyId = localStorage.getItem('companyId');
@@ -52,19 +40,10 @@ export default function DashboardTruckPage() {
     const matricula = localStorage.getItem('matricula');
 
     if (storedUser && companyId && sectorId && matricula) {
-        const parsedUser = JSON.parse(storedUser);
+      const parsedUser = JSON.parse(storedUser);
       setUser({ ...parsedUser, id: authUser.uid, companyId, sectorId, sectorName, matricula });
-    } else {
-      toast({
-        variant: 'destructive',
-        title: 'Erro de Sessão',
-        description: 'Dados da sessão não encontrados. Por favor, faça login novamente.',
-      });
-      auth.signOut();
-      localStorage.clear();
-      router.push('/login');
     }
-  }, [isUserLoading, authUser, router, toast, auth]);
+  }, [isUserLoading, authUser]);
   
   useEffect(() => {
     if (!firestore || !user || !authUser) return;
