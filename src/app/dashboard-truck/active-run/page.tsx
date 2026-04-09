@@ -161,6 +161,7 @@ function ActiveRunContent() {
   const [run, setRun] = useState<Run | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [observation, setObservation] = useState('');
+  const [noMileage, setNoMileage] = useState(false);
   const [stopData, setStopData] = useState<{ occupied: string; empty: string; mileage: string, occupancy: number; }>({ occupied: '', empty: '', mileage: '', occupancy: 0 });
   const [currentStopIndex, setCurrentStopIndex] = useState(0);
   
@@ -267,21 +268,29 @@ function ActiveRunContent() {
     const stop = run.stops[currentStopIndex];
     const { occupied, empty, mileage, occupancy } = stopData;
 
-    if (!occupied || !empty || !mileage) {
-      toast({ variant: 'destructive', title: 'Campos obrigatórios', description: 'Preencha todos os campos para finalizar a parada.' });
-      return;
-    }
-
-    const finalMileage = Number(mileage);
     const previousMileage = currentStopIndex > 0 ? (run.stops[currentStopIndex - 1].mileageAtStop || run.startMileage) : run.startMileage;
+    let finalMileage: number;
 
-    if (finalMileage <= previousMileage) {
-      toast({ 
-        variant: 'destructive', 
-        title: 'KM Inválido', 
-        description: `A quilometragem deve ser superior à última registrada (${previousMileage} km).` 
-      });
-      return;
+    if (noMileage) {
+       if (!occupied || !empty) {
+          toast({ variant: 'destructive', title: 'Campos obrigatórios', description: 'Preencha carros ocupados e vazios.' });
+          return;
+       }
+       finalMileage = previousMileage;
+    } else {
+       if (!occupied || !empty || !mileage) {
+         toast({ variant: 'destructive', title: 'Campos obrigatórios', description: 'Preencha todos os campos para finalizar a parada.' });
+         return;
+       }
+       finalMileage = Number(mileage);
+       if (finalMileage <= previousMileage) {
+         toast({ 
+           variant: 'destructive', 
+           title: 'KM Inválido', 
+           description: `A quilometragem deve ser superior à última registrada (${previousMileage} km).` 
+         });
+         return;
+       }
     }
     
     const departureTime = new Date();
@@ -337,6 +346,7 @@ function ActiveRunContent() {
               occupancy: 0
           });
           setObservation('');
+          setNoMileage(false);
       }
 
     } catch (error) {
@@ -540,8 +550,22 @@ function ActiveRunContent() {
                                   <Input id={`mileage-${stopNameIdentifier}`} type="number" inputMode="numeric" placeholder="Quilometragem"
                                       value={stopData.mileage}
                                       onChange={(e) => handleStopDataChange('mileage', e.target.value)}
+                                      disabled={noMileage}
+                                      className={noMileage ? 'opacity-50' : ''}
                                   />
                               </div>
+                          </div>
+                          <div className="flex items-center space-x-2 pt-2">
+                              <input 
+                                type="checkbox" 
+                                id={`no-mileage-${stopNameIdentifier}`} 
+                                checked={noMileage} 
+                                onChange={(e) => setNoMileage(e.target.checked)} 
+                                className="w-5 h-5 text-primary border-gray-300 rounded focus:ring-primary accent-primary"
+                              />
+                              <Label htmlFor={`no-mileage-${stopNameIdentifier}`} className="text-sm font-medium cursor-pointer">
+                                  Veículo não exibe quilometragem
+                              </Label>
                           </div>
                       </>
                     )}

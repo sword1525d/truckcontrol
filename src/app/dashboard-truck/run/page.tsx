@@ -151,6 +151,7 @@ export default function TruckRunPage() {
   const [selectedVehicle, setSelectedVehicle] = useState('');
   const [replacedVehicleId, setReplacedVehicleId] = useState('');
   const [manualPlate, setManualPlate] = useState('');
+  const [noMileage, setNoMileage] = useState(false);
   const [isMaintenanceLoading, setIsMaintenanceLoading] = useState(false);
   const [mileage, setMileage] = useState('');
   const [stopPoint, setStopPoint] = useState<StopPoint>('');
@@ -381,30 +382,32 @@ export default function TruckRunPage() {
       finalVehicleId = manualPlate.toUpperCase().trim();
     }
     
-    if(!firestore || !user || !finalVehicleId || !mileage || (!milkrunTrip && !stopPoint)){
+    if(!firestore || !user || !finalVehicleId || (!noMileage && !mileage) || (!milkrunTrip && !stopPoint)){
        toast({ variant: 'destructive', title: 'Erro', description: 'Preencha todos os campos para iniciar a corrida.' });
        return;
     }
 
-    const currentMileage = Number(mileage);
     const chosenVehicle = vehicles.find((v: any) => v.id === finalVehicleId);
+    const currentMileage = noMileage ? (chosenVehicle?.lastMileage || 0) : Number(mileage);
 
-    if (currentMileage <= 0) {
-      toast({
-        variant: 'destructive',
-        title: 'KM Inválido',
-        description: 'A quilometragem não pode ser zero ou negativa.'
-      });
-      return;
-    }
+    if (!noMileage) {
+        if (currentMileage <= 0) {
+          toast({
+            variant: 'destructive',
+            title: 'KM Inválido',
+            description: 'A quilometragem não pode ser zero ou negativa.'
+          });
+          return;
+        }
 
-    if (chosenVehicle && chosenVehicle.lastMileage !== undefined && currentMileage <= chosenVehicle.lastMileage) {
-      toast({
-        variant: 'destructive',
-        title: 'KM Inválido',
-        description: `A quilometragem deve ser maior que a última registrada (${chosenVehicle.lastMileage} km).`
-      });
-      return;
+        if (chosenVehicle && chosenVehicle.lastMileage !== undefined && currentMileage <= chosenVehicle.lastMileage) {
+          toast({
+            variant: 'destructive',
+            title: 'KM Inválido',
+            description: `A quilometragem deve ser maior que a última registrada (${chosenVehicle.lastMileage} km).`
+          });
+          return;
+        }
     }
 
     setIsSubmitting(true);
@@ -634,8 +637,21 @@ export default function TruckRunPage() {
                     placeholder="KM atual no painel" 
                     value={mileage} 
                     onChange={(e: any) => setMileage(e.target.value)} 
-                    className="h-12 text-xl font-bold"
+                    className={cn("h-12 text-xl font-bold", noMileage && "opacity-50")}
+                    disabled={noMileage}
                   />
+                  <div className="flex items-center space-x-2 pt-2 pb-2">
+                      <input 
+                        type="checkbox" 
+                        id="no-mileage-start" 
+                        checked={noMileage} 
+                        onChange={(e) => setNoMileage(e.target.checked)} 
+                        className="w-5 h-5 text-primary border-gray-300 rounded focus:ring-primary accent-primary"
+                      />
+                      <Label htmlFor="no-mileage-start" className="text-sm font-medium cursor-pointer">
+                          Veículo não exibe quilometragem
+                      </Label>
+                  </div>
                   {selectedVehicle && vehicles.find(v => v.id === selectedVehicle)?.lastMileage !== undefined && (
                     <p className="text-[10px] text-muted-foreground px-1 italic">
                       Último registro: {vehicles.find(v => v.id === selectedVehicle)?.lastMileage} km
@@ -711,7 +727,7 @@ export default function TruckRunPage() {
                                 <AlertDialogTrigger asChild>
                                     <Button 
                                       className={cn("w-full text-md font-bold h-12 gap-2 shadow-sm", isCompleted && "bg-muted text-muted-foreground")} 
-                                      disabled={isSubmitting || !mileage || isCompleted}
+                                      disabled={isSubmitting || (!noMileage && !mileage) || isCompleted}
                                     >
                                       <Play className="w-4 h-4 fill-current" /> {isCompleted ? 'VIAGEM CONCLUÍDA' : 'INICIAR ESTA ROTA'}
                                     </Button>
@@ -806,7 +822,7 @@ export default function TruckRunPage() {
                       <AlertDialogTrigger asChild>
                           <Button
                             className="w-full text-lg h-14 mt-4 shadow-lg font-bold"
-                            disabled={(!activeRunId && (!selectedVehicle || !mileage || !stopPoint)) || isSubmitting}
+                            disabled={(!activeRunId && (!selectedVehicle || (!noMileage && !mileage) || !stopPoint)) || isSubmitting}
                           >
                             {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : (activeRunId ? <Clock className="mr-2 h-5 w-5" /> : <Play className="mr-2 h-5 w-5 fill-current" />)}
                             {activeRunId ? 'RETOMAR TRAJETO ATUAL' : 'INICIAR TRAJETO'}
