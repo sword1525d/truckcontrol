@@ -5,9 +5,10 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { useFirebase } from '@/firebase';
-import { collection, addDoc, serverTimestamp, getDocs, query, where, Timestamp } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, getDocs, query, where, Timestamp, updateDoc, doc } from 'firebase/firestore';
 
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
   Dialog,
   DialogContent,
@@ -26,7 +27,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { ArrowLeft, Loader2, Truck, Wrench } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 
@@ -63,6 +64,7 @@ const CHECKLIST_ITEMS: Omit<ChecklistItem, 'status' | 'observation'>[] = [
 type Vehicle = {
   id: string;
   model: string;
+  status?: string;
 };
 
 type UserData = {
@@ -80,6 +82,8 @@ export default function ChecklistPage() {
   const [user, setUser] = useState<UserData | null>(null);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [selectedVehicle, setSelectedVehicle] = useState('');
+  const [manualPlate, setManualPlate] = useState('');
+  const [isMaintenanceLoading, setIsMaintenanceLoading] = useState(false);
   const [checklist, setChecklist] = useState<ChecklistItem[]>(
     CHECKLIST_ITEMS.map(item => ({ ...item, status: 'na', observation: '' }))
   );
@@ -113,7 +117,7 @@ export default function ChecklistPage() {
         const vehiclesCol = collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/vehicles`);
         const q = query(vehiclesCol, where('isTruck', '==', true));
         const querySnapshot = await getDocs(q);
-        const vehiclesList = querySnapshot.docs.map(doc => ({ id: doc.id, model: doc.data().model }));
+        const vehiclesList = querySnapshot.docs.map(doc => ({ id: doc.id, model: doc.data().model, status: doc.data().status }));
         setVehicles(vehiclesList);
       } catch (error) {
         toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível carregar os veículos.' });
@@ -136,8 +140,39 @@ export default function ChecklistPage() {
     );
   };
 
+  const handleMarkMaintenance = async () => {
+    if (!firestore || !user || !selectedVehicle || selectedVehicle === 'OUTRO') return;
+    
+    if (!window.confirm(`Deseja realmente marcar o veículo ${selectedVehicle} como EM MANUTENÇÃO?`)) {
+      return;
+    }
+    
+    setIsMaintenanceLoading(true);
+    try {
+      const vehicleRef = doc(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/vehicles`, selectedVehicle);
+      await updateDoc(vehicleRef, { status: 'EM_MANUTENCAO' });
+      
+      setVehicles(prev => prev.map(v => v.id === selectedVehicle ? { ...v, status: 'EM_MANUTENCAO' } : v));
+      toast({ title: 'Sucesso', description: 'Veículo marcado como em manutenção.' });
+      setSelectedVehicle('');
+    } catch (error) {
+      console.error(error);
+      toast({ variant: 'destructive', title: 'Erro', description: 'Erro ao registrar manutenção.' });
+    } finally {
+      setIsMaintenanceLoading(false);
+    }
+  };
+
   const handleSaveChecklist = async () => {
-      if (!selectedVehicle) {
+      let finalVehicleId = selectedVehicle;
+
+      if (finalVehicleId === 'OUTRO') {
+          if (!manualPlate || manualPlate.trim() === '') {
+              toast({ variant: 'destructive', title: 'Erro', description: 'Por favor, digite a placa do caminhão.' });
+              return;
+          }
+          finalVehicleId = manualPlate.toUpperCase().trim();
+      } else if (!finalVehicleId) {
           toast({ variant: 'destructive', title: 'Erro', description: 'Por favor, selecione um veículo.' });
           return;
       }
@@ -152,9 +187,9 @@ export default function ChecklistPage() {
       if(!firestore || !user) return;
 
       try {
-          const checklistCol = collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/vehicles/${selectedVehicle}/checklists`);
+          const checklistCol = collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/vehicles/${finalVehicleId}/checklists`);
           await addDoc(checklistCol, {
-              vehicleId: selectedVehicle,
+              vehicleId: finalVehicleId,
               driverId: user.id,
               driverName: user.name,
               timestamp: serverTimestamp(),
@@ -218,9 +253,44 @@ export default function ChecklistPage() {
                     <SelectValue placeholder={isLoading ? "Carregando..." : "Selecione um veículo"} />
                     </SelectTrigger>
                     <SelectContent>
-                    {vehicles.map(v => <SelectItem key={v.id} value={v.id}>{`${v.id} - ${v.model}`}</SelectItem>)}
+                    {vehicles.map(v => (
+                        <SelectItem key={v.id} value={v.id} disabled={v.status === 'EM_MANUTENCAO'}>
+                            {`${v.id} - ${v.model}`} {v.status === 'EM_MANUTENCAO' ? '(EM MANUTENÇÃO)' : ''}
+                        </SelectItem>
+                    ))}
+                    <SelectItem value="OUTRO" className="font-bold text-primary">Outro Caminhão (Digitar Placa)</SelectItem>
                     </SelectContent>
                 </Select>
+
+                {selectedVehicle === 'OUTRO' && (
+                  <div className="space-y-2 mt-4 pt-4 border-t border-dashed animate-in fade-in zoom-in duration-300">
+                    <Label htmlFor="manualPlate" className="text-sm font-bold flex items-center gap-2">
+                      <Truck className="w-4 h-4 text-primary" /> PLACA DO CAMINHÃO
+                    </Label>
+                    <Input
+                      id="manualPlate"
+                      placeholder="EX: ABC-1234"
+                      value={manualPlate}
+                      onChange={(e) => setManualPlate(e.target.value.toUpperCase())}
+                      className="h-12 text-lg font-bold uppercase"
+                    />
+                  </div>
+                )}
+
+                {selectedVehicle && selectedVehicle !== 'OUTRO' && (
+                  <div className="flex justify-end mt-2 animate-in fade-in duration-300">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={handleMarkMaintenance}
+                      disabled={isMaintenanceLoading}
+                      className="text-xs text-amber-600 border-amber-200 hover:bg-amber-50 hover:text-amber-700 dark:hover:bg-amber-900/20"
+                    >
+                      {isMaintenanceLoading ? <Loader2 className="w-3 h-3 mr-2 animate-spin" /> : <Wrench className="w-3 h-3 mr-2" />}
+                      Informar Manutenção
+                    </Button>
+                  </div>
+                )}
             </CardContent>
         </Card>
         

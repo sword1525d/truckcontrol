@@ -30,7 +30,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Loader2, Play, Clock, MapPin, Truck, Milestone, ClipboardCheck } from 'lucide-react';
+import { ArrowLeft, Loader2, Play, Clock, MapPin, Truck, Milestone, ClipboardCheck, Wrench } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { startOfDay, endOfDay, format } from 'date-fns';
 
@@ -46,6 +46,7 @@ type Vehicle = {
   id: string;
   model: string;
   lastMileage?: number;
+  status?: string;
 };
 
 type RouteStop = {
@@ -148,6 +149,9 @@ export default function TruckRunPage() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [milkrunRoutes, setMilkrunRoutes] = useState<Route[]>([]);
   const [selectedVehicle, setSelectedVehicle] = useState('');
+  const [replacedVehicleId, setReplacedVehicleId] = useState('');
+  const [manualPlate, setManualPlate] = useState('');
+  const [isMaintenanceLoading, setIsMaintenanceLoading] = useState(false);
   const [mileage, setMileage] = useState('');
   const [stopPoint, setStopPoint] = useState<StopPoint>('');
   const [isLoading, setIsLoading] = useState(true);
@@ -188,7 +192,7 @@ export default function TruckRunPage() {
         const vehiclesList = querySnapshot.docs
           .map((doc: any) => ({ id: doc.id, ...(doc.data() as any) }))
           .filter((v: any) => v.isTruck)
-          .map((v: any) => ({ id: v.id, model: v.model, lastMileage: v.lastMileage }));
+          .map((v: any) => ({ id: v.id, model: v.model, lastMileage: v.lastMileage, status: v.status }));
         setVehicles(vehiclesList);
       } catch (error) {
         toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível carregar os veículos.' });
@@ -255,11 +259,18 @@ export default function TruckRunPage() {
 
   useEffect(() => {
     if (selectedVehicle) {
-      const v = vehicles.find((v: any) => v.id === selectedVehicle);
-      if (v && v.lastMileage !== undefined) {
-        setMileage(v.lastMileage.toString());
+      if (selectedVehicle === 'OUTRO') {
+        setMileage('');
+        validateVehicle(selectedVehicle);
+      } else {
+        const v = vehicles.find((v: any) => v.id === selectedVehicle);
+        if (v && v.lastMileage !== undefined) {
+          setMileage(v.lastMileage.toString());
+        } else {
+          setMileage('');
+        }
+        validateVehicle(selectedVehicle);
       }
-      validateVehicle(selectedVehicle);
     } else {
       setHasValidated(false);
       setVehicleInUse(null);
@@ -267,6 +278,11 @@ export default function TruckRunPage() {
   }, [selectedVehicle, vehicles]);
 
   const validateVehicle = async (vehicleId: string) => {
+    if (vehicleId === 'OUTRO') {
+      setActiveRunId(null);
+      setHasValidated(true);
+      return;
+    }
     if (!firestore || !user) return;
     setIsValidatingVehicle(true);
     setVehicleInUse(null);
@@ -331,8 +347,39 @@ export default function TruckRunPage() {
     }
   }
 
+  const handleMarkMaintenance = async () => {
+    if (!firestore || !user || !selectedVehicle || selectedVehicle === 'OUTRO') return;
+    
+    if (!window.confirm(`Deseja realmente marcar o veículo ${selectedVehicle} como EM MANUTENÇÃO?`)) {
+      return;
+    }
+    
+    setIsMaintenanceLoading(true);
+    try {
+      const vehicleRef = doc(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/vehicles`, selectedVehicle);
+      await updateDoc(vehicleRef, { status: 'EM_MANUTENCAO' });
+      
+      setVehicles(prev => prev.map(v => v.id === selectedVehicle ? { ...v, status: 'EM_MANUTENCAO' } : v));
+      toast({ title: 'Sucesso', description: 'Veículo marcado como em manutenção.' });
+      setSelectedVehicle('');
+    } catch (error) {
+      console.error(error);
+      toast({ variant: 'destructive', title: 'Erro', description: 'Erro ao registrar manutenção.' });
+    } finally {
+      setIsMaintenanceLoading(false);
+    }
+  };
+
   const handleStartRun = async (milkrunTrip?: RouteTrip, milkrunVehicleId?: string) => {
-    const finalVehicleId = milkrunVehicleId || selectedVehicle;
+    let finalVehicleId = milkrunVehicleId || selectedVehicle;
+    
+    if (finalVehicleId === 'OUTRO') {
+      if (!manualPlate || manualPlate.trim() === '') {
+        toast({ variant: 'destructive', title: 'Erro', description: 'Por favor, digite a placa do caminhão para prosseguir.' });
+        return;
+      }
+      finalVehicleId = manualPlate.toUpperCase().trim();
+    }
     
     if(!firestore || !user || !finalVehicleId || !mileage || (!milkrunTrip && !stopPoint)){
        toast({ variant: 'destructive', title: 'Erro', description: 'Preencha todos os campos para iniciar a corrida.' });
@@ -363,26 +410,28 @@ export default function TruckRunPage() {
     setIsSubmitting(true);
     try {
       // Check for daily checklist
-      const todayStart = startOfDay(new Date());
-      const todayEnd = endOfDay(new Date());
+      if (selectedVehicle !== 'OUTRO') {
+        const todayStart = startOfDay(new Date());
+        const todayEnd = endOfDay(new Date());
 
-      const checklistCol = collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/vehicles/${finalVehicleId}/checklists`);
-      const q = query(checklistCol,
-        where('timestamp', '>=', todayStart),
-        where('timestamp', '<=', todayEnd)
-      );
+        const checklistCol = collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/vehicles/${finalVehicleId}/checklists`);
+        const q = query(checklistCol,
+          where('timestamp', '>=', todayStart),
+          where('timestamp', '<=', todayEnd)
+        );
 
-      const checklistSnapshot = await getDocs(q);
+        const checklistSnapshot = await getDocs(q);
 
-      if (checklistSnapshot.empty) {
-        toast({
-          variant: 'destructive',
-          title: 'Checklist Requerido',
-          description: `Você deve preencher o checklist diário para o veículo ${finalVehicleId} antes de iniciar um trajeto.`,
-          duration: 5000,
-        });
-        setIsSubmitting(false);
-        return;
+        if (checklistSnapshot.empty) {
+          toast({
+            variant: 'destructive',
+            title: 'Checklist Requerido',
+            description: `Você deve preencher o checklist diário para o veículo ${finalVehicleId} antes de iniciar um trajeto.`,
+            duration: 5000,
+          });
+          setIsSubmitting(false);
+          return;
+        }
       }
 
 
@@ -460,7 +509,7 @@ export default function TruckRunPage() {
   }
 
   const isMilkrunAstec = user?.sectorName?.toUpperCase() === 'MILKRUN ASTEC';
-  const vehicleRoute = milkrunRoutes.find(r => r.vehicleId === selectedVehicle);
+  const vehicleRoute = milkrunRoutes.find(r => r.vehicleId === (selectedVehicle === 'OUTRO' && replacedVehicleId !== 'none' ? replacedVehicleId : selectedVehicle));
   const showProgrammed = !isMilkrunAstec && vehicleRoute && vehicleRoute.trips.length > 0 && activeTab === 'programmed';
   const hasRouteAvailable = !isMilkrunAstec && vehicleRoute && vehicleRoute.trips.length > 0;
 
@@ -490,10 +539,67 @@ export default function TruckRunPage() {
                   <SelectValue placeholder="Toque para escolher" />
                 </SelectTrigger>
                 <SelectContent>
-                  {vehicles.map((v: any) => <SelectItem key={v.id} value={v.id}>{`${v.id} - ${v.model}`}</SelectItem>)}
+                  {vehicles.map((v: any) => (
+                    <SelectItem key={v.id} value={v.id} disabled={v.status === 'EM_MANUTENCAO'}>
+                      {`${v.id} - ${v.model}`} {v.status === 'EM_MANUTENCAO' ? '(EM MANUTENÇÃO)' : ''}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value="OUTRO" className="font-bold text-primary">Outro Caminhão (Digitar Placa)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+
+            {selectedVehicle === 'OUTRO' && (
+              <div className="space-y-4 mt-4 pt-4 border-t border-dashed animate-in fade-in zoom-in duration-300">
+                <div className="space-y-2">
+                  <Label htmlFor="manualPlate" className="text-sm font-bold flex items-center gap-2">
+                    <Truck className="w-4 h-4 text-primary" /> PLACA DO CAMINHÃO
+                  </Label>
+                  <Input
+                    id="manualPlate"
+                    placeholder="EX: ABC-1234"
+                    value={manualPlate}
+                    onChange={(e) => setManualPlate(e.target.value.toUpperCase())}
+                    className="h-12 text-lg font-bold uppercase"
+                  />
+                </div>
+                {!isMilkrunAstec && milkrunRoutes.length > 0 && (
+                  <div className="space-y-2">
+                    <Label htmlFor="replacedVehicle" className="text-sm font-bold flex items-center gap-2 text-muted-foreground">
+                       Qual rota este veículo fará? (Opcional)
+                    </Label>
+                    <Select value={replacedVehicleId} onValueChange={setReplacedVehicleId}>
+                      <SelectTrigger id="replacedVehicle" className="h-12">
+                        <SelectValue placeholder="Selecione o caminhão para puxar a programação" />
+                      </SelectTrigger>
+                      <SelectContent>
+                         <SelectItem value="none">Nenhuma (Apenas Manual)</SelectItem>
+                         {milkrunRoutes.map((r: Route) => (
+                           <SelectItem key={r.vehicleId} value={r.vehicleId}>
+                             Herdar Programação do Veículo: {r.vehicleId}
+                           </SelectItem>
+                         ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {selectedVehicle && selectedVehicle !== 'OUTRO' && (
+              <div className="flex justify-end mt-2 animate-in fade-in duration-300">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={handleMarkMaintenance}
+                  disabled={isMaintenanceLoading}
+                  className="text-xs text-amber-600 border-amber-200 hover:bg-amber-50 hover:text-amber-700 dark:hover:bg-amber-900/20"
+                >
+                  {isMaintenanceLoading ? <Loader2 className="w-3 h-3 mr-2 animate-spin" /> : <Wrench className="w-3 h-3 mr-2" />}
+                  Informar Manutenção
+                </Button>
+              </div>
+            )}
 
             {isValidatingVehicle && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground justify-center py-2">
