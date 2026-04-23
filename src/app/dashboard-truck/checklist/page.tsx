@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { useFirebase } from '@/firebase';
-import { collection, addDoc, serverTimestamp, getDocs, query, where, Timestamp, updateDoc, doc } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, getDocs, query, where, Timestamp, updateDoc, doc, setDoc } from 'firebase/firestore';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -150,7 +150,13 @@ export default function ChecklistPage() {
     setIsMaintenanceLoading(true);
     try {
       const vehicleRef = doc(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/vehicles`, selectedVehicle);
-      await updateDoc(vehicleRef, { status: 'EM_MANUTENCAO' });
+      
+      // Usa setDoc para garantir que funciona mesmo que o veículo não exista formalmente no BD do setor
+      await setDoc(vehicleRef, { 
+          status: 'EM_MANUTENCAO',
+          isTruck: true,
+          model: selectedVehicle
+      }, { merge: true });
       
       setVehicles(prev => prev.map(v => v.id === selectedVehicle ? { ...v, status: 'EM_MANUTENCAO' } : v));
       toast({ title: 'Sucesso', description: 'Veículo marcado como em manutenção.' });

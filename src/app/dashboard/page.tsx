@@ -2,7 +2,7 @@
 'use client';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useFirebase } from '@/firebase';
-import { collection, onSnapshot, query, where, Timestamp, getDocs, getDoc, doc, setDoc, deleteDoc, collectionGroup, orderBy, writeBatch, updateDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, Timestamp, getDocs, getDoc, doc, setDoc, deleteDoc, collectionGroup, orderBy, writeBatch, updateDoc, addDoc } from 'firebase/firestore';
 import {
     Card,
     CardContent,
@@ -1673,11 +1673,11 @@ const HistoryTableRow = ({ run, users, onViewDetails, isSuperAdmin, onDelete }: 
     );
 };
 
-const ChecklistTableRow = ({ checklist, driver, onViewDetails, isSuperAdmin, onDelete }: { checklist: any, driver?: FirestoreUser, onViewDetails: () => void, isSuperAdmin: boolean, onDelete: (path: string) => void }) => {
+const ChecklistTableRow = ({ checklist, driver, onViewDetails, isSuperAdmin, onDelete, onBlockVehicle }: { checklist: any, driver?: FirestoreUser, onViewDetails: () => void, isSuperAdmin: boolean, onDelete: (path: string) => void, onBlockVehicle?: (vehicleId: string) => void }) => {
     const nonCompliantItems = checklist.items.filter((item: any) => item.status === 'nao_conforme').length;
     const getInitials = (name: string) => name.split(' ').map(n => n[0]).slice(0, 2).join('');
     return (
-        <TableRow><TableCell>{format(new Date(checklist.timestamp.seconds * 1000), 'dd/MM/yy HH:mm')}</TableCell><TableCell><div className="flex items-center gap-2"><Truck className="h-4 w-4 text-muted-foreground" />{checklist.vehicleId}</div></TableCell><TableCell><div className="font-medium flex items-center gap-2"><Avatar className="h-6 w-6"><AvatarImage src={driver?.photoURL} alt={checklist.driverName} /><AvatarFallback className="text-xs">{getInitials(checklist.driverName)}</AvatarFallback></Avatar>{checklist.driverName}</div></TableCell><TableCell>{nonCompliantItems > 0 ? <Badge variant="destructive">{nonCompliantItems} item(ns) não conforme</Badge> : <Badge className="bg-green-600 hover:bg-green-700">Tudo conforme</Badge>}</TableCell><TableCell className="text-right font-medium space-x-2"><Button variant="outline" size="sm" onClick={onViewDetails}><FileText className="h-4 w-4 mr-2" />Ver Detalhes</Button>{isSuperAdmin && (<AlertDialog><AlertDialogTrigger asChild><Button variant="destructive" size="sm"><Trash2 className="h-4 w-4 mr-1" /> Deletar</Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Você tem certeza?</AlertDialogTitle><AlertDialogDescription>Esta ação não pode ser desfeita e irá apagar permanentemente o checklist.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => onDelete(checklist.path)}>Confirmar</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>)}</TableCell></TableRow>
+        <TableRow><TableCell>{format(new Date(checklist.timestamp.seconds * 1000), 'dd/MM/yy HH:mm')}</TableCell><TableCell><div className="flex items-center gap-2"><Truck className="h-4 w-4 text-muted-foreground" />{checklist.vehicleId}</div></TableCell><TableCell><div className="font-medium flex items-center gap-2"><Avatar className="h-6 w-6"><AvatarImage src={driver?.photoURL} alt={checklist.driverName} /><AvatarFallback className="text-xs">{getInitials(checklist.driverName)}</AvatarFallback></Avatar>{checklist.driverName}</div></TableCell><TableCell>{nonCompliantItems > 0 ? <Badge variant="destructive">{nonCompliantItems} item(ns) não conforme</Badge> : <Badge className="bg-green-600 hover:bg-green-700">Tudo conforme</Badge>}</TableCell><TableCell className="text-right font-medium space-x-2">{nonCompliantItems > 0 && onBlockVehicle && (<Button variant="destructive" size="sm" onClick={() => onBlockVehicle(checklist.vehicleId)}><AlertCircle className="h-4 w-4 mr-2" /> Bloquear Uso</Button>)}<Button variant="outline" size="sm" onClick={onViewDetails}><FileText className="h-4 w-4 mr-2" />Ver Detalhes</Button>{isSuperAdmin && (<AlertDialog><AlertDialogTrigger asChild><Button variant="destructive" size="sm"><Trash2 className="h-4 w-4 mr-1" /> Deletar</Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Você tem certeza?</AlertDialogTitle><AlertDialogDescription>Esta ação não pode ser desfeita e irá apagar permanentemente o checklist.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => onDelete(checklist.path)}>Confirmar</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>)}</TableCell></TableRow>
     );
 };
 
@@ -2500,6 +2500,30 @@ const ChecklistsTab = ({ activeTab }: { activeTab: string }) => {
         }
     };
 
+    const handleBlockVehicle = async (vehicleId: string) => {
+        if (!firestore || !user) return;
+        try {
+            const vehicleRef = doc(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/vehicles`, vehicleId);
+            await setDoc(vehicleRef, { 
+                status: 'EM_MANUTENCAO',
+                isTruck: true,
+                model: vehicleId
+            }, { merge: true });
+            
+            const maintenanceCol = collection(vehicleRef, 'maintenance');
+            await addDoc(maintenanceCol, {
+                startTime: Timestamp.now(),
+                endTime: null,
+                notes: 'Bloqueado devido a não conformidade no checklist.',
+            });
+            
+            toast({ title: 'Veículo Bloqueado', description: `O caminhão ${vehicleId} foi enviado para manutenção.` });
+        } catch (error) {
+            console.error(error);
+            toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível bloquear o caminhão.' });
+        }
+    };
+
     const { filteredChecklists, vehicleList } = useMemo(() => {
         const vehicles = new Set<string>();
         allChecklists.forEach(c => vehicles.add(c.vehicleId));
@@ -2559,6 +2583,7 @@ const ChecklistsTab = ({ activeTab }: { activeTab: string }) => {
                                         onViewDetails={() => setSelectedChecklist(item)}
                                         isSuperAdmin={isSuperAdmin}
                                         onDelete={handleDelete}
+                                        onBlockVehicle={handleBlockVehicle}
                                     />
                                 ))
                             ) : (
