@@ -1,0 +1,2063 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0f2954" />
+    <title>FROTACONTROL - Acompanhamento Caminhões</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Questrial&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      html {
+        background: #0f2954;
+      }
+
+      .honda-theme html {
+        background: #c62828;
+      }
+
+      body {
+        font-family: "Questrial", sans-serif;
+        background: transparent;
+        min-height: 100vh;
+        min-height: 100dvh;
+        display: flex;
+        flex-direction: column;
+        overflow-x: hidden;
+        position: relative;
+      }
+
+      .background-fill {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: #0f2954;
+        z-index: -1;
+      }
+
+      .honda-theme .background-fill {
+        background: #c62828;
+      }
+
+      .container {
+        display: flex;
+        flex-direction: column;
+        min-height: 100vh;
+        min-height: 100dvh;
+        width: 100%;
+      }
+
+      .header {
+        background-color: #0f2954;
+        color: white;
+        padding: 15px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .honda-theme .header {
+        background-color: #c62828;
+      }
+
+      .back-button {
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 8px;
+        border-radius: 50%;
+        transition: background-color 0.2s ease;
+      }
+
+      .back-button:hover {
+        background-color: rgba(255, 255, 255, 0.1);
+      }
+
+      .back-button img {
+        width: 24px;
+        height: 24px;
+        filter: brightness(0) invert(1);
+      }
+
+      .header-title {
+        font-size: 18px;
+        font-weight: normal;
+      }
+
+      .form-container {
+        background: white;
+        border-radius: 24px 24px 0 0;
+        padding: 20px;
+        flex: 1;
+        box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.1);
+        position: relative;
+        width: 100%;
+        overflow-y: auto;
+        margin-top: -20px;
+        border: 10px solid transparent;
+      }
+
+      .card {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 15px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        border-left: 4px solid #0f2954;
+        position: relative;
+      }
+
+      .honda-theme .card {
+        border-left-color: #c62828;
+      }
+
+      .card.completed {
+        border-left-color: #4caf50;
+        opacity: 0.8;
+      }
+
+      .card.in-progress {
+        border-left-color: #ff9800;
+      }
+
+      .card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 15px;
+      }
+
+      .ponto-title {
+        font-size: 16px;
+        font-weight: bold;
+        color: #333;
+      }
+
+      .ponto-status {
+        font-size: 12px;
+        padding: 4px 8px;
+        border-radius: 12px;
+        background: #e3f2fd;
+        color: #1976d2;
+      }
+
+      .ponto-status.completed {
+        background: #e8f5e8;
+        color: #4caf50;
+      }
+
+      .ponto-status.in-progress {
+        background: #fff3e0;
+        color: #ef6c00;
+      }
+
+      .form-group {
+        margin-bottom: 15px;
+      }
+
+      .form-label {
+        display: block;
+        margin-bottom: 8px;
+        color: #4b4b4b;
+        font-size: 14px;
+        font-weight: 500;
+      }
+
+      .form-input,
+      .form-select {
+        width: 100%;
+        padding: 12px;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        font-size: 16px;
+        font-family: "Questrial", sans-serif;
+      }
+
+      .form-input:focus,
+      .form-select:focus {
+        border-color: #0f2954;
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(15, 41, 84, 0.1);
+      }
+
+      .honda-theme .form-input:focus,
+      .honda-theme .form-select:focus {
+        border-color: #c62828;
+        box-shadow: 0 0 0 3px rgba(198, 40, 40, 0.1);
+      }
+
+      .button-group {
+        display: flex;
+        gap: 10px;
+        margin-top: 15px;
+      }
+
+      .btn {
+        flex: 1;
+        padding: 12px;
+        border: none;
+        border-radius: 8px;
+        font-size: 14px;
+        font-family: "Questrial", sans-serif;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .btn-primary {
+        background-color: #0f2954;
+        color: white;
+      }
+
+      .honda-theme .btn-primary {
+        background-color: #c62828;
+      }
+
+      .btn-primary:hover {
+        background-color: #1a3a6e;
+      }
+
+      .honda-theme .btn-primary:hover {
+        background-color: #8e0000;
+      }
+
+      .btn-secondary {
+        background-color: #f5f5f5;
+        color: #333;
+        border: 1px solid #e0e0e0;
+      }
+
+      .btn-secondary:hover {
+        background-color: #e0e0e0;
+      }
+
+      .btn-success {
+        background-color: #4caf50;
+        color: white;
+      }
+
+      .btn-success:hover {
+        background-color: #45a049;
+      }
+
+      .btn-danger {
+        background-color: #f44336;
+        color: white;
+      }
+
+      .btn-danger:hover {
+        background-color: #d32f2f;
+      }
+
+      .btn-warning {
+        background-color: #ff9800;
+        color: white;
+      }
+
+      .btn-warning:hover {
+        background-color: #f57c00;
+      }
+
+      .add-ponto-section {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      }
+
+      .section-title {
+        font-size: 16px;
+        font-weight: bold;
+        color: #333;
+        margin-bottom: 15px;
+      }
+
+      .pontos-list {
+        margin-bottom: 20px;
+      }
+
+      .start-section {
+        margin-top: 20px;
+        text-align: center;
+      }
+
+      .btn-start {
+        width: 100%;
+        padding: 16px;
+        background-color: #0f2954;
+        color: white;
+        border: none;
+        border-radius: 12px;
+        font-size: 16px;
+        font-family: "Questrial", sans-serif;
+        cursor: pointer;
+        transition: background-color 0.2s;
+      }
+
+      .honda-theme .btn-start {
+        background-color: #c62828;
+      }
+
+      .btn-start:hover {
+        background-color: #1a3a6e;
+      }
+
+      .honda-theme .btn-start:hover {
+        background-color: #8e0000;
+      }
+
+      .btn-start:disabled {
+        background-color: #cccccc;
+        cursor: not-allowed;
+      }
+
+      .loading-spinner {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        z-index: 1001;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .spinner {
+        width: 40px;
+        height: 40px;
+        border: 4px solid rgba(255, 255, 255, 0.3);
+        border-radius: 50%;
+        border-top-color: #0f2954;
+        animation: spin 1s linear infinite;
+      }
+
+      .honda-theme .spinner {
+        border-top-color: #c62828;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      .snackbar {
+        visibility: hidden;
+        min-width: 250px;
+        background-color: #333;
+        color: white;
+        text-align: center;
+        border-radius: 8px;
+        padding: 16px;
+        position: fixed;
+        z-index: 1002;
+        left: 50%;
+        bottom: 30px;
+        transform: translateX(-50%);
+        font-size: 14px;
+      }
+
+      .snackbar.show {
+        visibility: visible;
+        animation: fadein 0.5s, fadeout 0.5s 2.5s;
+      }
+
+      @keyframes fadein {
+        from {
+          bottom: 0;
+          opacity: 0;
+        }
+        to {
+          bottom: 30px;
+          opacity: 1;
+        }
+      }
+
+      @keyframes fadeout {
+        from {
+          bottom: 30px;
+          opacity: 1;
+        }
+        to {
+          bottom: 0;
+          opacity: 0;
+        }
+      }
+
+      .empty-state {
+        text-align: center;
+        padding: 40px 20px;
+        color: #666;
+      }
+
+      .empty-state img {
+        width: 80px;
+        height: 80px;
+        margin-bottom: 16px;
+        opacity: 0.5;
+      }
+
+      .timeline {
+        position: relative;
+        margin: 20px 0;
+      }
+
+      .timeline::before {
+        content: "";
+        position: absolute;
+        left: 15px;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background: #e0e0e0;
+      }
+
+      .timeline-item {
+        display: flex;
+        align-items: flex-start;
+        margin-bottom: 20px;
+        position: relative;
+      }
+
+      .timeline-marker {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #0f2954;
+        margin-right: 15px;
+        position: relative;
+        z-index: 2;
+        flex-shrink: 0;
+      }
+
+      .honda-theme .timeline-marker {
+        background: #c62828;
+      }
+
+      .timeline-marker.completed {
+        background: #4caf50;
+      }
+
+      .timeline-content {
+        flex: 1;
+        background: #f9f9f9;
+        padding: 12px;
+        border-radius: 8px;
+      }
+
+      .timeline-ponto {
+        font-weight: bold;
+        margin-bottom: 5px;
+      }
+
+      .timeline-info {
+        font-size: 12px;
+        color: #666;
+      }
+
+      .action-buttons {
+        position: absolute;
+        top: 15px;
+        right: 15px;
+        display: flex;
+        gap: 5px;
+      }
+
+      .action-btn {
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 5px;
+        border-radius: 4px;
+        color: #666;
+        transition: all 0.2s;
+      }
+
+      .action-btn:hover {
+        background: #f0f0f0;
+        color: #333;
+      }
+
+      .action-btn.edit:hover {
+        color: #0f2954;
+      }
+
+      .honda-theme .action-btn.edit:hover {
+        color: #c62828;
+      }
+
+      .action-btn.delete:hover {
+        color: #f44336;
+      }
+
+      .action-btn.move:hover {
+        color: #ff9800;
+      }
+
+      .modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        z-index: 1003;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .modal-content {
+        background-color: white;
+        border-radius: 12px;
+        width: 90%;
+        max-width: 400px;
+        padding: 25px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+        position: relative;
+      }
+
+      .close-modal {
+        position: absolute;
+        top: 15px;
+        right: 20px;
+        font-size: 24px;
+        color: #757575;
+        cursor: pointer;
+      }
+
+      .close-modal:hover {
+        color: #333;
+      }
+
+      .modal-title {
+        font-size: 18px;
+        font-weight: bold;
+        margin-bottom: 20px;
+        color: #333;
+      }
+
+      .drag-handle {
+        cursor: move;
+        color: #666;
+        padding: 5px;
+        margin-right: 10px;
+      }
+
+      .ponto-item {
+        display: flex;
+        align-items: center;
+        padding: 10px;
+        background: #f9f9f9;
+        margin-bottom: 5px;
+        border-radius: 8px;
+        border: 1px solid #e0e0e0;
+      }
+
+      .ponto-item.dragging {
+        background: #e3f2fd;
+        border-color: #0f2954;
+      }
+
+      .honda-theme .ponto-item.dragging {
+        background: #ffebee;
+        border-color: #c62828;
+      }
+
+      .ponto-text {
+        flex: 1;
+      }
+
+      .reorder-section {
+        margin-top: 20px;
+      }
+
+      /* Continuar Acompanhamento Card */
+      .continue-card {
+        background: linear-gradient(135deg, #0f2954, #1a3a6e);
+        color: white;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      }
+
+      .honda-theme .continue-card {
+        background: linear-gradient(135deg, #c62828, #8e0000);
+      }
+
+      .continue-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 15px;
+      }
+
+      .continue-icon {
+        font-size: 24px;
+      }
+
+      .continue-title {
+        font-size: 18px;
+        font-weight: bold;
+      }
+
+      .continue-info {
+        margin-bottom: 15px;
+        line-height: 1.5;
+      }
+
+      .continue-details {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin-bottom: 15px;
+      }
+
+      .detail-item {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .detail-label {
+        font-size: 12px;
+        opacity: 0.8;
+        margin-bottom: 2px;
+      }
+
+      .detail-value {
+        font-size: 14px;
+        font-weight: 600;
+      }
+
+      .progress-info {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+      }
+
+      .progress-text {
+        font-size: 14px;
+      }
+
+      .progress-bar {
+        height: 6px;
+        background: rgba(255, 255, 255, 0.3);
+        border-radius: 3px;
+        overflow: hidden;
+        margin-bottom: 15px;
+      }
+
+      .progress-fill {
+        height: 100%;
+        background: #4caf50;
+        border-radius: 3px;
+        transition: width 0.3s ease;
+      }
+
+      /* Responsividade */
+      @media (max-width: 600px) {
+        .form-container {
+          padding: 15px;
+        }
+
+        .card {
+          padding: 15px;
+        }
+
+        .button-group {
+          flex-direction: column;
+        }
+
+        .action-buttons {
+          position: static;
+          justify-content: flex-end;
+          margin-top: 10px;
+        }
+
+        .continue-details {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 480px) {
+        .form-container {
+          padding: 10px;
+        }
+
+        .card {
+          padding: 12px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="background-fill"></div>
+    <div class="container">
+      <div class="header">
+        <button class="back-button" onclick="window.history.back()">
+          <img src="assets/icon_arrow.svg" alt="Voltar" />
+        </button>
+        <div class="header-title">Acompanhamento de Caminhão</div>
+        <div style="width: 24px"></div>
+      </div>
+
+      <div class="form-container">
+        <!-- Card de Continuar Acompanhamento Ativo -->
+        <div class="continue-card" id="continueCard" style="display: none">
+          <div class="continue-header">
+            <i class="fas fa-play-circle continue-icon"></i>
+            <div class="continue-title">Continuar Acompanhamento</div>
+          </div>
+          <div class="continue-info">
+            Você tem um acompanhamento em andamento. Continue de onde parou!
+          </div>
+          <div class="continue-details">
+            <div class="detail-item">
+              <div class="detail-label">Veículo</div>
+              <div class="detail-value" id="continueVeiculo">-</div>
+            </div>
+            <div class="detail-item">
+              <div class="detail-label">Iniciado em</div>
+              <div class="detail-value" id="continueData">-</div>
+            </div>
+            <div class="detail-item">
+              <div class="detail-label">Progresso</div>
+              <div class="detail-value" id="continueProgress">-</div>
+            </div>
+            <div class="detail-item">
+              <div class="detail-label">KM Atual</div>
+              <div class="detail-value" id="continueKm">-</div>
+            </div>
+          </div>
+          <div class="progress-info">
+            <div class="progress-text" id="continueProgressText">
+              0 de 0 pontos
+            </div>
+            <div class="progress-text" id="continuePercentage">0%</div>
+          </div>
+          <div class="progress-bar">
+            <div
+              class="progress-fill"
+              id="continueProgressFill"
+              style="width: 0%"
+            ></div>
+          </div>
+          <div class="button-group">
+            <button
+              class="btn btn-secondary"
+              onclick="iniciarNovoAcompanhamento()"
+            >
+              <i class="fas fa-plus"></i> NOVO ACOMPANHAMENTO
+            </button>
+            <button class="btn btn-success" onclick="continuarAcompanhamento()">
+              <i class="fas fa-play"></i> CONTINUAR
+            </button>
+          </div>
+        </div>
+
+        <!-- Informações do Veículo -->
+        <div class="card" id="infoVeiculoCard">
+          <div class="card-header">
+            <div class="ponto-title">Informações do Veículo</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="veiculo">Veículo</label>
+            <select class="form-select" id="veiculo" required>
+              <option value="" disabled selected>Selecione um veículo</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="quilometragem"
+              >Quilometragem Atual</label
+            >
+            <input
+              type="number"
+              class="form-input"
+              id="quilometragem"
+              required
+            />
+          </div>
+        </div>
+
+        <!-- Adicionar Pontos -->
+        <div class="add-ponto-section" id="addPontoSection">
+          <div class="section-title">Adicionar Pontos de Parada</div>
+          <div class="form-group">
+            <label class="form-label" for="novoPonto">Ponto de Parada</label>
+            <select class="form-select" id="novoPonto">
+              <option value="" disabled selected>Selecione um ponto</option>
+              <option value="PINT. ABS">PINT. ABS</option>
+              <option value="PINT. FX ABS">PINT. FX ABS</option>
+              <option value="MOCOM">MOCOM</option>
+              <option value="INJ. PLÁSTICA">INJ. PLÁSTICA</option>
+              <option value="PINT. PÓ">PINT. PÓ</option>
+              <option value="USINAGEM">USINAGEM</option>
+              <option value="PINT. TANQUE">PINT. TANQUE</option>
+              <option value="PINT. ALUMÍNIO">PINT. ALUMÍNIO</option>
+              <option value="MONT. RODA">MONT. RODA</option>
+              <option value="SOLDA CHASSI">SOLDA CHASSI</option>
+              <option value="DIV. PEÇAS">DIV. PEÇAS</option>
+              <option value="GALVANOPLASTIA">GALVANOPLASTIA</option>
+              <option value="DOBRADETUBOS">DOBRADETUBOS</option>
+              <option value="ESTAM. PRENSA">ESTAM. PRENSA</option>
+              <option value="MONT. MOTOR">MONT. MOTOR</option>
+              <option value="SOLDA ESCAP.">SOLDA ESCAP.</option>
+              <option value="LINHA MONT.">LINHA MONT.</option>
+              <option value="PINT. ALT. TEMP.">PINT. ALT. TEMP.</option>
+              <option value="SOLDA TANQUE">SOLDA TANQUE</option>
+              <option value="FUNDIÇÃO">FUNDIÇÃO</option>
+              <option value="SOLDA COMP.">SOLDA COMP.</option>
+              <option value="FÁBR. ASSENTO">FÁBR. ASSENTO</option>
+              <option value="MONT. QUADRI.">MONT. QUADRI.</option>
+              <option value="MONT. FILTRO">MONT. FILTRO</option>
+              <option value="SOLDA ALUMÍNIO">SOLDA ALUMÍNIO</option>
+              <option value="FABRICA DE ARO">FABRICA DE ARO</option>
+              <option value="MOCOMMSIN1">MOCOMMSIN1</option>
+              <option value="PRENSA. COMP.">PRENSA. COMP.</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" id="btnAdicionarPonto">
+            ADICIONAR PONTO
+          </button>
+        </div>
+
+        <!-- Gerenciar Pontos -->
+        <div class="card" id="gerenciarPontosCard" style="display: none">
+          <div class="card-header">
+            <div class="ponto-title">Gerenciar Pontos de Parada</div>
+          </div>
+          <div class="button-group">
+            <button class="btn btn-warning" onclick="abrirModalReordenar()">
+              <i class="fas fa-sort"></i> REORDENAR PONTOS
+            </button>
+            <button class="btn btn-primary" onclick="abrirModalAdicionar()">
+              <i class="fas fa-plus"></i> ADICIONAR PONTO
+            </button>
+          </div>
+        </div>
+
+        <!-- Lista de Pontos -->
+        <div class="pontos-list" id="pontosList">
+          <div class="empty-state" id="emptyState">
+            <div>Nenhum ponto adicionado</div>
+            <div style="font-size: 12px; margin-top: 8px">
+              Adicione pontos de parada acima
+            </div>
+          </div>
+        </div>
+
+        <!-- Timeline de Acompanhamento -->
+        <div class="card" id="timelineCard" style="display: none">
+          <div class="card-header">
+            <div class="ponto-title">Acompanhamento em Tempo Real</div>
+          </div>
+          <div class="timeline" id="timeline"></div>
+        </div>
+
+        <!-- Iniciar Acompanhamento -->
+        <div class="start-section">
+          <button class="btn-start" id="btnIniciarAcompanhamento" disabled>
+            INICIAR ACOMPANHAMENTO
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modais (mantidos do código anterior) -->
+    <div class="modal" id="modalReordenar">
+      <div class="modal-content">
+        <span class="close-modal" onclick="fecharModalReordenar()"
+          >&times;</span
+        >
+        <div class="modal-title">Reordenar Pontos de Parada</div>
+        <div class="reorder-section" id="reorderList"></div>
+        <div class="button-group" style="margin-top: 20px">
+          <button class="btn btn-secondary" onclick="fecharModalReordenar()">
+            CANCELAR
+          </button>
+          <button class="btn btn-primary" onclick="salvarNovaOrdem()">
+            SALVAR ORDEM
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal" id="modalAdicionar">
+      <div class="modal-content">
+        <span class="close-modal" onclick="fecharModalAdicionar()"
+          >&times;</span
+        >
+        <div class="modal-title">Adicionar Novo Ponto</div>
+        <div class="form-group">
+          <label class="form-label" for="novoPontoModal">Ponto de Parada</label>
+          <select class="form-select" id="novoPontoModal">
+            <option value="" disabled selected>Selecione um ponto</option>
+            <!-- Opções dos pontos -->
+          </select>
+        </div>
+        <div class="button-group" style="margin-top: 20px">
+          <button class="btn btn-secondary" onclick="fecharModalAdicionar()">
+            CANCELAR
+          </button>
+          <button class="btn btn-primary" onclick="adicionarPontoModal()">
+            ADICIONAR PONTO
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="loading-spinner" id="loadingSpinner">
+      <div class="spinner"></div>
+    </div>
+
+    <div id="snackbar" class="snackbar"></div>
+
+    <script>
+      // Variáveis globais
+      let pontosAdicionados = [];
+      let veiculoEmUso = false;
+      let responsavelVeiculo = "";
+      let acompanhamentoId = null;
+      let kmAtual = 0;
+      let corridaIniciada = false;
+      let draggedItem = null;
+
+      // Elementos da interface
+      let veiculoSelect,
+        quilometragemInput,
+        novoPontoSelect,
+        btnAdicionarPonto,
+        btnIniciarAcompanhamento;
+      let pontosList,
+        emptyState,
+        timelineCard,
+        timeline,
+        addPontoSection,
+        gerenciarPontosCard;
+      let loadingSpinner, snackbar;
+
+      document.addEventListener("DOMContentLoaded", () => {
+        // Verifica a empresa do usuário e aplica o tema correspondente
+        const usuario = JSON.parse(localStorage.getItem("usuario"));
+        if (usuario && usuario.empresa === "HONDA") {
+          document.body.classList.add("honda-theme");
+          document.querySelector('meta[name="theme-color"]').content =
+            "#c62828";
+        } else if (usuario && usuario.empresa === "LSL") {
+          document.body.classList.remove("honda-theme");
+          document.querySelector('meta[name="theme-color"]').content =
+            "#0f2954";
+        }
+
+        // Inicializar elementos da interface
+        inicializarElementos();
+
+        // Verificar se há acompanhamento ativo
+        verificarAcompanhamentoAtivo();
+
+        // Preencher dropdown de veículos
+        carregarVeiculos();
+
+        // Configurar event listeners
+        configurarEventListeners();
+      });
+
+      function inicializarElementos() {
+        veiculoSelect = document.getElementById("veiculo");
+        quilometragemInput = document.getElementById("quilometragem");
+        novoPontoSelect = document.getElementById("novoPonto");
+        btnAdicionarPonto = document.getElementById("btnAdicionarPonto");
+        btnIniciarAcompanhamento = document.getElementById(
+          "btnIniciarAcompanhamento"
+        );
+        pontosList = document.getElementById("pontosList");
+        emptyState = document.getElementById("emptyState");
+        timelineCard = document.getElementById("timelineCard");
+        timeline = document.getElementById("timeline");
+        addPontoSection = document.getElementById("addPontoSection");
+        gerenciarPontosCard = document.getElementById("gerenciarPontosCard");
+        loadingSpinner = document.getElementById("loadingSpinner");
+        snackbar = document.getElementById("snackbar");
+      }
+
+      function verificarAcompanhamentoAtivo() {
+        const usuario = JSON.parse(localStorage.getItem("usuario"));
+
+        if (!usuario) return;
+
+        // Verificar se o usuário tem acompanhamento ativo no localStorage
+        if (usuario.em_acompanhamento && usuario.acompanhamento_id) {
+          acompanhamentoId = usuario.acompanhamento_id;
+          corridaIniciada = true;
+
+          // Buscar dados do acompanhamento ativo
+          buscarAcompanhamentoAtivo();
+        }
+      }
+
+      function buscarAcompanhamentoAtivo() {
+        const usuario = JSON.parse(localStorage.getItem("usuario"));
+        const empresa = usuario.empresa;
+        const setor = usuario.setor;
+
+        loadingSpinner.style.display = "flex";
+
+        fetch(
+          `https://lslcda-default-rtdb.firebaseio.com/${empresa}/${setor}/acompanhamentos_caminhoes.json`
+        )
+          .then((response) => response.json())
+          .then((acompanhamentos) => {
+            if (acompanhamentos) {
+              // Encontrar o acompanhamento atual pelo ID
+              const acompanhamentoAtivo = Object.values(acompanhamentos).find(
+                (acomp) => acomp && acomp.id === acompanhamentoId
+              );
+
+              if (acompanhamentoAtivo) {
+                // Restaurar o estado do acompanhamento
+                restaurarAcompanhamento(acompanhamentoAtivo);
+              } else {
+                // Acompanhamento não encontrado, limpar estado
+                limparAcompanhamentoAtivo();
+              }
+            } else {
+              limparAcompanhamentoAtivo();
+            }
+          })
+          .catch((error) => {
+            console.error("Erro ao buscar acompanhamento ativo:", error);
+            limparAcompanhamentoAtivo();
+          })
+          .finally(() => {
+            loadingSpinner.style.display = "none";
+          });
+      }
+
+      function restaurarAcompanhamento(acompanhamento) {
+        // Preencher dados do veículo
+        veiculoSelect.value = acompanhamento.veiculo;
+        quilometragemInput.value = acompanhamento.km_inicial;
+        kmAtual = acompanhamento.km_atual || acompanhamento.km_inicial;
+
+        // Restaurar pontos
+        pontosAdicionados = acompanhamento.pontos || [];
+
+        // Configurar interface para modo de acompanhamento ativo
+        veiculoSelect.disabled = true;
+        quilometragemInput.disabled = true;
+        addPontoSection.style.display = "none";
+        gerenciarPontosCard.style.display = "block";
+        btnIniciarAcompanhamento.disabled = true;
+        timelineCard.style.display = "block";
+
+        // Renderizar pontos
+        renderizarPontos();
+
+        // Buscar e restaurar timeline
+        restaurarTimeline();
+
+        mostrarSnackbar(
+          "Acompanhamento ativo restaurado. Continue de onde parou!"
+        );
+      }
+
+      function restaurarTimeline() {
+        const usuario = JSON.parse(localStorage.getItem("usuario"));
+        const empresa = usuario.empresa;
+        const setor = usuario.setor;
+
+        // Buscar checks em tempo real para este acompanhamento
+        fetch(
+          `https://lslcda-default-rtdb.firebaseio.com/${empresa}/${setor}/checks_tempo_real.json`
+        )
+          .then((response) => response.json())
+          .then((checks) => {
+            if (checks) {
+              const checksFiltrados = Object.values(checks).filter(
+                (check) =>
+                  check &&
+                  check.acompanhamento_id === acompanhamentoId &&
+                  check.status === "FINALIZADO"
+              );
+
+              // Ordenar por timestamp
+              checksFiltrados.sort(
+                (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
+              );
+
+              // Adicionar à timeline
+              checksFiltrados.forEach((check) => {
+                atualizarTimeline(
+                  check.ponto,
+                  "finalizado",
+                  check.qtd_carros,
+                  check.qtd_itens,
+                  check.km
+                );
+              });
+            }
+          })
+          .catch((error) => {
+            console.error("Erro ao restaurar timeline:", error);
+          });
+      }
+
+      function limparAcompanhamentoAtivo() {
+        const usuario = JSON.parse(localStorage.getItem("usuario"));
+
+        if (usuario) {
+          // Limpar dados de acompanhamento do usuário
+          usuario.em_acompanhamento = false;
+          usuario.veiculo_em_uso = null;
+          usuario.acompanhamento_id = null;
+          localStorage.setItem("usuario", JSON.stringify(usuario));
+
+          // Atualizar no Firebase
+          fetch(
+            `https://lslcda-default-rtdb.firebaseio.com/${usuario.empresa}/user/${usuario.mat}.json`,
+            {
+              method: "PATCH",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                em_acompanhamento: false,
+                veiculo_em_uso: null,
+                acompanhamento_id: null,
+              }),
+            }
+          ).catch((error) => {
+            console.error("Erro ao limpar acompanhamento:", error);
+          });
+        }
+
+        corridaIniciada = false;
+        acompanhamentoId = null;
+      }
+
+      function configurarEventListeners() {
+        // Atualizar quilometragem ao selecionar veículo
+        veiculoSelect.addEventListener("change", function () {
+          atualizarQuilometragem();
+        });
+
+        // Adicionar ponto à lista
+        btnAdicionarPonto.addEventListener("click", function () {
+          adicionarPonto();
+        });
+
+        // Iniciar acompanhamento
+        btnIniciarAcompanhamento.addEventListener("click", function () {
+          iniciarAcompanhamento();
+        });
+      }
+
+      function carregarVeiculos() {
+        // Usando o novo banco de dados Firebase
+        fetch(
+          `https://frotacontrol-milkrun-mao-default-rtdb.firebaseio.com/veiculos.json`
+        )
+          .then((response) => response.json())
+          .then((veiculos) => {
+            if (veiculos) {
+              for (const placa in veiculos) {
+                const option = document.createElement("option");
+                option.value = placa;
+                option.textContent = `${placa} - ${veiculos[placa]}`;
+                veiculoSelect.appendChild(option);
+              }
+
+              // Se já temos um veículo em acompanhamento ativo, selecioná-lo
+              const usuario = JSON.parse(localStorage.getItem("usuario"));
+              if (usuario && usuario.veiculo_em_uso) {
+                veiculoSelect.value = usuario.veiculo_em_uso;
+              }
+            }
+          })
+          .catch((error) => {
+            console.error("Erro ao carregar veículos:", error);
+            mostrarSnackbar("Erro ao carregar veículos. Tente novamente.");
+          });
+      }
+
+      function atualizarQuilometragem() {
+        // Se já temos um acompanhamento ativo, não atualizar a quilometragem
+        if (corridaIniciada) return;
+
+        const usuario = JSON.parse(localStorage.getItem("usuario"));
+        const empresa = usuario.empresa;
+        const setor = usuario.setor;
+        const veiculoSelecionado = veiculoSelect.value;
+
+        // Verifica se o veículo está em uso nas corridas regulares
+        fetch(
+          `https://lslcda-default-rtdb.firebaseio.com/${empresa}/${setor}/corridas.json`
+        )
+          .then((response) => response.json())
+          .then((corridas) => {
+            if (corridas) {
+              const corridasFiltradas = Object.values(corridas).filter(
+                (corrida) => corrida && corrida.veículo === veiculoSelecionado
+              );
+
+              if (corridasFiltradas.length > 0) {
+                const ultimaCorrida =
+                  corridasFiltradas[corridasFiltradas.length - 1];
+                if (ultimaCorrida.km_final) {
+                  quilometragemInput.value = ultimaCorrida.km_final;
+                  kmAtual = parseInt(ultimaCorrida.km_final);
+                  veiculoEmUso = false;
+                } else {
+                  quilometragemInput.value = "";
+                  veiculoEmUso = true;
+                  responsavelVeiculo = ultimaCorrida.responsavel;
+                  mostrarSnackbar(
+                    `O veículo está em uso por ${responsavelVeiculo}.`
+                  );
+                }
+              } else {
+                quilometragemInput.value = "";
+                veiculoEmUso = false;
+              }
+            } else {
+              quilometragemInput.value = "";
+              veiculoEmUso = false;
+            }
+          })
+          .catch((error) => {
+            console.error("Erro ao verificar status do veículo:", error);
+            quilometragemInput.value = "";
+          });
+      }
+
+      function adicionarPonto() {
+        const pontoSelecionado = novoPontoSelect.value;
+        adicionarPontoNaLista(pontoSelecionado);
+      }
+
+      function adicionarPontoNaLista(ponto) {
+        if (!ponto) {
+          mostrarSnackbar("Selecione um ponto para adicionar.");
+          return;
+        }
+
+        if (pontosAdicionados.includes(ponto)) {
+          mostrarSnackbar("Este ponto já foi adicionado.");
+          return;
+        }
+
+        pontosAdicionados.push(ponto);
+        renderizarPontos();
+        novoPontoSelect.value = "";
+
+        // Habilitar botão de iniciar se há pontos
+        if (pontosAdicionados.length > 0) {
+          btnIniciarAcompanhamento.disabled = false;
+        }
+
+        // Se a corrida já foi iniciada, atualizar no banco
+        if (corridaIniciada) {
+          atualizarPontosNoBanco();
+          salvarAcaoPonto("ADICAO", ponto, null, null, null);
+        }
+      }
+
+      function removerPonto(index) {
+        const pontoRemovido = pontosAdicionados[index];
+        pontosAdicionados.splice(index, 1);
+        renderizarPontos();
+
+        // Se a corrida já foi iniciada, atualizar no banco
+        if (corridaIniciada) {
+          atualizarPontosNoBanco();
+          salvarAcaoPonto("REMOCAO", pontoRemovido, null, null, null);
+        }
+
+        mostrarSnackbar(`Ponto ${pontoRemovido} removido.`);
+      }
+
+      function editarPonto(index) {
+        const pontoAtual = pontosAdicionados[index];
+        const novoPonto = prompt(`Editar ponto "${pontoAtual}":`, pontoAtual);
+
+        if (novoPonto && novoPonto.trim() !== "" && novoPonto !== pontoAtual) {
+          const pontoAntigo = pontosAdicionados[index];
+          pontosAdicionados[index] = novoPonto.trim();
+          renderizarPontos();
+
+          // Se a corrida já foi iniciada, atualizar no banco
+          if (corridaIniciada) {
+            atualizarPontosNoBanco();
+            salvarAcaoPonto(
+              "EDICAO",
+              pontoAntigo,
+              null,
+              null,
+              null,
+              novoPonto.trim()
+            );
+          }
+
+          mostrarSnackbar(`Ponto atualizado para ${novoPonto.trim()}.`);
+        }
+      }
+
+      function renderizarPontos() {
+        pontosList.innerHTML = "";
+
+        if (pontosAdicionados.length === 0) {
+          emptyState.style.display = "block";
+          return;
+        }
+
+        emptyState.style.display = "none";
+
+        pontosAdicionados.forEach((ponto, index) => {
+          const pontoId = ponto.replace(/\s+/g, "_").replace(/\./g, "");
+
+          const pontoCard = document.createElement("div");
+          pontoCard.className = "card";
+          pontoCard.id = `ponto-${pontoId}`;
+
+          pontoCard.innerHTML = `
+                <div class="action-buttons">
+                    <button class="action-btn move" onclick="moverPonto(${index}, 'up')" ${
+            index === 0 ? "disabled" : ""
+          }>
+                        <i class="fas fa-arrow-up"></i>
+                    </button>
+                    <button class="action-btn move" onclick="moverPonto(${index}, 'down')" ${
+            index === pontosAdicionados.length - 1 ? "disabled" : ""
+          }>
+                        <i class="fas fa-arrow-down"></i>
+                    </button>
+                    <button class="action-btn edit" onclick="editarPonto(${index})">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="action-btn delete" onclick="removerPonto(${index})">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+                <div class="card-header">
+                    <div class="ponto-title">${ponto}</div>
+                    <span class="ponto-status">Pendente</span>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="qtd-carros-${pontoId}">QTD CARROS</label>
+                    <input type="number" class="form-input" id="qtd-carros-${pontoId}" min="0" disabled>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="qtd-itens-${pontoId}">QTD ITENS</label>
+                    <input type="number" class="form-input" id="qtd-itens-${pontoId}" min="0" disabled>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="km-ponto-${pontoId}">QUILOMETRAGEM NO PONTO</label>
+                    <input type="number" class="form-input" id="km-ponto-${pontoId}" min="0" disabled>
+                </div>
+                <div class="button-group">
+                    <button class="btn btn-primary" onclick="registrarChegada('${pontoId}', '${ponto}')" id="btn-chegada-${pontoId}">REGISTRAR CHEGADA</button>
+                    <button class="btn btn-success" onclick="finalizarParada('${pontoId}', '${ponto}')" id="btn-finalizar-${pontoId}" style="display: none;">FINALIZAR PARADA</button>
+                </div>
+            `;
+
+          pontosList.appendChild(pontoCard);
+        });
+      }
+
+      function moverPonto(index, direcao) {
+        if (direcao === "up" && index > 0) {
+          // Mover para cima
+          [pontosAdicionados[index], pontosAdicionados[index - 1]] = [
+            pontosAdicionados[index - 1],
+            pontosAdicionados[index],
+          ];
+        } else if (direcao === "down" && index < pontosAdicionados.length - 1) {
+          // Mover para baixo
+          [pontosAdicionados[index], pontosAdicionados[index + 1]] = [
+            pontosAdicionados[index + 1],
+            pontosAdicionados[index],
+          ];
+        }
+
+        renderizarPontos();
+
+        // Se a corrida já foi iniciada, atualizar no banco
+        if (corridaIniciada) {
+          atualizarPontosNoBanco();
+          salvarAcaoPonto(
+            "REORDENACAO",
+            pontosAdicionados[index],
+            null,
+            null,
+            null
+          );
+        }
+      }
+
+      function atualizarPontosNoBanco() {
+        const usuario = JSON.parse(localStorage.getItem("usuario"));
+        const empresa = usuario.empresa;
+        const setor = usuario.setor;
+
+        // Atualizar a lista de pontos no acompanhamento
+        fetch(
+          `https://lslcda-default-rtdb.firebaseio.com/${empresa}/${setor}/acompanhamentos_caminhoes.json`
+        )
+          .then((response) => response.json())
+          .then((acompanhamentos) => {
+            if (acompanhamentos) {
+              // Encontrar o acompanhamento atual
+              const acompanhamentoIndex = Object.keys(
+                acompanhamentos
+              ).findIndex(
+                (key) =>
+                  acompanhamentos[key] &&
+                  acompanhamentos[key].id === acompanhamentoId
+              );
+
+              if (acompanhamentoIndex !== -1) {
+                const key = Object.keys(acompanhamentos)[acompanhamentoIndex];
+                const acompanhamentoAtualizado = {
+                  ...acompanhamentos[key],
+                  pontos: pontosAdicionados,
+                };
+
+                fetch(
+                  `https://lslcda-default-rtdb.firebaseio.com/${empresa}/${setor}/acompanhamentos_caminhoes/${key}.json`,
+                  {
+                    method: "PUT",
+                    headers: {
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify(acompanhamentoAtualizado),
+                  }
+                )
+                  .then((response) => {
+                    if (response.ok) {
+                      console.log(
+                        "Pontos atualizados no banco:",
+                        pontosAdicionados
+                      );
+                    } else {
+                      console.error(
+                        "Erro ao atualizar pontos no banco:",
+                        response.statusText
+                      );
+                    }
+                  })
+                  .catch((error) => {
+                    console.error("Erro ao atualizar pontos no banco:", error);
+                  });
+              }
+            }
+          })
+          .catch((error) => {
+            console.error("Erro ao buscar acompanhamentos:", error);
+          });
+      }
+
+      function salvarAcaoPonto(
+        acao,
+        ponto,
+        qtdCarros,
+        qtdItens,
+        km,
+        novoPonto = null
+      ) {
+        const usuario = JSON.parse(localStorage.getItem("usuario"));
+        const empresa = usuario.empresa;
+        const setor = usuario.setor;
+        const data = new Date().toLocaleDateString("pt-BR");
+        const horario = new Date().toLocaleTimeString("pt-BR");
+        const veiculo = veiculoSelect.value;
+
+        const acaoPonto = {
+          acao: acao,
+          ponto: ponto,
+          novo_ponto: novoPonto,
+          qtd_carros: qtdCarros,
+          qtd_itens: qtdItens,
+          km: km,
+          data: data,
+          horario: horario,
+          responsavel: usuario.nome,
+          veiculo: veiculo,
+          acompanhamento_id: acompanhamentoId,
+          tipo: "ACOMPANHAMENTO_CAMINHAO",
+          timestamp: new Date().toISOString(),
+        };
+
+        // Salvar ação no Firebase
+        fetch(
+          `https://lslcda-default-rtdb.firebaseio.com/${empresa}/${setor}/gestao_pontos.json`
+        )
+          .then((response) => response.json())
+          .then((acoes) => {
+            const novoId = acoes ? Object.keys(acoes).length : 0;
+
+            fetch(
+              `https://lslcda-default-rtdb.firebaseio.com/${empresa}/${setor}/gestao_pontos/${novoId}.json`,
+              {
+                method: "PUT",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify(acaoPonto),
+              }
+            )
+              .then((response) => {
+                if (response.ok) {
+                  console.log("Ação de gestão salva com sucesso:", acaoPonto);
+                } else {
+                  console.error(
+                    "Erro ao salvar ação de gestão:",
+                    response.statusText
+                  );
+                }
+              })
+              .catch((error) => {
+                console.error("Erro ao salvar ação de gestão:", error);
+              });
+          })
+          .catch((error) => {
+            console.error("Erro ao obter próximo ID:", error);
+          });
+      }
+
+      function registrarChegada(pontoId, pontoNome) {
+        const pontoCard = document.getElementById(`ponto-${pontoId}`);
+        const btnChegada = document.getElementById(`btn-chegada-${pontoId}`);
+        const btnFinalizar = document.getElementById(
+          `btn-finalizar-${pontoId}`
+        );
+        const qtdCarrosInput = document.getElementById(`qtd-carros-${pontoId}`);
+        const qtdItensInput = document.getElementById(`qtd-itens-${pontoId}`);
+        const kmPontoInput = document.getElementById(`km-ponto-${pontoId}`);
+        const statusElement = pontoCard.querySelector(".ponto-status");
+
+        // Habilitar inputs
+        qtdCarrosInput.disabled = false;
+        qtdItensInput.disabled = false;
+        kmPontoInput.disabled = false;
+
+        // Mostrar botão de finalizar
+        btnChegada.style.display = "none";
+        btnFinalizar.style.display = "block";
+
+        // Atualizar status
+        statusElement.textContent = "Em Andamento";
+        statusElement.className = "ponto-status in-progress";
+        pontoCard.classList.add("in-progress");
+
+        // Salvar check de chegada no banco
+        salvarCheckPonto(pontoNome, "CHEGADA", null, null, kmAtual);
+
+        mostrarSnackbar(
+          `Chegada em ${pontoNome} registrada. Preencha os dados da parada.`
+        );
+      }
+
+      function finalizarParada(pontoId, pontoNome) {
+        const pontoCard = document.getElementById(`ponto-${pontoId}`);
+        const qtdCarros = document.getElementById(
+          `qtd-carros-${pontoId}`
+        ).value;
+        const qtdItens = document.getElementById(`qtd-itens-${pontoId}`).value;
+        const kmPonto = document.getElementById(`km-ponto-${pontoId}`).value;
+
+        if (!qtdCarros || !qtdItens || !kmPonto) {
+          mostrarSnackbar("Preencha todos os campos para finalizar a parada.");
+          return;
+        }
+
+        // Desabilitar inputs
+        document.getElementById(`qtd-carros-${pontoId}`).disabled = true;
+        document.getElementById(`qtd-itens-${pontoId}`).disabled = true;
+        document.getElementById(`km-ponto-${pontoId}`).disabled = true;
+
+        // Esconder botão de finalizar
+        document.getElementById(`btn-finalizar-${pontoId}`).style.display =
+          "none";
+
+        // Marcar como completo
+        pontoCard.classList.remove("in-progress");
+        pontoCard.classList.add("completed");
+        const statusElement = pontoCard.querySelector(".ponto-status");
+        statusElement.textContent = "Concluído";
+        statusElement.className = "ponto-status completed";
+
+        // Atualizar KM atual
+        kmAtual = parseInt(kmPonto);
+
+        // Salvar dados completos do ponto
+        salvarCheckPonto(
+          pontoNome,
+          "FINALIZADO",
+          parseInt(qtdCarros),
+          parseInt(qtdItens),
+          parseInt(kmPonto)
+        );
+        salvarResumoPonto(
+          pontoNome,
+          parseInt(qtdCarros),
+          parseInt(qtdItens),
+          parseInt(kmPonto)
+        );
+
+        // Atualizar timeline
+        atualizarTimeline(
+          pontoNome,
+          "finalizado",
+          qtdCarros,
+          qtdItens,
+          kmPonto
+        );
+
+        mostrarSnackbar(`Parada em ${pontoNome} finalizada com sucesso.`);
+      }
+
+      function salvarCheckPonto(ponto, status, qtdCarros, qtdItens, km) {
+        const usuario = JSON.parse(localStorage.getItem("usuario"));
+        const empresa = usuario.empresa;
+        const setor = usuario.setor;
+        const data = new Date().toLocaleDateString("pt-BR");
+        const horario = new Date().toLocaleTimeString("pt-BR");
+        const veiculo = veiculoSelect.value;
+
+        const checkPonto = {
+          ponto: ponto,
+          status: status,
+          qtd_carros: qtdCarros,
+          qtd_itens: qtdItens,
+          km: parseInt(km),
+          data: data,
+          horario: horario,
+          responsavel: usuario.nome,
+          veiculo: veiculo,
+          tipo: "ACOMPANHAMENTO_CAMINHAO",
+          timestamp: new Date().toISOString(),
+        };
+
+        // Salvar no Firebase - tabela de checks em tempo real
+        fetch(
+          `https://lslcda-default-rtdb.firebaseio.com/${empresa}/${setor}/checks_tempo_real.json`
+        )
+          .then((response) => response.json())
+          .then((checks) => {
+            const novoId = checks ? Object.keys(checks).length : 0;
+
+            fetch(
+              `https://lslcda-default-rtdb.firebaseio.com/${empresa}/${setor}/checks_tempo_real/${novoId}.json`,
+              {
+                method: "PUT",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify(checkPonto),
+              }
+            )
+              .then((response) => {
+                if (response.ok) {
+                  console.log("Check do ponto salvo com sucesso:", checkPonto);
+                } else {
+                  console.error(
+                    "Erro ao salvar check do ponto:",
+                    response.statusText
+                  );
+                }
+              })
+              .catch((error) => {
+                console.error("Erro ao salvar check do ponto:", error);
+              });
+          })
+          .catch((error) => {
+            console.error("Erro ao obter próximo ID:", error);
+          });
+      }
+
+      function salvarResumoPonto(ponto, qtdCarros, qtdItens, km) {
+        const usuario = JSON.parse(localStorage.getItem("usuario"));
+        const empresa = usuario.empresa;
+        const setor = usuario.setor;
+        const data = new Date().toLocaleDateString("pt-BR");
+        const horario = new Date().toLocaleTimeString("pt-BR");
+        const veiculo = veiculoSelect.value;
+
+        const resumoPonto = {
+          ponto: ponto,
+          qtd_carros: qtdCarros,
+          qtd_itens: qtdItens,
+          km: parseInt(km),
+          data: data,
+          horario: horario,
+          responsavel: usuario.nome,
+          veiculo: veiculo,
+          acompanhamento_id: acompanhamentoId,
+          tipo: "ACOMPANHAMENTO_CAMINHAO",
+        };
+
+        // Salvar no Firebase - tabela de resumo
+        fetch(
+          `https://lslcda-default-rtdb.firebaseio.com/${empresa}/${setor}/acompanhamento_caminhoes.json`
+        )
+          .then((response) => response.json())
+          .then((acompanhamentos) => {
+            const novoId = acompanhamentos
+              ? Object.keys(acompanhamentos).length
+              : 0;
+
+            fetch(
+              `https://lslcda-default-rtdb.firebaseio.com/${empresa}/${setor}/acompanhamento_caminhoes/${novoId}.json`,
+              {
+                method: "PUT",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify(resumoPonto),
+              }
+            )
+              .then((response) => {
+                if (response.ok) {
+                  console.log(
+                    "Resumo do ponto salvo com sucesso:",
+                    resumoPonto
+                  );
+                } else {
+                  console.error(
+                    "Erro ao salvar resumo do ponto:",
+                    response.statusText
+                  );
+                }
+              })
+              .catch((error) => {
+                console.error("Erro ao salvar resumo do ponto:", error);
+              });
+          })
+          .catch((error) => {
+            console.error("Erro ao obter próximo ID:", error);
+          });
+      }
+
+      function atualizarTimeline(ponto, status, qtdCarros, qtdItens, km) {
+        const timelineItem = document.createElement("div");
+        timelineItem.className = "timeline-item";
+
+        const markerClass =
+          status === "finalizado"
+            ? "timeline-marker completed"
+            : "timeline-marker";
+
+        timelineItem.innerHTML = `
+            <div class="${markerClass}"></div>
+            <div class="timeline-content">
+                <div class="timeline-ponto">${ponto}</div>
+                <div class="timeline-info">
+                    ${status === "finalizado" ? "Finalizado" : "Em Andamento"} 
+                    | Carros: ${qtdCarros} | Itens: ${qtdItens} | KM: ${km}
+                </div>
+                <div class="timeline-info" style="font-size: 10px;">
+                    ${new Date().toLocaleTimeString("pt-BR")}
+                </div>
+            </div>
+        `;
+
+        timeline.appendChild(timelineItem);
+        timelineCard.style.display = "block";
+
+        // Rolagem automática para o último item
+        timelineItem.scrollIntoView({ behavior: "smooth" });
+      }
+
+      function abrirModalReordenar() {
+        const reorderList = document.getElementById("reorderList");
+        reorderList.innerHTML = "";
+
+        pontosAdicionados.forEach((ponto, index) => {
+          const pontoItem = document.createElement("div");
+          pontoItem.className = "ponto-item";
+          pontoItem.draggable = true;
+          pontoItem.dataset.index = index;
+
+          pontoItem.innerHTML = `
+                <div class="drag-handle">
+                    <i class="fas fa-grip-vertical"></i>
+                </div>
+                <div class="ponto-text">${ponto}</div>
+            `;
+
+          // Configurar eventos de drag and drop
+          pontoItem.addEventListener("dragstart", handleDragStart);
+          pontoItem.addEventListener("dragover", handleDragOver);
+          pontoItem.addEventListener("drop", handleDrop);
+          pontoItem.addEventListener("dragend", handleDragEnd);
+
+          reorderList.appendChild(pontoItem);
+        });
+
+        document.getElementById("modalReordenar").style.display = "flex";
+      }
+
+      function fecharModalReordenar() {
+        document.getElementById("modalReordenar").style.display = "none";
+      }
+
+      function abrirModalAdicionar() {
+        document.getElementById("modalAdicionar").style.display = "flex";
+      }
+
+      function fecharModalAdicionar() {
+        document.getElementById("modalAdicionar").style.display = "none";
+      }
+
+      function adicionarPontoModal() {
+        const novoPonto = document.getElementById("novoPontoModal").value;
+        if (novoPonto) {
+          adicionarPontoNaLista(novoPonto);
+          fecharModalAdicionar();
+          document.getElementById("novoPontoModal").value = "";
+        }
+      }
+
+      function salvarNovaOrdem() {
+        // A nova ordem já foi aplicada durante o drag and drop
+        fecharModalReordenar();
+        mostrarSnackbar("Ordem dos pontos atualizada com sucesso!");
+      }
+
+      // Funções de Drag and Drop
+      function handleDragStart(e) {
+        draggedItem = this;
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/html", this.innerHTML);
+        this.classList.add("dragging");
+      }
+
+      function handleDragOver(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+      }
+
+      function handleDrop(e) {
+        e.preventDefault();
+        if (draggedItem !== this) {
+          const fromIndex = parseInt(draggedItem.dataset.index);
+          const toIndex = parseInt(this.dataset.index);
+
+          // Reordenar o array
+          const [removed] = pontosAdicionados.splice(fromIndex, 1);
+          pontosAdicionados.splice(toIndex, 0, removed);
+
+          // Atualizar a visualização
+          abrirModalReordenar();
+
+          // Se a corrida já foi iniciada, atualizar no banco
+          if (corridaIniciada) {
+            atualizarPontosNoBanco();
+            salvarAcaoPonto("REORDENACAO", removed, null, null, null);
+          }
+        }
+      }
+
+      function handleDragEnd() {
+        this.classList.remove("dragging");
+      }
+
+      function iniciarAcompanhamento() {
+        if (veiculoEmUso) {
+          mostrarSnackbar(
+            `O veículo já está em uso por ${responsavelVeiculo}.`
+          );
+          return;
+        }
+
+        const usuario = JSON.parse(localStorage.getItem("usuario"));
+        const veiculo = veiculoSelect.value;
+        const quilometragem = quilometragemInput.value;
+        const responsavel = usuario.nome;
+        const data = new Date().toLocaleDateString("pt-BR");
+        const horario_inicio = new Date().toLocaleTimeString("pt-BR");
+
+        if (veiculo && quilometragem && pontosAdicionados.length > 0) {
+          acompanhamentoId = Date.now().toString(); // ID único para o acompanhamento
+          corridaIniciada = true;
+
+          const novoAcompanhamento = {
+            id: acompanhamentoId,
+            data,
+            horario_inicio,
+            km_inicial: parseInt(quilometragem),
+            responsavel,
+            veiculo: veiculo,
+            pontos: pontosAdicionados,
+            status: "EM ANDAMENTO",
+            tipo: "ACOMPANHAMENTO_CAMINHAO",
+            km_atual: parseInt(quilometragem),
+          };
+
+          // Desabilitar inputs iniciais e mostrar seção de gerenciamento
+          veiculoSelect.disabled = true;
+          quilometragemInput.disabled = true;
+          addPontoSection.style.display = "none";
+          gerenciarPontosCard.style.display = "block";
+          btnIniciarAcompanhamento.disabled = true;
+          loadingSpinner.style.display = "flex";
+
+          // Salvar acompanhamento no Firebase
+          fetch(
+            `https://lslcda-default-rtdb.firebaseio.com/${usuario.empresa}/${usuario.setor}/acompanhamentos_caminhoes.json`
+          )
+            .then((response) => response.json())
+            .then((acompanhamentos) => {
+              const novoId = acompanhamentos
+                ? Object.keys(acompanhamentos).length
+                : 0;
+
+              fetch(
+                `https://lslcda-default-rtdb.firebaseio.com/${usuario.empresa}/${usuario.setor}/acompanhamentos_caminhoes/${novoId}.json`,
+                {
+                  method: "PUT",
+                  headers: {
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify(novoAcompanhamento),
+                }
+              )
+                .then((response) => {
+                  if (response.ok) {
+                    console.log(
+                      "Acompanhamento salvo com sucesso:",
+                      novoAcompanhamento
+                    );
+
+                    // Atualizar dados do usuário
+                    const usuarioAtualizado = {
+                      em_acompanhamento: true,
+                      veiculo_em_uso: veiculo,
+                      acompanhamento_id: acompanhamentoId,
+                    };
+
+                    // Atualizar localStorage
+                    usuario.em_acompanhamento = true;
+                    usuario.veiculo_em_uso = veiculo;
+                    usuario.acompanhamento_id = acompanhamentoId;
+                    localStorage.setItem("usuario", JSON.stringify(usuario));
+
+                    // Atualizar no Firebase
+                    fetch(
+                      `https://lslcda-default-rtdb.firebaseio.com/${usuario.empresa}/user/${usuario.mat}.json`,
+                      {
+                        method: "PATCH",
+                        headers: {
+                          "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify(usuarioAtualizado),
+                      }
+                    )
+                      .then((response) => {
+                        if (response.ok) {
+                          console.log(
+                            "Dados do usuário atualizados com sucesso:",
+                            usuarioAtualizado
+                          );
+
+                          // Esconder loading e mostrar mensagem de sucesso
+                          loadingSpinner.style.display = "none";
+                          mostrarSnackbar(
+                            "Acompanhamento iniciado com sucesso!"
+                          );
+
+                          // Mostrar timeline
+                          timelineCard.style.display = "block";
+                        } else {
+                          console.error(
+                            "Erro ao atualizar os dados do usuário:",
+                            response.statusText
+                          );
+                          mostrarSnackbar(
+                            "Erro ao iniciar o acompanhamento. Tente novamente."
+                          );
+                          reativarFormulario();
+                        }
+                      })
+                      .catch((error) => {
+                        console.error(
+                          "Erro ao atualizar os dados do usuário:",
+                          error
+                        );
+                        mostrarSnackbar(
+                          "Erro ao iniciar o acompanhamento. Tente novamente."
+                        );
+                        reativarFormulario();
+                      });
+                  } else {
+                    console.error(
+                      "Erro ao salvar o acompanhamento:",
+                      response.statusText
+                    );
+                    mostrarSnackbar(
+                      "Erro ao iniciar o acompanhamento. Tente novamente."
+                    );
+                    reativarFormulario();
+                  }
+                })
+                .catch((error) => {
+                  console.error("Erro ao salvar o acompanhamento:", error);
+                  mostrarSnackbar(
+                    "Erro ao iniciar o acompanhamento. Tente novamente."
+                  );
+                  reativarFormulario();
+                });
+            })
+            .catch((error) => {
+              console.error("Erro ao obter o próximo ID:", error);
+              mostrarSnackbar(
+                "Erro ao iniciar o acompanhamento. Tente novamente."
+              );
+              reativarFormulario();
+            });
+        } else {
+          mostrarSnackbar(
+            "Preencha todos os campos e adicione pelo menos um ponto."
+          );
+        }
+      }
+
+      function reativarFormulario() {
+        veiculoSelect.disabled = false;
+        quilometragemInput.disabled = false;
+        addPontoSection.style.display = "block";
+        gerenciarPontosCard.style.display = "none";
+        btnIniciarAcompanhamento.disabled = false;
+        loadingSpinner.style.display = "none";
+        corridaIniciada = false;
+      }
+
+      function mostrarSnackbar(mensagem) {
+        snackbar.textContent = mensagem;
+        snackbar.className = "snackbar show";
+        setTimeout(() => {
+          snackbar.className = snackbar.className.replace("show", "");
+        }, 3000);
+      }
+    </script>
+  </body>
+</html>

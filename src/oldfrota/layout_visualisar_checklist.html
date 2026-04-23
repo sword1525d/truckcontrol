@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0f2954">
+    <title>FROTACONTROL - Visualizar Checklists</title>
+    <link href="https://fonts.googleapis.com/css2?family=Questrial&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        html {
+            background: #0f2954;
+        }
+
+        .honda-theme html {
+            background: #c62828;
+        }
+
+        body {
+            font-family: 'Questrial', sans-serif;
+            background: transparent;
+            min-height: 100vh;
+            min-height: 100dvh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        .background-fill {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: #0f2954;
+            z-index: -1;
+        }
+
+        .honda-theme .background-fill {
+            background: #c62828;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            min-height: 100dvh;
+            width: 100%;
+        }
+
+        .header {
+            background-color: #0f2954;
+            color: white;
+            padding: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .honda-theme .header {
+            background-color: #c62828;
+        }
+
+        .header-button {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 50%;
+            transition: background-color 0.2s ease;
+        }
+
+        .header-button:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .header-button img {
+            width: 24px;
+            height: 24px;
+            filter: brightness(0) invert(1);
+        }
+
+        .date-selector {
+            display: flex;
+            align-items: center;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 20px;
+            transition: background-color 0.2s ease;
+        }
+
+        .date-selector:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .date-selector img {
+            width: 20px;
+            margin-right: 8px;
+            filter: brightness(0) invert(1);
+        }
+
+        .form-container {
+            background: white;
+            border-radius: 24px 24px 0 0;
+            padding: 20px 15px;
+            flex: 1;
+            box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.1);
+            position: relative;
+            width: 100%;
+            overflow-y: auto;
+            margin-top: -20px;
+            border: 10px solid transparent;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+            background-color: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #e0e0e0;
+            font-size: 14px;
+        }
+
+        th {
+            background-color: #0f2954;
+            color: white;
+            font-weight: 500;
+            position: sticky;
+            top: 0;
+        }
+
+        .honda-theme th {
+            background-color: #c62828;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+        tr:hover {
+            background-color: #f0f0f0;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background-color: white;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 400px;
+            padding: 25px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            position: relative;
+        }
+
+        .close-modal {
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            font-size: 24px;
+            color: #757575;
+            cursor: pointer;
+        }
+
+        .close-modal:hover {
+            color: #333;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 8px;
+            color: #4b4b4b;
+            font-size: 14px;
+        }
+
+        .form-input, .form-select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            font-family: 'Questrial', sans-serif;
+        }
+
+        .form-input:focus, .form-select:focus {
+            border-color: #0f2954;
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(15, 41, 84, 0.1);
+        }
+
+        .honda-theme .form-input:focus,
+        .honda-theme .form-select:focus {
+            border-color: #c62828;
+            box-shadow: 0 0 0 3px rgba(198, 40, 40, 0.1);
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            margin: 15px 0;
+        }
+
+        .checkbox-group input {
+            margin-right: 10px;
+        }
+
+        .modal-button {
+            width: 100%;
+            padding: 14px;
+            background-color: #0f2954;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-family: 'Questrial', sans-serif;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: background-color 0.2s;
+        }
+
+        .honda-theme .modal-button {
+            background-color: #c62828;
+        }
+
+        .modal-button:hover {
+            background-color: #1a3a6e;
+        }
+
+        .honda-theme .modal-button:hover {
+            background-color: #8e0000;
+        }
+
+        .loading-spinner {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1001;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: #0f2954;
+            animation: spin 1s linear infinite;
+        }
+
+        .honda-theme .spinner {
+            border-top-color: #c62828;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Estilos para o botão de visualizar imagens */
+        .view-images-btn {
+            background-color: #0f2954;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 14px;
+            font-family: 'Questrial', sans-serif;
+            transition: background-color 0.2s;
+        }
+        
+        .honda-theme .view-images-btn {
+            background-color: #c62828;
+        }
+        
+        .view-images-btn:hover {
+            background-color: #1a3a6e;
+        }
+        
+        .honda-theme .view-images-btn:hover {
+            background-color: #8e0000;
+        }
+
+        /* Estilos para o modal de imagens */
+        .images-modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.9);
+            overflow: auto;
+        }
+        
+        .images-modal-content {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .image-container {
+            width: 100%;
+            max-width: 90vw;
+            height: 80vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+        
+        .image-slide {
+            display: none;
+            width: 100%;
+            height: 100%;
+            text-align: center;
+        }
+        
+        .image-slide.active {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .image-slide img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+        
+        .close-images {
+            position: absolute;
+            top: 20px;
+            right: 35px;
+            color: #f1f1f1;
+            font-size: 40px;
+            font-weight: bold;
+            cursor: pointer;
+            z-index: 1001;
+        }
+        
+        .close-images:hover {
+            color: #bbb;
+        }
+        
+        .image-number {
+            color: #f2f2f2;
+            font-size: 16px;
+            padding: 10px;
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(0, 0, 0, 0.5);
+            border-radius: 5px;
+        }
+        
+        .image-caption {
+            color: #ccc;
+            padding: 10px;
+            text-align: center;
+        }
+        
+        .prev, .next {
+            cursor: pointer;
+            position: fixed;
+            top: 50%;
+            transform: translateY(-50%);
+            width: auto;
+            padding: 16px;
+            color: white;
+            font-weight: bold;
+            font-size: 32px;
+            transition: 0.3s;
+            border-radius: 0 3px 3px 0;
+            user-select: none;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1001;
+        }
+        
+        .prev {
+            left: 0;
+            border-radius: 0 8px 8px 0;
+        }
+        
+        .next {
+            right: 0;
+            border-radius: 8px 0 0 8px;
+        }
+        
+        .prev:hover, .next:hover {
+            background-color: rgba(0, 0, 0, 0.8);
+        }
+        
+        .dots-container {
+            text-align: center;
+            padding: 20px;
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+        }
+        
+        .dot {
+            cursor: pointer;
+            height: 15px;
+            width: 15px;
+            margin: 0 5px;
+            background-color: #bbb;
+            border-radius: 50%;
+            display: inline-block;
+            transition: background-color 0.6s ease;
+        }
+        
+        .dot.active, .dot:hover {
+            background-color: #717171;
+        }
+
+        /* Responsividade */
+        @media (max-width: 600px) {
+            th, td {
+                padding: 10px 12px;
+                font-size: 13px;
+            }
+            
+            .view-images-btn {
+                padding: 6px 10px;
+                font-size: 12px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            th, td {
+                padding: 8px 10px;
+                font-size: 12px;
+            }
+            
+            .form-container {
+                padding: 15px 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="background-fill"></div>
+    <div class="container">
+        <div class="header">
+            <button class="header-button" onclick="window.history.back()">
+                <img src="assets/icon_arrow.svg" alt="Voltar">
+            </button>
+            <div class="date-selector" onclick="openModal()">
+                <img src="assets/icon_calendar.svg" alt="Calendário">
+                <span id="currentDateText"></span>
+            </div>
+        </div>
+
+        <div class="form-container">
+            <table id="checklistsTable">
+                <thead>
+                    <tr>
+                        <th>DATA</th>
+                        <th>RESPONSÁVEL</th>
+                        <th>FRENTE</th>
+                        <th>F. DIREITO</th>
+                        <th>F. ESQUERDO</th>
+                        <th>TRÁS</th>
+                        <th>T. DIREITO</th>
+                        <th>T. ESQUERDO</th>
+                        <th>HORA</th>
+                        <th>IMAGENS</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Dados dos checklists serão inseridos aqui -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Modal de seleção de período -->
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeModal()">&times;</span>
+            <h2 style="margin-bottom: 20px; color: #333;">Filtrar Checklists</h2>
+            
+            <div class="form-group">
+                <label for="day" class="form-label">Data:</label>
+                <input type="date" id="day" class="form-input">
+            </div>
+            
+            <div class="checkbox-group">
+                <input type="checkbox" id="monthToggle">
+                <label for="monthToggle">Mostrar mês todo</label>
+            </div>
+            
+            <div class="form-group">
+                <label for="responsavel" class="form-label">Responsável:</label>
+                <select id="responsavel" class="form-select">
+                    <option value="">Todos</option>
+                </select>
+            </div>
+            
+            <button class="modal-button" onclick="loadData(); closeModal();">Carregar Dados</button>
+        </div>
+    </div>
+
+    <!-- Modal de visualização de imagens -->
+    <div id="imagesModal" class="images-modal">
+        <span class="close-images" onclick="closeImagesModal()">&times;</span>
+        <div class="images-modal-content">
+            <div class="image-container">
+                <div class="image-number"></div>
+                <div class="image-slide active">
+                    <img id="modalImage" src="">
+                    <div class="image-caption"></div>
+                </div>
+                <a class="prev" onclick="plusSlides(-1)">&#10094;</a>
+                <a class="next" onclick="plusSlides(1)">&#10095;</a>
+            </div>
+            <div class="dots-container">
+                <!-- Os dots serão adicionados dinamicamente pelo JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    <div class="loading-spinner" id="loadingSpinner">
+        <div class="spinner"></div>
+    </div>
+
+    <script>
+        // Variáveis globais para controle das imagens
+        let currentImages = [];
+        let currentSlideIndex = 1;
+        let checklistData = {};
+
+        document.addEventListener("DOMContentLoaded", () => {
+            const usuario = JSON.parse(localStorage.getItem('usuario'));
+            if (usuario && usuario.empresa === 'HONDA') {
+                document.body.classList.add('honda-theme');
+                document.querySelector('meta[name="theme-color"]').content = '#c62828';
+            } else if (usuario && usuario.empresa === 'LSL') {
+                document.body.classList.remove('honda-theme');
+                document.querySelector('meta[name="theme-color"]').content = '#0f2954';
+            }
+
+            const currentDate = new Date().toISOString().split('T')[0];
+            document.getElementById('day').value = currentDate;
+            updateCurrentDateText(currentDate, false);
+            loadData();
+        });
+
+        function loadData() {
+            const spinner = document.getElementById('loadingSpinner');
+            spinner.style.display = 'flex';
+
+            const usuario = JSON.parse(localStorage.getItem('usuario'));
+            const empresa = usuario.empresa;
+            const setor = usuario.setor;
+
+            const selectedDay = document.getElementById('day').value;
+            const showMonth = document.getElementById('monthToggle').checked;
+            const selectedResponsavel = document.getElementById('responsavel').value;
+
+            const [year, month] = selectedDay.split('-');
+            const formattedMonth = month.padStart(2, '0');
+            const formattedYear = year;
+
+            fetch(`https://lslcda-default-rtdb.firebaseio.com/${empresa}/${setor}/relatorio.json`)
+                .then(response => response.json())
+                .then(relatorios => {
+                    if (!relatorios) {
+                        console.error('Nenhum checklist encontrado.');
+                        spinner.style.display = 'none';
+                        return;
+                    }
+
+                    const tableBody = document.getElementById('checklistsTable').getElementsByTagName('tbody')[0];
+                    tableBody.innerHTML = '';
+
+                    const responsavelSet = new Set();
+
+                    checklistData = relatorios;
+
+                    for (const id in relatorios) {
+                        const checklist = relatorios[id];
+                        if (checklist) {
+                            const data = checklist.data || checklist.DATA || '';
+                            const responsavel = checklist.responsável || checklist.RESPONSAVEL || '';
+                            const hora = checklist.hora || checklist.HORA || '';
+                            const anexos = checklist.anexos || checklist.ANEXOS || [];
+
+                            if (showMonth) {
+                                if (data) {
+                                    const [day, checklistMonth, checklistYear] = data.split('/');
+                                    if (checklistMonth === formattedMonth && checklistYear === formattedYear) {
+                                        responsavelSet.add(responsavel);
+                                        if (!selectedResponsavel || responsavel === selectedResponsavel) {
+                                            addRowToTable(tableBody, checklist, id, data, responsavel, hora, anexos);
+                                        }
+                                    }
+                                }
+                            } else if (data && data === selectedDay.split('-').reverse().join('/')) {
+                                responsavelSet.add(responsavel);
+                                if (!selectedResponsavel || responsavel === selectedResponsavel) {
+                                    addRowToTable(tableBody, checklist, id, data, responsavel, hora, anexos);
+                                }
+                            }
+                        }
+                    }
+
+                    updateResponsavelOptions(responsavelSet);
+                    updateCurrentDateText(selectedDay, showMonth);
+                    spinner.style.display = 'none';
+                })
+                .catch(error => {
+                    console.error('Erro ao carregar dados dos checklists:', error);
+                    spinner.style.display = 'none';
+                });
+        }
+
+        function addRowToTable(tableBody, checklist, checklistId, data, responsavel, hora, anexos) {
+            const row = tableBody.insertRow();
+            row.insertCell(0).textContent = data;
+            row.insertCell(1).textContent = abreviarNome(responsavel);
+
+            row.insertCell(2).textContent = checklist.FRENTE || checklist.fronte || '';
+            row.insertCell(3).textContent = checklist.F_DIREITO || checklist.f_direito || '';
+            row.insertCell(4).textContent = checklist.F_ESQUERDO || checklist.f_esquerdo || '';
+            row.insertCell(5).textContent = checklist.TRAS || checklist.tras || '';
+            row.insertCell(6).textContent = checklist.T_DIREITO || checklist.t_direito || '';
+            row.insertCell(7).textContent = checklist.T_ESQUERDO || checklist.t_esquerdo || '';
+
+            row.insertCell(8).textContent = hora;
+
+            const imagesCell = row.insertCell(9);
+            if (anexos && anexos.length > 0) {
+                const viewBtn = document.createElement('button');
+                viewBtn.className = 'view-images-btn';
+                viewBtn.textContent = 'Ver (' + anexos.length + ')';
+                viewBtn.onclick = function() {
+                    showImagesModal(checklistId);
+                };
+                imagesCell.appendChild(viewBtn);
+            } else {
+                imagesCell.textContent = 'Nenhuma';
+            }
+        }
+
+        function abreviarNome(nome) {
+            if (!nome) return '';
+            const partes = nome.split(' ');
+            if (partes.length > 1) {
+                return `${partes[0]} ${partes[1][0]}.`;
+            }
+            return nome;
+        }
+
+        function updateResponsavelOptions(responsavelSet) {
+            const responsavelSelect = document.getElementById('responsavel');
+            responsavelSelect.innerHTML = '<option value="">Todos</option>';
+            responsavelSet.forEach(responsavel => {
+                if (responsavel) {
+                    const option = document.createElement('option');
+                    option.value = responsavel;
+                    option.textContent = responsavel;
+                    responsavelSelect.appendChild(option);
+                }
+            });
+        }
+
+        function openModal() {
+            document.getElementById('modal').style.display = 'flex';
+        }
+
+        function closeModal() {
+            document.getElementById('modal').style.display = 'none';
+        }
+
+        function updateCurrentDateText(day, showMonth) {
+            const currentDateText = showMonth
+                ? `${day.split('-')[1]}/${day.split('-')[0]}`
+                : day.split('-').reverse().join('/');
+            document.getElementById('currentDateText').textContent = currentDateText;
+        }
+
+        // Funções para o modal de imagens
+        function showImagesModal(checklistId) {
+            const checklist = checklistData[checklistId];
+            const imagens = checklist.anexos || checklist.ANEXOS || [];
+            if (!checklist || !imagens.length) {
+                alert('Nenhuma imagem disponível para este checklist.');
+                return;
+            }
+
+            currentImages = imagens;
+            currentSlideIndex = 1;
+
+            const dotsContainer = document.querySelector('.dots-container');
+            dotsContainer.innerHTML = '';
+            for (let i = 0; i < currentImages.length; i++) {
+                const dot = document.createElement('span');
+                dot.className = 'dot';
+                dot.onclick = function() { currentSlide(i + 1); };
+                dotsContainer.appendChild(dot);
+            }
+
+            document.getElementById('imagesModal').style.display = 'flex';
+            showSlide(currentSlideIndex);
+        }
+
+        function closeImagesModal() {
+            document.getElementById('imagesModal').style.display = 'none';
+        }
+
+        function plusSlides(n) {
+            showSlide(currentSlideIndex += n);
+        }
+
+        function currentSlide(n) {
+            showSlide(currentSlideIndex = n);
+        }
+
+        function showSlide(n) {
+            const dots = document.getElementsByClassName('dot');
+            if (n > currentImages.length) { currentSlideIndex = 1; }
+            if (n < 1) { currentSlideIndex = currentImages.length; }
+            const modalImg = document.getElementById('modalImage');
+            modalImg.src = currentImages[currentSlideIndex - 1];
+            const numberText = document.querySelector('.image-number');
+            numberText.textContent = `${currentSlideIndex} / ${currentImages.length}`;
+            for (let i = 0; i < dots.length; i++) {
+                dots[i].className = dots[i].className.replace(' active', '');
+            }
+            if (dots[currentSlideIndex - 1]) {
+                dots[currentSlideIndex - 1].className += ' active';
+            }
+        }
+
+        document.addEventListener('click', function(event) {
+            if (event.target === document.getElementById('imagesModal')) {
+                closeImagesModal();
+            }
+        });
+
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape' && document.getElementById('imagesModal').style.display === 'flex') {
+                closeImagesModal();
+            }
+        });
+    </script>
+</body>
+</html>

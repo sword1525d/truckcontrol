@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0f2954">
+    <title>FROTACONTROL - Consultar Veículos</title>
+    <link rel="manifest" href="manifest.json">
+    <link href="https://fonts.googleapis.com/css2?family=Questrial&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: 'Questrial', sans-serif;
+            background: #2563eb;
+            min-height: 100vh;
+            min-height: 100dvh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            min-height: 100dvh;
+            width: 100%;
+        }
+
+        .header {
+            background-color: #0f2954;
+            color: white;
+            padding: 15px;
+            display: flex;
+            justify-content: flex-start;
+            align-items: center;
+        }
+
+        .back-button {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 50%;
+            transition: background-color 0.2s ease;
+        }
+
+        .back-button:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .back-button img {
+            width: 24px;
+            height: 24px;
+            filter: brightness(0) invert(1);
+        }
+
+        .form-container {
+            background: white;
+            border-radius: 24px 24px 0 0;
+            padding: 36px 20px 20px;
+            flex: 1;
+            box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.1);
+            position: relative;
+            width: 100%;
+            overflow-y: auto;
+            margin-top: -20px;
+        }
+
+        .form-title {
+            color: #4b4b4b;
+            text-align: center;
+            margin-bottom: 25px;
+            font-size: 1.4rem;
+        }
+
+        .form-group {
+            position: relative;
+            margin-bottom: 25px;
+        }
+
+        .form-input, .form-select {
+            width: 100%;
+            padding: 14px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            font-family: 'Questrial', sans-serif;
+            background: transparent;
+            transition: all 0.2s ease;
+            outline: none;
+            -webkit-appearance: none;
+            appearance: none;
+            height: 58px;
+        }
+
+        .form-input:focus, .form-select:focus {
+            border-color: #0f2954;
+            border-width: 2px;
+            padding: 13px;
+            box-shadow: 0 0 0 4px rgba(15, 41, 84, 0.1);
+        }
+
+        .form-label {
+            position: absolute;
+            left: 14px;
+            top: 16px;
+            color: #757575;
+            font-size: 16px;
+            transition: all 0.2s ease;
+            pointer-events: none;
+            background: white;
+            padding: 0 4px;
+            transform-origin: left center;
+        }
+
+        .form-input:focus + .form-label,
+        .form-input:not(:placeholder-shown) + .form-label,
+        .form-select:focus + .form-label,
+        .form-select:not([value=""]) + .form-label {
+            transform: translateY(-28px) scale(0.875);
+            color: #0f2954;
+            font-weight: 500;
+        }
+
+        .form-select {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23757575' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: calc(100% - 14px) center;
+            padding-right: 36px;
+        }
+
+        .form-select:focus {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%230f2954' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+        }
+
+        .form-select option {
+            background-color: white;
+            color: #333;
+            padding: 12px;
+        }
+
+        .vehicle-image {
+            width: 100%;
+            max-width: 300px;
+            margin: 0 auto 20px;
+            display: block;
+            border-radius: 8px;
+        }
+
+        .vehicle-info {
+            background-color: #f8f8f8;
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 20px;
+            width: 100%;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+
+        .vehicle-info div {
+            margin-bottom: 12px;
+            color: #4b4b4b;
+            font-size: 15px;
+        }
+
+        .km-container {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .km-box {
+            background-color: #16a34a;
+            color: white !important;
+            padding: 6px 10px;
+            border-radius: 6px;
+            margin-right: 10px;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        .status-green {
+            color: #16a34a;
+            font-weight: bold;
+        }
+
+        .status-red {
+            color: #dc2626;
+            font-weight: bold;
+        }
+
+        /* Honda Theme */
+        .honda-theme {
+            --color-primary: #c62828;
+            --color-primary-dark: #8e0000;
+        }
+
+        .honda-theme .header {
+            background-color: var(--color-primary) !important;
+        }
+
+        .honda-theme .form-input:focus,
+        .honda-theme .form-select:focus {
+            border-color: var(--color-primary);
+            box-shadow: 0 0 0 4px rgba(198, 40, 40, 0.1);
+        }
+
+        .honda-theme .form-input:focus + .form-label,
+        .honda-theme .form-input:not(:placeholder-shown) + .form-label,
+        .honda-theme .form-select:focus + .form-label,
+        .honda-theme .form-select:not([value=""]) + .form-label {
+            color: var(--color-primary);
+        }
+
+        .honda-theme .form-select:focus {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23c62828' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+        }
+
+        .honda-theme .km-box {
+            background-color: var(--color-primary);
+        }
+
+        .honda-theme .status-green {
+            color: var(--color-primary);
+        }
+
+        .honda-theme .vehicle-info {
+            background-color: #f9eaea;
+        }
+
+        /* Safe area adjustments */
+        @supports (padding: max(0px)) {
+            .header {
+                padding-top: max(15px, env(safe-area-inset-top));
+                padding-bottom: max(15px, env(safe-area-inset-bottom));
+            }
+            
+            .form-container {
+                padding-bottom: max(20px, env(safe-area-inset-bottom) + 20px);
+            }
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 480px) {
+            .form-container {
+                padding: 25px 15px 15px;
+            }
+            
+            .form-input, .form-select {
+                height: 50px;
+                font-size: 15px;
+                padding: 12px;
+            }
+            
+            .vehicle-info {
+                padding: 15px;
+            }
+            
+            .vehicle-info div {
+                font-size: 14px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <button class="back-button" onclick="window.history.back()">
+                <img src="assets/icon_arrow.svg" alt="Voltar">
+            </button>
+        </div>
+
+        <div class="form-container">
+            <div id="vehicleImageContainer"></div>
+            
+            <div class="form-group">
+                <select id="veiculo" class="form-select" required>
+                    <option value="" disabled selected hidden></option>
+                </select>
+                <label class="form-label" for="veiculo">Veículo</label>
+            </div>
+            
+            <div id="vehicleInfoContainer" class="vehicle-info"></div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            // Verifica a empresa do usuário e aplica o tema correspondente
+            const usuario = JSON.parse(localStorage.getItem('usuario'));
+            if (!usuario) {
+                window.location.href = 'index.html';
+                return;
+            }
+
+            if (usuario.empresa === 'HONDA') {
+                document.body.classList.add('honda-theme');
+                document.querySelector('meta[name="theme-color"]').content = '#c62828';
+            }
+
+            const empresa = usuario.empresa;
+            const setor = usuario.setor;
+            const veiculoSelect = document.getElementById('veiculo');
+            const vehicleImageContainer = document.getElementById('vehicleImageContainer');
+            const vehicleInfoContainer = document.getElementById('vehicleInfoContainer');
+
+            // Preencher dropdown de veículos
+            fetch(`https://lslcda-default-rtdb.firebaseio.com/${empresa}/${setor}/veiculos.json`)
+                .then(response => response.json())
+                .then(veiculos => {
+                    for (const veiculo in veiculos) {
+                        const option = document.createElement('option');
+                        option.value = veiculo;
+                        option.textContent = veiculo;
+                        veiculoSelect.appendChild(option);
+                    }
+                })
+                .catch(error => console.error('Erro ao carregar veículos:', error));
+
+            // Atualizar informações do veículo ao selecionar
+            veiculoSelect.addEventListener('change', function() {
+                const veiculoSelecionado = veiculoSelect.value;
+                fetch(`https://lslcda-default-rtdb.firebaseio.com/${empresa}/${setor}/veiculos/${veiculoSelecionado}.json`)
+                    .then(response => response.json())
+                    .then(veiculo => {
+                        // Exibe a imagem do veículo (se existir) ou uma imagem padrão
+                        const imageUrl = veiculo.image || 'assets/default_car.png';
+                        vehicleImageContainer.innerHTML = `<img src="${imageUrl}" alt="${veiculoSelecionado}" class="vehicle-image">`;
+                        
+                        // Determina a classe de status com base no valor
+                        const statusClass = veiculo.status === 'EM MANUTENÇÃO' ? 'status-red' : 'status-green';
+                        
+                        // Exibe as informações do veículo
+                        vehicleInfoContainer.innerHTML = `
+                            <div class="km-container">
+                                <div class="km-box">${veiculo.km_rodados || 'N/A'}</div>
+                                <div>Kms rodados</div>
+                            </div>
+                            <div><strong>Placa:</strong> ${veiculo.placa || 'N/A'}</div>
+                            <div><strong>Status:</strong> <span class="${statusClass}">${veiculo.status || 'N/A'}</span></div>
+                            ${veiculo.status === 'NO ESTACIONAMENTO' && veiculo['ÚLTIMO A USAR'] ? 
+                                `<div><strong>Último uso:</strong> ${veiculo['ÚLTIMO A USAR']}</div>` : ''}
+                            ${veiculo.status === 'EM CORRIDA' ? `
+                                <div><strong>Motorista:</strong> ${veiculo.motorista || 'N/A'}</div>
+                                <div><strong>Destino:</strong> ${veiculo.destino || 'N/A'}</div>
+                            ` : ''}
+                            ${veiculo.status === 'EM MANUTENÇÃO' ? `
+                                <div><strong>Motivo:</strong> ${veiculo.motivo || 'N/A'}</div>
+                                <div><strong>Previsão:</strong> ${veiculo.previsao || 'N/A'}</div>
+                            ` : ''}
+                        `;
+                    })
+                    .catch(error => {
+                        console.error('Erro ao carregar informações do veículo:', error);
+                        vehicleInfoContainer.innerHTML = '<div>Erro ao carregar informações do veículo</div>';
+                    });
+            });
+        });
+    </script>
+</body>
+</html>

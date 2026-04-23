@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contador de Dias com Corridas</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+        }
+        .container {
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        textarea, input {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        #result {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #e8f4fc;
+            border-radius: 4px;
+            display: none;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-radius: 50%;
+            border-top: 4px solid #3498db;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Contador de Dias com Corridas</h1>
+        
+        <label for="dbUrl">URL do Banco de Dados (Realtime Database):</label>
+        <input type="text" id="dbUrl" placeholder="Cole aqui o link do seu Firebase Realtime Database (ex: https://seusite.firebaseio.com/.json)" />
+        
+        <button id="fetchData">Buscar e Contar Dias</button>
+        
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Processando dados...</p>
+        </div>
+        
+        <div id="result"></div>
+        
+        <h3>Dados Recebidos:</h3>
+        <textarea id="dataOutput" rows="10" readonly></textarea>
+    </div>
+
+    <script>
+        document.getElementById('fetchData').addEventListener('click', function() {
+            const dbUrl = document.getElementById('dbUrl').value.trim();
+            const resultDiv = document.getElementById('result');
+            const dataOutput = document.getElementById('dataOutput');
+            const loadingDiv = document.getElementById('loading');
+            
+            if (!dbUrl) {
+                resultDiv.style.display = 'block';
+                resultDiv.innerHTML = '<p style="color: red;">Por favor, insira a URL do banco de dados.</p>';
+                return;
+            }
+            
+            // Mostra o loading
+            loadingDiv.style.display = 'block';
+            resultDiv.style.display = 'none';
+            dataOutput.value = '';
+            
+            // Faz a requisição para o Firebase
+            fetch(dbUrl)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Erro ao buscar dados: ' + response.status);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // Esconde o loading
+                    loadingDiv.style.display = 'none';
+                    
+                    // Exibe os dados brutos
+                    dataOutput.value = JSON.stringify(data, null, 2);
+                    
+                    // Processa os dados para contar dias diferentes
+                    processData(data);
+                })
+                .catch(error => {
+                    loadingDiv.style.display = 'none';
+                    resultDiv.style.display = 'block';
+                    resultDiv.innerHTML = `<p style="color: red;">Erro: ${error.message}</p>`;
+                    console.error('Erro:', error);
+                });
+        });
+        
+        function processData(data) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.style.display = 'block';
+            
+            // Verifica se os dados estão no formato esperado
+            if (!data || typeof data !== 'object') {
+                resultDiv.innerHTML = '<p style="color: red;">Formato de dados inválido. Certifique-se de que o banco de dados contém registros no formato esperado.</p>';
+                return;
+            }
+            
+            // Converte o objeto em array se necessário
+            let corridas = Array.isArray(data) ? data : Object.values(data);
+            
+            // Filtra apenas itens com propriedade 'data'
+            corridas = corridas.filter(item => item && item.data);
+            
+            if (corridas.length === 0) {
+                resultDiv.innerHTML = '<p>Nenhuma corrida encontrada nos dados.</p>';
+                return;
+            }
+            
+            // Extrai as datas únicas
+            const datasUnicas = [...new Set(corridas.map(corrida => corrida.data))];
+            
+            // Ordena as datas
+            datasUnicas.sort((a, b) => {
+                const [diaA, mesA, anoA] = a.split('/').map(Number);
+                const [diaB, mesB, anoB] = b.split('/').map(Number);
+                return new Date(anoA, mesA - 1, diaA) - new Date(anoB, mesB - 1, diaB);
+            });
+            
+            // Exibe o resultado
+            resultDiv.innerHTML = `
+                <p><strong>Total de dias com corridas registradas:</strong> ${datasUnicas.length}</p>
+                <p><strong>Dias com corridas:</strong></p>
+                <ul>
+                    ${datasUnicas.map(data => `<li>${data}</li>`).join('')}
+                </ul>
+                <p><strong>Total de corridas registradas:</strong> ${corridas.length}</p>
+            `;
+        }
+    </script>
+</body>
+</html>

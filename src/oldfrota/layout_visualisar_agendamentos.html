@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0f2954">
+    <title>FROTACONTROL - Visualizar Agendamentos</title>
+    <link href="https://fonts.googleapis.com/css2?family=Questrial&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        html {
+            background: #0f2954;
+        }
+
+        .honda-theme html {
+            background: #c62828;
+        }
+
+        body {
+            font-family: 'Questrial', sans-serif;
+            background: transparent;
+            min-height: 100vh;
+            min-height: 100dvh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        .background-fill {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: #0f2954;
+            z-index: -1;
+        }
+
+        .honda-theme .background-fill {
+            background: #c62828;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            min-height: 100dvh;
+            width: 100%;
+        }
+
+        .header {
+            background-color: #0f2954;
+            color: white;
+            padding: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .honda-theme .header {
+            background-color: #c62828;
+        }
+
+        .header-button {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 50%;
+            transition: background-color 0.2s ease;
+        }
+
+        .header-button:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .header-button img {
+            width: 24px;
+            height: 24px;
+            filter: brightness(0) invert(1);
+        }
+
+        .date-selector {
+            display: flex;
+            align-items: center;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 20px;
+            transition: background-color 0.2s ease;
+        }
+
+        .date-selector:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .date-selector img {
+            width: 20px;
+            margin-right: 8px;
+            filter: brightness(0) invert(1);
+        }
+
+        .form-container {
+            background: white;
+            border-radius: 24px 24px 0 0;
+            padding: 20px;
+            flex: 1;
+            box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.1);
+            position: relative;
+            width: 100%;
+            overflow-y: auto;
+            margin-top: -20px;
+            border: 10px solid transparent;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+            background-color: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #e0e0e0;
+            font-size: 14px;
+        }
+
+        th {
+            background-color: #0f2954;
+            color: white;
+            font-weight: 500;
+            position: sticky;
+            top: 0;
+        }
+
+        .honda-theme th {
+            background-color: #c62828;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+        tr:hover {
+            background-color: #f0f0f0;
+        }
+
+        .btn-cancelar {
+            background-color: #f32121;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 12px;
+            cursor: pointer;
+            font-family: 'Questrial', sans-serif;
+            transition: background-color 0.2s;
+            font-size: 14px;
+        }
+
+        .btn-cancelar:hover {
+            background-color: #d11b1b;
+        }
+
+        .btn-cancelar:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+
+        .honda-theme .btn-cancelar {
+            background-color: #c62828;
+        }
+
+        .honda-theme .btn-cancelar:hover {
+            background-color: #8e0000;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background-color: white;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 400px;
+            padding: 25px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            position: relative;
+        }
+
+        .close-modal {
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            font-size: 24px;
+            color: #757575;
+            cursor: pointer;
+        }
+
+        .close-modal:hover {
+            color: #333;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 8px;
+            color: #4b4b4b;
+            font-size: 14px;
+        }
+
+        .form-input, .form-select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            font-family: 'Questrial', sans-serif;
+        }
+
+        .form-input:focus, .form-select:focus {
+            border-color: #0f2954;
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(15, 41, 84, 0.1);
+        }
+
+        .honda-theme .form-input:focus,
+        .honda-theme .form-select:focus {
+            border-color: #c62828;
+            box-shadow: 0 0 0 3px rgba(198, 40, 40, 0.1);
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            margin: 15px 0;
+        }
+
+        .checkbox-group input {
+            margin-right: 10px;
+        }
+
+        .modal-button {
+            width: 100%;
+            padding: 14px;
+            background-color: #0f2954;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-family: 'Questrial', sans-serif;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: background-color 0.2s;
+        }
+
+        .honda-theme .modal-button {
+            background-color: #c62828;
+        }
+
+        .modal-button:hover {
+            background-color: #1a3a6e;
+        }
+
+        .honda-theme .modal-button:hover {
+            background-color: #8e0000;
+        }
+
+        .loading-spinner {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1001;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: #0f2954;
+            animation: spin 1s linear infinite;
+        }
+
+        .honda-theme .spinner {
+            border-top-color: #c62828;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .snackbar {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #333;
+            color: #fff;
+            padding: 12px 24px;
+            border-radius: 4px;
+            z-index: 1000;
+            animation: fadeIn 0.3s, fadeOut 0.3s 2.7s;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; bottom: 0; }
+            to { opacity: 1; bottom: 20px; }
+        }
+
+        @keyframes fadeOut {
+            from { opacity: 1; bottom: 20px; }
+            to { opacity: 0; bottom: 0; }
+        }
+
+        /* Responsividade */
+        @media (max-width: 600px) {
+            th, td {
+                padding: 10px 12px;
+                font-size: 13px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            th, td {
+                padding: 8px 10px;
+                font-size: 12px;
+            }
+            
+            .form-container {
+                padding: 15px 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="background-fill"></div>
+    <div class="container">
+        <div class="header">
+            <button class="header-button" onclick="window.history.back()">
+                <img src="assets/icon_arrow.svg" alt="Voltar">
+            </button>
+            <div class="date-selector" onclick="openModal()">
+                <img src="assets/icon_calendar.svg" alt="Calendário">
+                <span id="currentDateText"></span>
+            </div>
+        </div>
+
+        <div class="form-container">
+            <table id="agendamentosTable">
+                <thead>
+                    <tr>
+                        <th>DATA</th>
+                        <th>VEÍCULO</th>
+                        <th>RESPONSÁVEL</th>
+                        <th>HORA INÍCIO</th>
+                        <th>HORA FIM</th>
+                        <th>MOTIVO</th> <!-- Alterado de DESTINO para MOTIVO -->
+                        <th>STATUS</th>
+                        <th>AÇÃO</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Dados dos agendamentos serão inseridos aqui -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeModal()">&times;</span>
+            <h2 style="margin-bottom: 20px; color: #333;">Filtrar Agendamentos</h2>
+            
+            <div class="form-group">
+                <label for="day" class="form-label">Data:</label>
+                <input type="date" id="day" class="form-input">
+            </div>
+            
+            <div class="checkbox-group">
+                <input type="checkbox" id="monthToggle">
+                <label for="monthToggle">Mostrar mês todo</label>
+            </div>
+            
+            <div class="form-group">
+                <label for="veiculo" class="form-label">Veículo:</label>
+                <select id="veiculo" class="form-select">
+                    <option value="">Todos</option>
+                </select>
+            </div>
+            
+            <button class="modal-button" onclick="loadData(); closeModal();">Carregar Dados</button>
+        </div>
+    </div>
+
+    <div class="loading-spinner" id="loadingSpinner">
+        <div class="spinner"></div>
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            // Verifica a empresa do usuário e aplica o tema correspondente
+            const usuario = JSON.parse(localStorage.getItem('usuario'));
+            if (usuario && usuario.empresa === 'HONDA') {
+                document.body.classList.add('honda-theme');
+                document.querySelector('meta[name="theme-color"]').content = '#c62828';
+            } else if (usuario && usuario.empresa === 'LSL') {
+                document.body.classList.remove('honda-theme');
+                document.querySelector('meta[name="theme-color"]').content = '#0f2954';
+            }
+
+            const currentDate = new Date().toISOString().split('T')[0];
+            document.getElementById('day').value = currentDate;
+            updateCurrentDateText(currentDate, false);
+            loadData();
+        });
+
+        function loadData() {
+            const spinner = document.getElementById('loadingSpinner');
+            spinner.style.display = 'flex';
+
+            const usuario = JSON.parse(localStorage.getItem('usuario'));
+            const empresa = usuario.empresa;
+            const setor = usuario.setor;
+
+            const selectedDay = document.getElementById('day').value;
+            const showMonth = document.getElementById('monthToggle').checked;
+            const selectedVeiculo = document.getElementById('veiculo').value;
+
+            const [year, month] = selectedDay.split('-');
+            const formattedMonth = month.padStart(2, '0');
+            const formattedYear = year;
+
+            // Primeiro carrega a lista de veículos para o dropdown
+            fetch(`https://lslcda-default-rtdb.firebaseio.com/${empresa}/${setor}/veiculos.json`)
+                .then(response => response.json())
+                .then(veiculos => {
+                    const veiculoSelect = document.getElementById('veiculo');
+                    veiculoSelect.innerHTML = '<option value="">Todos</option>';
+                    
+                    if (veiculos) {
+                        for (const veiculo in veiculos) {
+                            if (veiculos[veiculo]) {
+                                const option = document.createElement('option');
+                                option.value = veiculo;
+                                option.textContent = veiculo;
+                                veiculoSelect.appendChild(option);
+                            }
+                        }
+                    }
+
+                    // Agora carrega os agendamentos
+                    return fetch(`https://lslcda-default-rtdb.firebaseio.com/${empresa}/${setor}/agendamentos.json`);
+                })
+                .then(response => response.json())
+                .then(agendamentos => {
+                    if (!agendamentos) {
+                        console.error('Nenhum agendamento encontrado.');
+                        spinner.style.display = 'none';
+                        return;
+                    }
+
+                    const tableBody = document.getElementById('agendamentosTable').getElementsByTagName('tbody')[0];
+                    tableBody.innerHTML = '';
+
+                    // Converter objeto de objetos em array
+                    const agendamentosArray = [];
+                    for (const veiculo in agendamentos) {
+                        if (agendamentos[veiculo]) {
+                            for (const key in agendamentos[veiculo]) {
+                                if (agendamentos[veiculo][key]) {
+                                    const agendamento = agendamentos[veiculo][key];
+                                    agendamento.veiculo = veiculo;
+                                    agendamento.id = key;
+                                    agendamentosArray.push(agendamento);
+                                }
+                            }
+                        }
+                    }
+
+                    agendamentosArray.forEach(agendamento => {
+                        if (!agendamento.data) return;
+                        const [day, agMonth, agYear] = agendamento.data.split('/');
+                        const dataAgendamentoFormatada = `${agMonth.padStart(2, '0')}/${agYear}`;
+                        if (showMonth) {
+                            // Compara mês/ano (formato MM/YYYY)
+                            if (dataAgendamentoFormatada === `${formattedMonth}/${formattedYear}`) {
+                                if (!selectedVeiculo || agendamento.veiculo === selectedVeiculo) {
+                                    addRowToTable(tableBody, agendamento);
+                                }
+                            }
+                        } else {
+                            // Compara data completa (formato DD/MM/YYYY)
+                            const formattedSelectedDay = selectedDay.split('-').reverse().join('/');
+                            if (agendamento.data === formattedSelectedDay) {
+                                if (!selectedVeiculo || agendamento.veiculo === selectedVeiculo) {
+                                    addRowToTable(tableBody, agendamento);
+                                }
+                            }
+                        }
+                    });
+
+                    updateCurrentDateText(selectedDay, showMonth);
+                    spinner.style.display = 'none';
+                })
+                .catch(error => {
+                    console.error('Erro ao carregar dados dos agendamentos:', error);
+                    spinner.style.display = 'none';
+                });
+        }
+
+        function addRowToTable(tableBody, agendamento) {
+            const usuario = JSON.parse(localStorage.getItem('usuario'));
+            const isMeuAgendamento = agendamento.matricula === usuario.mat;
+            const isCancelavel = isMeuAgendamento && agendamento.status === 'confirmado';
+            
+            const row = tableBody.insertRow();
+            row.insertCell(0).textContent = agendamento.data;
+            row.insertCell(1).textContent = agendamento.veiculo;
+            row.insertCell(2).textContent = abreviarNome(agendamento.responsavel);
+            row.insertCell(3).textContent = agendamento.hora_inicio;
+            row.insertCell(4).textContent = agendamento.hora_fim;
+            row.insertCell(5).textContent = agendamento.motivo; // Alterado de destino para motivo
+            
+            const statusCell = row.insertCell(6);
+            statusCell.textContent = agendamento.status === 'confirmado' ? 'Confirmado' : 'Cancelado';
+            
+            const actionCell = row.insertCell(7);
+            if (isCancelavel) {
+                const btnCancelar = document.createElement('button');
+                btnCancelar.className = 'btn-cancelar';
+                btnCancelar.textContent = 'Cancelar';
+                btnCancelar.onclick = () => cancelarAgendamento(agendamento.veiculo, agendamento.id);
+                actionCell.appendChild(btnCancelar);
+            } else {
+                actionCell.textContent = '-';
+            }
+        }
+
+        function abreviarNome(nome) {
+            const partes = nome.split(' ');
+            if (partes.length > 1) {
+                return `${partes[0]} ${partes[1][0]}.`;
+            }
+            return nome;
+        }
+
+        function cancelarAgendamento(veiculo, idAgendamento) {
+            if (!confirm('Tem certeza que deseja cancelar este agendamento?')) {
+                return;
+            }
+
+            const spinner = document.getElementById('loadingSpinner');
+            spinner.style.display = 'flex';
+
+            const usuario = JSON.parse(localStorage.getItem('usuario'));
+            const empresa = usuario.empresa;
+            const setor = usuario.setor;
+
+            const updates = {
+                status: 'cancelado'
+            };
+
+            fetch(`https://lslcda-default-rtdb.firebaseio.com/${empresa}/${setor}/agendamentos/${veiculo}/${idAgendamento}.json`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(updates)
+            })
+            .then(response => {
+                if (response.ok) {
+                    showSnackbar('Agendamento cancelado com sucesso');
+                    loadData();
+                } else {
+                    throw new Error('Erro ao cancelar agendamento');
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                showSnackbar('Erro ao cancelar agendamento. Tente novamente.');
+            })
+            .finally(() => {
+                spinner.style.display = 'none';
+            });
+        }
+
+        function openModal() {
+            document.getElementById('modal').style.display = 'flex';
+        }
+
+        function closeModal() {
+            document.getElementById('modal').style.display = 'none';
+        }
+
+        function updateCurrentDateText(day, showMonth) {
+            const currentDateText = showMonth
+                ? `${day.split('-')[1]}/${day.split('-')[0]}`
+                : day.split('-').reverse().join('/');
+            document.getElementById('currentDateText').textContent = currentDateText;
+        }
+
+        function showSnackbar(message) {
+            const snackbar = document.createElement('div');
+            snackbar.className = 'snackbar';
+            snackbar.textContent = message;
+            
+            document.body.appendChild(snackbar);
+            
+            setTimeout(() => {
+                document.body.removeChild(snackbar);
+            }, 3000);
+        }
+    </script>
+</body>
+</html>

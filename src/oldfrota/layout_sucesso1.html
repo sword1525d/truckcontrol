@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0f2954">
+  <title>FROTACONTROL - Corrida Encerrada</title>
+  <link href="https://fonts.googleapis.com/css2?family=Questrial&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: 'Questrial', sans-serif;
+      background-color: #dbdbdb;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+    header {
+      background-color: #0f2954;
+      color: #D9EAFA;
+      padding: 20px 15px;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+    header img.header-title {
+      width: 220px; 
+      height: auto;
+      margin-bottom: 15px;
+    }
+    header p {
+      font-size: 16px;
+      margin: 2px 0;
+    }
+    header img.logo {
+      position: absolute;
+      bottom: 10px;
+      right: 10px;
+      width: 50px;
+      height: auto;
+    }
+    main {
+      flex: 1;
+      background-color: #dbdbdb;
+      border-top-left-radius: 20px;
+      border-top-right-radius: 20px;
+      padding: 20px 15px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .confirmation-container {
+      text-align: center;
+      max-width: 300px;
+      width: 100%;
+    }
+    .animation {
+      width: 150px;
+      margin-bottom: 20px;
+    }
+    .success-message {
+      font-size: 18px;
+      color: #4b4b4b;
+      margin-bottom: 15px;
+    }
+    .tip-title {
+      color: #6b6b6b;
+      font-size: 14px;
+      margin-bottom: 5px;
+    }
+    .tip {
+      font-size: 14px;
+      color: #4b4b4b;
+      margin-bottom: 30px;
+    }
+    .btn-voltar {
+      background-color: #0f2954;
+      color: #D9EAFA;
+      border: none;
+      width: 100%;
+      border-radius: 8px;
+      padding: 12px 20px;
+      font-family: 'Questrial', sans-serif;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+      font-size: 16px;
+    }
+    .btn-voltar:hover {
+      background-color: #1a3b6e;
+    }
+  </style>
+</head>
+<body>
+
+
+<main>
+  <div class="confirmation-container">
+    <img src="assets/anim_ok.gif" alt="Animação de Sucesso" class="animation">
+    <div class="success-message">Corrida Encerrada com Sucesso!</div>
+    <div class="tip-title">Fica a dica:</div>
+    <div class="tip" id="dica"></div>
+    <button class="btn-voltar" onclick="window.location.href='layout_home.html'">VOLTAR AO INÍCIO</button>
+  </div>
+</main>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    // Atualiza informações do usuário
+    const usuario = JSON.parse(localStorage.getItem('usuario'));
+    
+    if (usuario) {
+        document.getElementById('nomeColaborador').textContent = usuario.nome;
+        document.getElementById('matriculaColaborador').textContent = usuario.mat;
+        
+        // Trocar cor e logo conforme empresa
+        const header = document.querySelector('header');
+        const logo = document.querySelector('header img.logo');
+        
+        if (usuario.empresa === 'LSL') {
+            header.style.backgroundColor = '#00375b';
+            logo.src = 'assets/logo-lsl.png';
+        } else if (usuario.empresa === 'HONDA') {
+            header.style.backgroundColor = '#f32121';
+            logo.src = 'assets/logo-honda.png';
+        }
+    }
+    
+    // Dicas aleatórias
+    const dicas = [
+        "Sempre use o cinto de segurança",
+        "Sempre pare nas faixas de pedestres!",
+        "Ao parar fora de um estacionamento ligue o pisca-alerta!",
+        "Não se esqueça de encerrar a corrida quando voltar!"
+    ];
+    const dicaAleatoria = dicas[Math.floor(Math.random() * dicas.length)];
+    document.getElementById('dica').textContent = dicaAleatoria;
+});
+</script>
+
+</body>
+</html>

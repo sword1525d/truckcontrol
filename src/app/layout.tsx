@@ -21,7 +21,7 @@ export default function RootLayout({
     <html lang="pt-BR" className={`${GeistSans.variable} ${GeistMono.variable}`}>
       <head>
         <link rel="icon" href="/icon.svg" sizes="any" type="image/svg+xml" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
       </head>
       <body className="font-sans antialiased flex flex-col min-h-screen bg-background text-foreground">

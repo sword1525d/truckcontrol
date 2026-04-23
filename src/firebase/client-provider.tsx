@@ -16,12 +16,17 @@ function AuthGuard({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
   useEffect(() => {
-    if (!isUserLoading && !user && pathname !== '/login') {
+    // Rotas públicas ou do módulo carro que não exigem auth do Firebase
+    const isPublicOrCarRoute = pathname === '/' || pathname === '/login-car' || pathname.startsWith('/dashboard-car');
+
+    if (!isUserLoading && !user && pathname !== '/login' && !isPublicOrCarRoute) {
       router.push('/login');
     }
   }, [user, isUserLoading, pathname, router]);
 
-  if (isUserLoading && pathname !== '/login') {
+  // Se estiver carregando, mostra loading SOMENTE se não for login e não for rota pública/carro
+  const isPublicOrCarRoute = pathname === '/' || pathname === '/login-car' || pathname.startsWith('/dashboard-car');
+  if (isUserLoading && pathname !== '/login' && !isPublicOrCarRoute) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-background gap-4">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />

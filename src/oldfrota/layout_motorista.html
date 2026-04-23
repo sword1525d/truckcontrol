@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0f2954">
+    <title>FROTACONTROL - Rota Carreteiro</title>
+    <link href="https://fonts.googleapis.com/css2?family=Questrial&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: 'Questrial', sans-serif;
+            background: #2563eb;
+            min-height: 100vh;
+            min-height: 100dvh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            min-height: 100dvh;
+            width: 100%;
+        }
+
+        .header {
+            background-color: #0f2954;
+            color: white;
+            padding: 15px;
+            display: flex;
+            justify-content: flex-start;
+            align-items: center;
+        }
+
+        .back-button {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 50%;
+            transition: background-color 0.2s ease;
+        }
+
+        .back-button:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .content-container {
+            background: white;
+            border-radius: 24px 24px 0 0;
+            padding: 36px 20px 20px;
+            flex: 1;
+            box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.1);
+            position: relative;
+            width: 100%;
+            overflow-y: auto;
+            margin-top: -20px;
+        }
+
+        .page-title {
+            color: #4b4b4b;
+            text-align: center;
+            margin-bottom: 25px;
+            font-size: 1.4rem;
+        }
+
+        .km-inicial-section {
+            margin-bottom: 30px;
+        }
+
+        .form-group {
+            position: relative;
+            margin-bottom: 25px;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 14px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            font-family: 'Questrial', sans-serif;
+            background: transparent;
+            transition: all 0.2s ease;
+            outline: none;
+            height: 58px;
+        }
+
+        .form-input:focus {
+            border-color: #0f2954;
+            border-width: 2px;
+            padding: 13px;
+            box-shadow: 0 0 0 4px rgba(15, 41, 84, 0.1);
+        }
+
+        .form-label {
+            position: absolute;
+            left: 14px;
+            top: 16px;
+            color: #757575;
+            font-size: 16px;
+            transition: all 0.2s ease;
+            pointer-events: none;
+            background: white;
+            padding: 0 4px;
+            transform-origin: left center;
+        }
+
+        .form-input:focus + .form-label,
+        .form-input:not(:placeholder-shown) + .form-label {
+            transform: translateY(-28px) scale(0.875);
+            color: #0f2954;
+            font-weight: 500;
+        }
+
+        .btn-iniciar {
+            width: 100%;
+            background: #0f2954;
+            border: none;
+            border-radius: 12px;
+            padding: 16px;
+            color: white;
+            font-size: 16px;
+            font-weight: 500;
+            font-family: 'Questrial', sans-serif;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin-top: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            box-shadow: 0 2px 4px rgba(15, 41, 84, 0.3);
+        }
+
+        .btn-iniciar:hover {
+            background: #1a3a6e;
+            box-shadow: 0 4px 8px rgba(15, 41, 84, 0.3);
+        }
+
+        .btn-iniciar:active {
+            transform: translateY(1px);
+        }
+
+        .rota-section {
+            display: none;
+        }
+
+        .rota-section.active {
+            display: block;
+        }
+
+        .info-motorista {
+            background: #f3f4f6;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .info-motorista .label {
+            font-size: 13px;
+            color: #757575;
+            margin-bottom: 5px;
+        }
+
+        .info-motorista .valor {
+            font-size: 18px;
+            font-weight: 600;
+            color: #0f2954;
+        }
+
+        .paradas-list {
+            margin-top: 20px;
+        }
+
+        .parada-item {
+            background: white;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 15px;
+            transition: all 0.2s ease;
+        }
+
+        .parada-item.checked {
+            border-color: #16a34a;
+            background: #f0fdf4;
+        }
+
+        .parada-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 10px;
+        }
+
+        .parada-info h3 {
+            color: #0f2954;
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .parada-info .local {
+            color: #757575;
+            font-size: 14px;
+        }
+
+        .checkbox-wrapper {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .checkbox-custom {
+            width: 30px;
+            height: 30px;
+            border: 2px solid #0f2954;
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            background: white;
+        }
+
+        .checkbox-custom.checked {
+            background: #16a34a;
+            border-color: #16a34a;
+        }
+
+        .checkbox-custom svg {
+            width: 20px;
+            height: 20px;
+            stroke: white;
+            display: none;
+        }
+
+        .checkbox-custom.checked svg {
+            display: block;
+        }
+
+        .parada-horarios {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .horario-box {
+            background: #f9fafb;
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 1px solid #e5e7eb;
+        }
+
+        .horario-box .label {
+            font-size: 11px;
+            color: #757575;
+            text-transform: uppercase;
+            margin-bottom: 2px;
+        }
+
+        .horario-box .valor {
+            font-size: 15px;
+            font-weight: 600;
+            color: #0f2954;
+        }
+
+        .campos-finalizacao {
+            display: none;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .campos-finalizacao.active {
+            display: block;
+        }
+
+        .grid-inputs {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .input-pequeno {
+            position: relative;
+        }
+
+        .input-pequeno input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: 'Questrial', sans-serif;
+            outline: none;
+            text-align: center;
+        }
+
+        .input-pequeno input:focus {
+            border-color: #0f2954;
+            border-width: 2px;
+            padding: 9px;
+        }
+
+        .input-pequeno label {
+            display: block;
+            font-size: 11px;
+            color: #757575;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+            text-align: center;
+        }
+
+        .btn-finalizar {
+            width: 100%;
+            background: #16a34a;
+            border: none;
+            border-radius: 12px;
+            padding: 16px;
+            color: white;
+            font-size: 16px;
+            font-weight: 500;
+            font-family: 'Questrial', sans-serif;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin-top: 30px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            box-shadow: 0 2px 4px rgba(22, 163, 74, 0.3);
+        }
+
+        .btn-finalizar:hover {
+            background: #15803d;
+            box-shadow: 0 4px 8px rgba(22, 163, 74, 0.3);
+        }
+
+        .btn-finalizar:active {
+            transform: translateY(1px);
+        }
+
+        .btn-finalizar:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .progress-info {
+            text-align: center;
+            margin: 20px 0;
+            padding: 15px;
+            background: #f3f4f6;
+            border-radius: 8px;
+        }
+
+        .progress-info .texto {
+            font-size: 14px;
+            color: #757575;
+            margin-bottom: 8px;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e5e7eb;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: #0f2954;
+            transition: width 0.3s ease;
+            border-radius: 4px;
+        }
+
+        .toast {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-100px);
+            padding: 12px 20px;
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+            opacity: 0;
+            transition: all 0.3s ease;
+            z-index: 1000;
+            max-width: 90%;
+            text-align: center;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .toast.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+
+        .toast.success {
+            background: #16a34a;
+        }
+
+        @media (max-width: 480px) {
+            .content-container {
+                padding: 25px 15px 15px;
+            }
+            
+            .parada-item {
+                padding: 14px;
+            }
+            
+            .parada-info h3 {
+                font-size: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <button class="back-button" onclick="window.history.back()">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
+                </svg>
+            </button>
+        </div>
+
+        <div class="content-container">
+            <h1 class="page-title">Rota do Carreteiro</h1>
+            
+            <!-- Seção KM Inicial -->
+            <div class="km-inicial-section" id="kmInicialSection">
+                <div class="form-group">
+                    <input type="number" id="kmInicial" class="form-input" placeholder=" " required>
+                    <label class="form-label" for="kmInicial">KM Inicial do Veículo</label>
+                </div>
+                <button class="btn-iniciar" id="btnIniciar">INICIAR ROTA</button>
+            </div>
+
+            <!-- Seção da Rota -->
+            <div class="rota-section" id="rotaSection">
+                <div class="info-motorista">
+                    <div class="label">Motorista</div>
+                    <div class="valor" id="nomeMotorista">JOSUE</div>
+                </div>
+
+                <div class="info-motorista">
+                    <div class="label">Veículo</div>
+                    <div class="valor" id="placaVeiculo">QZG2J66</div>
+                </div>
+
+                <div class="progress-info">
+                    <div class="texto">Progresso da Rota</div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+                    </div>
+                    <div style="margin-top: 8px; font-size: 14px; color: #0f2954; font-weight: 600;">
+                        <span id="paradaAtual">0</span> de <span id="totalParadas">0</span> paradas
+                    </div>
+                </div>
+
+                <div class="paradas-list" id="paradasList"></div>
+
+                <button class="btn-finalizar" id="btnFinalizar" disabled>FINALIZAR ROTA</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        const paradas = [
+            { setor: "SPOT NACIONAL", local: "DCC", horaEntrada: "7:15", horaSaida: "7:40" },
+            { setor: "CUSTO MOTO PINT TANQUE", local: "PWT", horaEntrada: "7:47", horaSaida: "8:07" },
+            { setor: "CUSTO MOTO PINT TANQUE", local: "DCC", horaEntrada: "8:14", horaSaida: "8:47" },
+            { setor: "MONTAGEM EIXO DIANTEIRO", local: "FAD", horaEntrada: "8:54", horaSaida: "9:15" },
+            { setor: "MONTAGEM CHASSI", local: "MCH", horaEntrada: "9:22", horaSaida: "9:45" },
+            { setor: "INJETORA DE PLÁSTICO", local: "INJ", horaEntrada: "9:52", horaSaida: "10:10" },
+            { setor: "CROMAÇÃO", local: "CRM", horaEntrada: "10:17", horaSaida: "10:40" },
+            { setor: "PINTURA QUADRO", local: "PQD", horaEntrada: "10:47", horaSaida: "11:15" },
+            { setor: "ALMOXARIFADO GERAL", local: "ALM", horaEntrada: "11:22", horaSaida: "11:45" },
+            { setor: "MONTAGEM FINAL", local: "MTF", horaEntrada: "13:00", horaSaida: "13:30" },
+            { setor: "TESTE DE QUALIDADE", local: "TQL", horaEntrada: "13:37", horaSaida: "14:00" },
+            { setor: "EXPEDIÇÃO", local: "EXP", horaEntrada: "14:07", horaSaida: "14:30" },
+            { setor: "EMBALAGEM", local: "EMB", horaEntrada: "14:37", horaSaida: "15:00" },
+            { setor: "CARGA", local: "CGR", horaEntrada: "15:07", horaSaida: "15:30" },
+            { setor: "ESTACIONAMENTO", local: "EST", horaEntrada: "15:37", horaSaida: "16:00" },
+            { setor: "RETORNO FINAL", local: "BASE", horaEntrada: "16:15", horaSaida: "16:45" }
+        ];
+
+        let kmInicial = 0;
+        let paradasConcluidas = 0;
+
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `toast ${type}`;
+            toast.classList.add('show');
+            
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+
+        function atualizarProgresso() {
+            const total = paradas.length;
+            const progresso = (paradasConcluidas / total) * 100;
+            
+            document.getElementById('progressFill').style.width = progresso + '%';
+            document.getElementById('paradaAtual').textContent = paradasConcluidas;
+            document.getElementById('totalParadas').textContent = total;
+            
+            if (paradasConcluidas === total) {
+                document.getElementById('btnFinalizar').disabled = false;
+            }
+        }
+
+        function renderizarParadas() {
+            const paradasList = document.getElementById('paradasList');
+            paradasList.innerHTML = '';
+            
+            paradas.forEach((parada, index) => {
+                const item = document.createElement('div');
+                item.className = 'parada-item';
+                item.id = `parada-${index}`;
+                
+                item.innerHTML = `
+                    <div class="parada-header">
+                        <div class="parada-info">
+                            <h3>${parada.setor}</h3>
+                            <div class="local">${parada.local}</div>
+                        </div>
+                        <div class="checkbox-wrapper">
+                            <div class="checkbox-custom" onclick="toggleParada(${index})">
+                                <svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="20 6 9 17 4 12"></polyline>
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="parada-horarios">
+                        <div class="horario-box">
+                            <div class="label">Entrada</div>
+                            <div class="valor">${parada.horaEntrada}</div>
+                        </div>
+                        <div class="horario-box">
+                            <div class="label">Saída</div>
+                            <div class="valor">${parada.horaSaida}</div>
+                        </div>
+                    </div>
+                    <div class="campos-finalizacao" id="campos-${index}">
+                        <div class="form-group">
+                            <input type="number" class="form-input" placeholder=" " id="kmFinal-${index}">
+                            <label class="form-label">KM Final da Parada</label>
+                        </div>
+                        <div class="grid-inputs">
+                            <div class="input-pequeno">
+                                <label>Carros c/ Peça</label>
+                                <input type="number" id="comPeca-${index}" placeholder="0" min="0">
+                            </div>
+                            <div class="input-pequeno">
+                                <label>Carros s/ Peça</label>
+                                <input type="number" id="semPeca-${index}" placeholder="0" min="0">
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                paradasList.appendChild(item);
+            });
+        }
+
+        function toggleParada(index) {
+            const item = document.getElementById(`parada-${index}`);
+            const checkbox = item.querySelector('.checkbox-custom');
+            const campos = document.getElementById(`campos-${index}`);
+            const kmFinal = document.getElementById(`kmFinal-${index}`);
+            const comPeca = document.getElementById(`comPeca-${index}`);
+            const semPeca = document.getElementById(`semPeca-${index}`);
+            
+            if (checkbox.classList.contains('checked')) {
+                checkbox.classList.remove('checked');
+                item.classList.remove('checked');
+                campos.classList.remove('active');
+                paradasConcluidas--;
+            } else {
+                campos.classList.add('active');
+                
+                // Verificar se os campos foram preenchidos
+                setTimeout(() => {
+                    const verificarCampos = setInterval(() => {
+                        if (kmFinal.value && comPeca.value && semPeca.value) {
+                            checkbox.classList.add('checked');
+                            item.classList.add('checked');
+                            paradasConcluidas++;
+                            atualizarProgresso();
+                            showToast(`Parada ${paradas[index].setor} concluída!`);
+                            clearInterval(verificarCampos);
+                        }
+                    }, 500);
+                    
+                    // Limpar verificação após 30 segundos
+                    setTimeout(() => clearInterval(verificarCampos), 30000);
+                }, 100);
+            }
+            
+            atualizarProgresso();
+        }
+
+        document.getElementById('btnIniciar').addEventListener('click', function() {
+            const kmInicialInput = document.getElementById('kmInicial');
+            
+            if (!kmInicialInput.value || kmInicialInput.value <= 0) {
+                showToast('Por favor, informe o KM inicial válido', 'error');
+                return;
+            }
+            
+            kmInicial = kmInicialInput.value;
+            
+            document.getElementById('kmInicialSection').style.display = 'none';
+            document.getElementById('rotaSection').classList.add('active');
+            
+            renderizarParadas();
+            atualizarProgresso();
+            
+            showToast('Rota iniciada! Boa viagem!');
+        });
+
+        document.getElementById('btnFinalizar').addEventListener('click', function() {
+            showToast('Rota finalizada com sucesso!');
+            
+            setTimeout(() => {
+                // Aqui você redirecionaria para outra página
+                showToast('Dados salvos!');
+            }, 1500);
+        });
+    </script>
+</body>
+</html>

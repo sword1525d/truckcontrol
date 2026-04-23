@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0f2954">
+    <title>FROTACONTROL - Visualizar Corridas</title>
+    <link href="https://fonts.googleapis.com/css2?family=Questrial&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Questrial', sans-serif;
+            background-color: #dbdbdb;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+        header {
+            background-color: #0f2954; /* Cor padrão (LSL) */
+            color: #D9EAFA;
+            padding: 15px;
+        }
+        .header-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+        }
+        .back-button {
+            background: none;
+            border: none;
+            cursor: pointer;
+        }
+        .back-button img {
+            width: 28px;
+            height: 28px;
+        }
+        .current-date {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            color: #D9EAFA;
+            font-size: 16px;
+        }
+        .current-date img {
+            width: 24px;
+            margin-right: 8px;
+        }
+        main {
+            flex: 1;
+            background-color: #dbdbdb;
+            border-top-left-radius: 20px;
+            border-top-right-radius: 20px;
+            padding: 20px 15px;
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+            background-color: #ececec;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        th, td {
+            border: 1px solid #bbbbbb;
+            padding: 10px;
+            font-size: 14px;
+            text-align: left;
+            white-space: nowrap;
+        }
+        th {
+            background-color: #0f2954; /* Cor padrão (LSL) */
+            color: #D9EAFA;
+            font-weight: normal;
+        }
+        tr:nth-child(even) {
+            background-color: #f5f5f5;
+        }
+        tr:hover {
+            background-color: #e0e0e0;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0, 0, 0, 0.8);
+        }
+        .modal-content {
+            background-color: #ececec;
+            margin: 15% auto;
+            padding: 20px;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 400px;
+            color: #4b4b4b;
+            position: relative;
+        }
+        .close {
+            color: #aaa;
+            position: absolute;
+            top: 10px;
+            right: 20px;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .close:hover {
+            color: #4b4b4b;
+        }
+        .period-selector label {
+            display: block;
+            margin-top: 15px;
+            color: #4b4b4b;
+        }
+        .period-selector select,
+        .period-selector input[type="date"] {
+            width: 100%;
+            padding: 10px;
+            margin-top: 5px;
+            background-color: #f5f5f5;
+            color: #4b4b4b;
+            border: 1px solid #bbbbbb;
+            border-radius: 4px;
+            font-family: 'Questrial', sans-serif;
+        }
+        .period-selector button {
+            margin-top: 20px;
+            width: 100%;
+            padding: 12px;
+            background-color: #0f2954; /* Cor padrão (LSL) */
+            color: #D9EAFA;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-family: 'Questrial', sans-serif;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        .period-selector button:hover {
+            background-color: #1a3a6e; /* Cor hover padrão (LSL) */
+        }
+        .spinner-container {
+            display: none;
+            position: fixed;
+            z-index: 2;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .spinner {
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #0f2954; /* Cor padrão (LSL) */
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Estilos para Honda */
+        .honda-theme header {
+            background-color: #f32121 !important;
+        }
+        .honda-theme th {
+            background-color: #f32121 !important;
+        }
+        .honda-theme .period-selector button {
+            background-color: #f32121 !important;
+        }
+        .honda-theme .period-selector button:hover {
+            background-color: #d11b1b !important;
+        }
+        .honda-theme .spinner {
+            border-top-color: #f32121 !important;
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-row">
+        <button class="back-button" onclick="window.history.back()">
+            <img src="assets/icon_arrow.svg" alt="Voltar">
+        </button>
+        <div class="current-date" onclick="openModal()">
+            <img src="assets/icon_calendar.svg" alt="Calendário">
+            <span id="currentDateText"></span>
+        </div>
+    </div>
+</header>
+
+<main>
+    <table id="corridasTable">
+        <thead>
+            <tr>
+                <th>DATA</th>
+                <th>RESPONSÁVEL</th>
+                <th>DESTINO</th>
+                <th>VEÍCULO</th>
+                <th>HORA INI.</th>
+                <th>HORA FIN.</th>
+                <th>KM INI.</th>
+                <th>KM FIN.</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- Dados das corridas serão inseridos aqui -->
+        </tbody>
+    </table>
+</main>
+
+<div id="modal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="closeModal()">&times;</span>
+        <div class="period-selector">
+            <label for="day">Data:</label>
+            <input type="date" id="day">
+            <label>
+                <input type="checkbox" id="monthToggle"> Mostrar mês todo
+            </label>
+            <label for="responsavel">Responsável:</label>
+            <select id="responsavel">
+                <option value="">Todos</option>
+            </select>
+            <button onclick="loadData(); closeModal();">Carregar Dados</button>
+        </div>
+    </div>
+</div>
+
+<div class="spinner-container" id="spinner-container">
+    <div class="spinner"></div>
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        // Verifica a empresa do usuário e aplica o tema correspondente
+        const usuario = JSON.parse(localStorage.getItem('usuario'));
+        if (usuario && usuario.empresa === 'HONDA') {
+            document.body.classList.add('honda-theme');
+            document.querySelector('meta[name="theme-color"]').content = '#f32121';
+        } else if (usuario && usuario.empresa === 'LSL') {
+            document.body.classList.remove('honda-theme');
+            document.querySelector('meta[name="theme-color"]').content = '#0f2954';
+        }
+
+        const currentDate = new Date().toISOString().split('T')[0];
+        document.getElementById('day').value = currentDate;
+        updateCurrentDateText(currentDate, false);
+        loadData();
+    });
+
+    function loadData() {
+        const spinnerContainer = document.getElementById('spinner-container');
+        spinnerContainer.style.display = 'flex';
+
+        const usuario = JSON.parse(localStorage.getItem('usuario'));
+        const empresa = usuario.empresa;
+        const setor = usuario.setor;
+
+        const selectedDay = document.getElementById('day').value;
+        const showMonth = document.getElementById('monthToggle').checked;
+        const selectedResponsavel = document.getElementById('responsavel').value;
+
+        const formattedSelectedDay = selectedDay.split('-').reverse().join('/');
+        const [year, month] = selectedDay.split('-');
+
+        fetch(`https://lslcda-default-rtdb.firebaseio.com/${empresa}/${setor}/corridas.json`)
+            .then(response => response.json())
+            .then(corridas => {
+                if (!corridas) {
+                    console.error('Nenhuma corrida encontrada.');
+                    spinnerContainer.style.display = 'none';
+                    return;
+                }
+
+                const tableBody = document.getElementById('corridasTable').getElementsByTagName('tbody')[0];
+                tableBody.innerHTML = '';
+
+                const responsavelSet = new Set();
+
+                corridas.forEach(corrida => {
+                    if (corrida) {
+                        if (showMonth) {
+                            const [day, corrMonth, corrYear] = corrida.data.split('/');
+                            if (corrMonth === month && corrYear === year) {
+                                responsavelSet.add(corrida.responsavel);
+                                if (!selectedResponsavel || corrida.responsavel === selectedResponsavel) {
+                                    addRowToTable(tableBody, corrida);
+                                }
+                            }
+                        } else if (corrida.data === formattedSelectedDay) {
+                            responsavelSet.add(corrida.responsavel);
+                            if (!selectedResponsavel || corrida.responsavel === selectedResponsavel) {
+                                addRowToTable(tableBody, corrida);
+                            }
+                        }
+                    }
+                });
+
+                updateResponsavelOptions(responsavelSet);
+                updateCurrentDateText(selectedDay, showMonth);
+                spinnerContainer.style.display = 'none';
+            })
+            .catch(error => {
+                console.error('Erro ao carregar dados das corridas:', error);
+                spinnerContainer.style.display = 'none';
+            });
+    }
+
+    function addRowToTable(tableBody, corrida) {
+        const row = tableBody.insertRow();
+        row.insertCell(0).textContent = corrida.data;
+        row.insertCell(1).textContent = abreviarNome(corrida.responsavel);
+        row.insertCell(2).textContent = corrida.destino;
+        row.insertCell(3).textContent = corrida.veículo;
+        row.insertCell(4).textContent = corrida.horario_inicio;
+        row.insertCell(5).textContent = corrida.horario_fim;
+        row.insertCell(6).textContent = corrida.km_inicial;
+        row.insertCell(7).textContent = corrida.km_final;
+    }
+
+    function abreviarNome(nome) {
+        const partes = nome.split(' ');
+        if (partes.length > 1) {
+            return `${partes[0]} ${partes[1][0]}.`;
+        }
+        return nome;
+    }
+
+    function updateResponsavelOptions(responsavelSet) {
+        const responsavelSelect = document.getElementById('responsavel');
+        responsavelSelect.innerHTML = '<option value="">Todos</option>';
+        responsavelSet.forEach(responsavel => {
+            const option = document.createElement('option');
+            option.value = responsavel;
+            option.textContent = responsavel;
+            responsavelSelect.appendChild(option);
+        });
+    }
+
+    function openModal() {
+        document.getElementById('modal').style.display = 'block';
+    }
+
+    function closeModal() {
+        document.getElementById('modal').style.display = 'none';
+    }
+
+    function updateCurrentDateText(day, showMonth) {
+        const currentDateText = showMonth
+            ? `${day.split('-')[1]}/${day.split('-')[0]}`
+            : day.split('-').reverse().join('/');
+        document.getElementById('currentDateText').textContent = currentDateText;
+    }
+</script>
+</body>
+</html>

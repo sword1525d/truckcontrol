@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <link rel="manifest" href="manifest.json" />
+    <!-- Cores do tema para diferentes esquemas de cores -->
+    <meta
+      name="theme-color"
+      content="#0f2954"
+      media="(prefers-color-scheme: light)"
+    />
+    <meta
+      name="theme-color"
+      content="#0f2954"
+      media="(prefers-color-scheme: dark)"
+    />
+    <link rel="icon" type="image/png" href="favicon.png" />
+    <title>FROTACONTROL - Home</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Questrial&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family: "Questrial", sans-serif;
+        background-color: #0f2954;
+        display: flex;
+        flex-direction: column;
+        min-height: 100vh;
+        min-height: -webkit-fill-available; /* Para Chrome no Android */
+        padding-top: env(
+          safe-area-inset-top
+        ); /* Previne conteúdo atrás da status bar */
+      }
+      header {
+        background-color: #0f2954;
+        color: #d9eafa;
+        padding: 20px 15px;
+        display: flex;
+        flex-direction: column;
+        position: relative;
+        box-shadow: none !important; /* Remove qualquer sombra/divisória */
+      }
+      header img.header-title {
+        width: 220px;
+        height: auto;
+        margin-bottom: 15px;
+      }
+      header p {
+        font-size: 16px;
+        margin: 2px 0;
+      }
+      header img.logo-top-right {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        width: 50px;
+        height: auto;
+        z-index: 2;
+      }
+      header img.logo {
+        position: absolute;
+        bottom: 10px;
+        right: 10px;
+        width: 50px;
+        height: auto;
+        z-index: 1;
+      }
+      main {
+        flex: 1;
+        background-color: #f5f5f5;
+        border-top-left-radius: 20px;
+        border-top-right-radius: 20px;
+        padding: 20px 15px;
+      }
+      .section-title {
+        font-size: 18px;
+        color: #757575;
+        font-weight: normal;
+        margin: 20px 0 15px 0;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        gap: 8px;
+        margin-bottom: 25px;
+      }
+      .grid button {
+        background-color: white;
+        border: none;
+        height: 80px;
+        border-radius: 8px;
+        padding: 10px;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        justify-content: space-between;
+        box-shadow: 0 2px 2px rgba(0, 0, 0, 0.1);
+        cursor: pointer;
+        box-sizing: border-box;
+        font-family: "Questrial", sans-serif;
+        transition: background-color 0.3s ease;
+        position: relative;
+      }
+      .grid button:hover {
+        background-color: #bbbbbb;
+      }
+      .grid button:disabled {
+        background-color: #a0a0a0;
+        cursor: not-allowed;
+        opacity: 0.7;
+      }
+      .grid button img {
+        width: 24px;
+        height: 24px;
+      }
+      .grid button span {
+        font-size: 14px;
+        text-align: left;
+        color: #757575;
+      }
+
+      .badge {
+        position: absolute;
+        top: 5px;
+        right: 5px;
+        background-color: #f32121;
+        color: white;
+        border-radius: 50%;
+        width: 20px;
+        height: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        font-weight: bold;
+      }
+
+      /* Estilos atualizados para a seção de status dos veículos */
+      .vehicles-status-container {
+        margin-bottom: 25px;
+        background: white;
+        border-radius: 12px;
+        padding: 15px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+
+      .loading-vehicles,
+      .no-vehicles,
+      .error-vehicles {
+        text-align: center;
+        color: #757575;
+        padding: 10px;
+      }
+
+      .vehicles-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 10px;
+      }
+
+      .vehicle-card {
+        border-radius: 8px;
+        padding: 12px;
+        text-align: center;
+        font-size: 14px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        position: relative;
+        /* Adicionado para um melhor alinhamento interno */
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+
+      .vehicle-name {
+        font-weight: bold;
+        margin-bottom: 3px;
+        color: #333;
+      }
+
+      .vehicle-placa {
+        font-size: 11px;
+        margin-bottom: 5px;
+        color: #555;
+      }
+
+      .vehicle-status {
+        font-size: 12px;
+        padding: 3px 6px;
+        border-radius: 12px;
+        display: inline-block;
+        color: white;
+      }
+
+      .vehicle-driver {
+        font-size: 11px;
+        margin-top: 5px;
+        color: #555;
+        font-style: italic;
+        /* Garante que o nome do motorista não ocupe espaço desnecessário */
+        flex-grow: 1;
+        display: flex;
+        align-items: flex-end;
+      }
+
+      /* --- ESTILOS ATUALIZADOS PARA A BARRA DE GASOLINA (LAYOUT DE LINHA) --- */
+      .gas-bar-container-full-width {
+        width: 100%; /* Ocupa toda a largura do card */
+        height: 6px; /* Altura da linha/barra */
+        background-color: #e0e0e0; /* Cor de fundo (trilho) da barra */
+        border-radius: 3px;
+        margin-top: 8px; /* Espaço entre o status e a barra */
+        overflow: hidden; /* Esconde o que sobrar da barra interna */
+      }
+
+      .gas-bar-inner {
+        height: 100%;
+        border-radius: 3px;
+        transition: width 0.5s ease, background-color 0.5s ease;
+      }
+
+      /* Cores da barra interna de acordo com o nível */
+      .gas-bar-inner.full {
+        background-color: #4caf50;
+      } /* Verde */
+      .gas-bar-inner.medium {
+        background-color: #ffc107;
+      } /* Amarelo */
+      .gas-bar-inner.low {
+        background-color: #f44336;
+      } /* Vermelho */
+      /* --- FIM DOS ESTILOS ATUALIZADOS --- */
+
+      /* Cores para os status simplificados */
+      .vehicle-card.no-estacionamento {
+        background-color: #e8f5e9;
+      }
+
+      .vehicle-card.no-estacionamento .vehicle-status {
+        background-color: #4caf50; /* Verde para disponível */
+      }
+
+      .vehicle-card.em-corrida {
+        background-color: #ffebee;
+      }
+
+      .vehicle-card.em-corrida .vehicle-status {
+        background-color: #f44336; /* Vermelho para em uso */
+      }
+
+      /* Garante que o header preenche toda a área superior */
+      @supports (padding: max(0px)) {
+        header {
+          padding-top: max(20px, env(safe-area-inset-top));
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <img
+        src="assets/img_head_frotacontrol.png"
+        alt="FROTACONTROL"
+        class="header-title"
+      />
+      <p id="nomeColaborador">LUCAS DE LIMA E LIMA</p>
+      <p id="matriculaColaborador">801584</p>
+      <!-- Novo logo no canto superior direito -->
+      <img src="assets/pecas.png" alt="Logo Peças" class="logo-top-right" />
+      <img src="assets/logo.png" alt="Logo" class="logo" />
+    </header>
+
+    <main>
+      <!-- Nova Seção: Status dos Veículos -->
+      <h2 class="section-title">Status dos Veículos</h2>
+      <div class="vehicles-status-container" id="vehiclesStatusContainer">
+        <div class="loading-vehicles">Carregando status dos veículos...</div>
+      </div>
+
+      <!-- Seção Corridas -->
+      <h2 class="section-title">Corridas</h2>
+      <div class="grid">
+        <button id="iniciarCorridaBtn">
+          <img src="assets/icon_play.svg" alt="Iniciar Corrida" />
+          <span>Iniciar Corrida</span>
+        </button>
+
+        <button id="encerrarCorridaBtn">
+          <img src="assets/icon_stop.svg" alt="Encerrar Corrida" />
+          <span>Encerrar Corrida</span>
+        </button>
+
+        <button id="visualizarCorridasBtn">
+          <img src="assets/icon_view.svg" alt="Visualizar Corridas" />
+          <span>Visualizar Corridas</span>
+        </button>
+      </div>
+
+      <!-- Seção Agendamentos -->
+      <h2 class="section-title">Agendamentos</h2>
+      <div class="grid">
+        <button id="agendarCorridaBtn">
+          <img src="assets/icons_clock.svg" alt="Agendar Corrida" />
+          <span>Agendar Corrida</span>
+        </button>
+
+        <button id="visualizarAgendamentosBtn">
+          <img src="assets/icon_view.svg" alt="Visualizar Agendamentos" />
+          <span>Visualizar Agendamentos</span>
+        </button>
+      </div>
+
+      <!-- Seção Veículos e Indicadores -->
+      <h2 class="section-title">Veículos e Indicadores</h2>
+      <div class="grid">
+        <button id="consultarVeiculoBtn">
+          <img src="assets/icon_car.svg" alt="Consultar Veículo" />
+          <span>Consultar Veículo</span>
+        </button>
+
+        <button id="indicadoresBtn">
+          <img src="assets/icon_dash.svg" alt="Indicadores e Dashboards" />
+          <span>Indicadores</span>
+        </button>
+
+        <button id="exportarDadosBtn">
+          <img src="assets/icon_share.svg" alt="Exportar Dados" />
+          <span>Exportar Dados</span>
+        </button>
+      </div>
+
+      <!-- Seção Checklist -->
+      <h2 class="section-title">Checklist Diário</h2>
+      <div class="grid">
+        <button id="preencherChecklistBtn">
+          <img src="assets/icon_clipboard.svg" alt="Preencher Checklist" />
+          <span>Preencher Checklist</span>
+        </button>
+
+        <button id="visualizarChecklistBtn">
+          <img src="assets/icon_view.svg" alt="Visualizar Checklist" />
+          <span>Visualizar Checklist</span>
+        </button>
+      </div>
+
+      <!-- Seção Abastecimento -->
+      <h2 class="section-title">Abastecimento</h2>
+      <div class="grid">
+        <button id="registrarAbastecimentoBtn">
+          <img src="assets/icon_gas.svg" alt="Registrar Abastecimento" />
+          <span>Registrar Abastecimento</span>
+        </button>
+
+        <button id="visualizarAbastecimentoBtn">
+          <img src="assets/icon_view.svg" alt="Visualizar Abastecimento" />
+          <span>Visualizar Abastecimento</span>
+        </button>
+      </div>
+
+      <!-- Seção Conta -->
+      <h2 class="section-title">Conta</h2>
+      <div class="grid">
+        <button id="logoutBtn">
+          <img src="assets/icon_logout.svg" alt="Deslogar Conta" />
+          <span>Sair</span>
+        </button>
+      </div>
+    </main>
+
+    <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        const usuario = JSON.parse(localStorage.getItem("usuario"));
+
+        if (usuario) {
+          // Atualiza informações do perfil
+          document.getElementById("nomeColaborador").textContent = usuario.nome;
+          document.getElementById("matriculaColaborador").textContent =
+            usuario.mat;
+
+          // Trocar cor e logo conforme empresa
+          const header = document.querySelector("header");
+          const logo = document.querySelector("header img.logo");
+
+          if (usuario.empresa === "LSL") {
+            header.style.backgroundColor = "#0f2954";
+            logo.src = "assets/logo-lsl.png";
+            document.body.style.backgroundColor = "#0f2954";
+            document
+              .querySelector('meta[name="theme-color"]')
+              .setAttribute("content", "#0f2954");
+          } else if (usuario.empresa === "HONDA") {
+            header.style.backgroundColor = "#c62828";
+            logo.src = "assets/logo-honda.png";
+            document.body.style.backgroundColor = "#c62828";
+            document
+              .querySelector('meta[name="theme-color"]')
+              .setAttribute("content", "#c62828");
+          }
+
+          // Função para carregar status dos veículos com barra de gasolina
+          function carregarStatusVeiculos() {
+            const container = document.getElementById(
+              "vehiclesStatusContainer"
+            );
+
+            fetch(
+              `https://lslcda-default-rtdb.firebaseio.com/${usuario.empresa}/${usuario.setor}/veiculos.json`
+            )
+              .then((response) => response.json())
+              .then((veiculos) => {
+                if (!veiculos) {
+                  container.innerHTML =
+                    '<div class="no-vehicles">Nenhum veículo cadastrado</div>';
+                  return;
+                }
+
+                // Buscar corridas ativas
+                fetch(
+                  `https://lslcda-default-rtdb.firebaseio.com/${usuario.empresa}/${usuario.setor}/corridas.json`
+                )
+                  .then((response) => response.json())
+                  .then((corridas) => {
+                    const veiculosEmUso = {};
+                    if (corridas) {
+                      Object.values(corridas)
+                        .filter((c) => c !== null)
+                        .forEach((corrida) => {
+                          if (!corrida.horario_fim) {
+                            veiculosEmUso[corrida.veículo] =
+                              corrida.responsavel;
+                          }
+                        });
+                    }
+
+                    // Criar HTML para mostrar o status simplificado
+                    let html = '<div class="vehicles-grid">';
+
+                    for (const veiculo in veiculos) {
+                      if (veiculos[veiculo]) {
+                        const dadosVeiculo = veiculos[veiculo];
+                        const emUso = veiculosEmUso[veiculo];
+                        const status = emUso
+                          ? "EM CORRIDA"
+                          : "NO ESTACIONAMENTO";
+                        const classe = emUso
+                          ? "em-corrida"
+                          : "no-estacionamento";
+                        const placa =
+                          dadosVeiculo.placa || "Placa não informada";
+
+                        // *** INÍCIO DA MODIFICAÇÃO ***
+                        const quilometragem = dadosVeiculo.km_rodados || "0";
+                        // *** FIM DA MODIFICAÇÃO ***
+
+                        // Lógica para a barra de gasolina
+                        const gasLevel = dadosVeiculo.gasolina || 4;
+                        let gasBarWidth = "0%";
+                        let gasBarClass = "low";
+                        const nivel =
+                          typeof gasLevel === "string"
+                            ? parseInt(gasLevel)
+                            : gasLevel;
+
+                        if (nivel >= 3) {
+                          gasBarWidth = nivel === 3 ? "75%" : "100%";
+                          gasBarClass = "full";
+                        } else if (nivel === 2) {
+                          gasBarWidth = "50%";
+                          gasBarClass = "medium";
+                        } else if (nivel === 1) {
+                          gasBarWidth = "25%";
+                          gasBarClass = "low";
+                        }
+
+                        // *** HTML ATUALIZADO PARA INCLUIR A QUILOMETRAGEM ***
+                        html += `
+                                        <div class="vehicle-card ${classe}">
+                                            <div class="vehicle-name">${veiculo}</div>
+                                            <div class="vehicle-placa">${placa} - ${quilometragem} km</div>
+                                            <div class="vehicle-status">${status}</div>
+                                            
+                                            <div class="gas-bar-container-full-width">
+                                                <div class="gas-bar-inner ${gasBarClass}" style="width: ${gasBarWidth};"></div>
+                                            </div>
+
+                                            ${
+                                              emUso
+                                                ? `<div class="vehicle-driver">${emUso}</div>`
+                                                : ""
+                                            }
+                                        </div>
+                                    `;
+                      }
+                    }
+
+                    html += "</div>";
+                    container.innerHTML = html;
+                  })
+                  .catch((error) => {
+                    console.error("Erro ao buscar corridas:", error);
+                    container.innerHTML =
+                      '<div class="error-vehicles">Erro ao carregar status</div>';
+                  });
+              })
+              .catch((error) => {
+                console.error("Erro ao buscar veículos:", error);
+                container.innerHTML =
+                  '<div class="error-vehicles">Erro ao carregar veículos</div>';
+              });
+          }
+
+          // Chamar a função para carregar os veículos
+          carregarStatusVeiculos();
+
+          // Atualizar a cada 30 segundos
+          setInterval(carregarStatusVeiculos, 30000);
+
+          // ... (o resto do seu código JavaScript continua aqui, sem alterações) ...
+
+          // Elementos dos botões
+          const iniciarCorridaBtn =
+            document.getElementById("iniciarCorridaBtn");
+          const agendarCorridaBtn =
+            document.getElementById("agendarCorridaBtn");
+          const encerrarCorridaBtn =
+            document.getElementById("encerrarCorridaBtn");
+          const visualizarCorridasBtn = document.getElementById(
+            "visualizarCorridasBtn"
+          );
+          const visualizarAgendamentosBtn = document.getElementById(
+            "visualizarAgendamentosBtn"
+          );
+          const preencherChecklistBtn = document.getElementById(
+            "preencherChecklistBtn"
+          );
+          const visualizarChecklistBtn = document.getElementById(
+            "visualizarChecklistBtn"
+          );
+          const registrarAbastecimentoBtn = document.getElementById(
+            "registrarAbastecimentoBtn"
+          );
+          const visualizarAbastecimentoBtn = document.getElementById(
+            "visualizarAbastecimentoBtn"
+          );
+          const consultarVeiculoBtn = document.getElementById(
+            "consultarVeiculoBtn"
+          );
+          const indicadoresBtn = document.getElementById("indicadoresBtn");
+          const exportarDadosBtn = document.getElementById("exportarDadosBtn");
+
+          // Verificar corridas do usuário
+          fetch(
+            `https://lslcda-default-rtdb.firebaseio.com/${usuario.empresa}/${usuario.setor}/corridas.json`
+          )
+            .then((response) => response.json())
+            .then((data) => {
+              const corridas = Object.values(data || {}).filter(
+                (c) => c !== null
+              );
+              const userCorridas = corridas.filter(
+                (c) => c.responsavel === usuario.nome
+              );
+
+              // Ordenar por data mais recente
+              userCorridas.sort((a, b) => {
+                const [diaA, mesA, anoA] = a.data.split("/");
+                const [diaB, mesB, anoB] = b.data.split("/");
+                const dateA = new Date(
+                  `${anoA}-${mesA}-${diaA}T${a.horario_inicio}`
+                );
+                const dateB = new Date(
+                  `${anoB}-${mesB}-${diaB}T${b.horario_inicio}`
+                );
+                return dateB - dateA;
+              });
+
+              const ultimaCorrida = userCorridas[0];
+              const corridaAtiva = ultimaCorrida && !ultimaCorrida.horario_fim;
+
+              iniciarCorridaBtn.disabled = !!corridaAtiva;
+              encerrarCorridaBtn.disabled = !corridaAtiva;
+            })
+            .catch((error) => {
+              console.error("Erro ao verificar corridas:", error);
+              iniciarCorridaBtn.disabled = true;
+            });
+
+          // Verificar agendamentos ativos no setor
+          function verificarAgendamentosAtivos() {
+            fetch(
+              `https://lslcda-default-rtdb.firebaseio.com/${usuario.empresa}/${usuario.setor}/agendamentos.json`
+            )
+              .then((response) => response.json())
+              .then((agendamentos) => {
+                if (!agendamentos) return;
+
+                let count = 0;
+                const agora = new Date();
+
+                // Percorre todos os veículos e seus agendamentos
+                for (const veiculo in agendamentos) {
+                  if (agendamentos[veiculo]) {
+                    for (const id in agendamentos[veiculo]) {
+                      const agendamento = agendamentos[veiculo][id];
+                      if (agendamento && agendamento.status === "confirmado") {
+                        // Verifica se o agendamento ainda está no futuro
+                        const [dia, mes, ano] = agendamento.data.split("/");
+                        const dataAgendamento = new Date(
+                          `${ano}-${mes}-${dia}T${agendamento.hora_fim}`
+                        );
+
+                        if (dataAgendamento > agora) {
+                          count++;
+                        }
+                      }
+                    }
+                  }
+                }
+
+                // Atualiza o badge
+                const badge = document.querySelector(
+                  "#visualizarAgendamentosBtn .badge"
+                );
+                if (count > 0) {
+                  if (!badge) {
+                    const newBadge = document.createElement("div");
+                    newBadge.className = "badge";
+                    newBadge.textContent = count;
+                    visualizarAgendamentosBtn.appendChild(newBadge);
+                  } else {
+                    badge.textContent = count;
+                  }
+                } else if (badge) {
+                  badge.remove();
+                }
+              })
+              .catch((error) => {
+                console.error("Erro ao verificar agendamentos:", error);
+              });
+          }
+
+          // Verificar agendamentos ao carregar a página
+          verificarAgendamentosAtivos();
+
+          // Eventos dos botões
+          iniciarCorridaBtn.addEventListener("click", () => {
+            if (!iniciarCorridaBtn.disabled) {
+              window.location.href = "layout_iniciar.html";
+            }
+          });
+
+          agendarCorridaBtn.addEventListener("click", () => {
+            window.location.href = "layout_agendar.html";
+          });
+
+          encerrarCorridaBtn.addEventListener("click", () => {
+            if (!encerrarCorridaBtn.disabled) {
+              window.location.href = "layout_encerrar.html";
+            }
+          });
+
+          visualizarCorridasBtn.addEventListener("click", () => {
+            window.location.href = "layout_visualisar.html";
+          });
+
+          visualizarAgendamentosBtn.addEventListener("click", () => {
+            window.location.href = "layout_visualisar_agendamentos.html";
+          });
+
+          preencherChecklistBtn.addEventListener("click", () => {
+            window.location.href = "layout_preencher_checklist.html";
+          });
+
+          visualizarChecklistBtn.addEventListener("click", () => {
+            window.location.href = "layout_visualisar_checklist.html";
+          });
+
+          registrarAbastecimentoBtn.addEventListener("click", () => {
+            window.location.href = "layout_registrar_abastecimento.html";
+          });
+
+          visualizarAbastecimentoBtn.addEventListener("click", () => {
+            window.location.href = "layout_visualisar_abastecimento.html";
+          });
+
+          consultarVeiculoBtn.addEventListener("click", () => {
+            window.location.href = "layout_consultar.html";
+          });
+
+          indicadoresBtn.addEventListener("click", () => {
+            window.location.href = "layout_dashboards.html";
+          });
+
+          exportarDadosBtn.addEventListener("click", () => {
+            window.location.href = "layout_exportar.html";
+          });
+
+          // Botão de Deslogar
+          document.getElementById("logoutBtn").addEventListener("click", () => {
+            const confirma = confirm("Tem certeza que deseja sair da conta?");
+            if (confirma) {
+              localStorage.removeItem("usuario");
+              window.location.href = "index.html";
+            }
+          });
+
+          // Atualiza dinamicamente a cor do tema quando muda a empresa
+          const observer = new MutationObserver(function (mutations) {
+            mutations.forEach(function (mutation) {
+              if (mutation.attributeName === "style") {
+                const bgColor = header.style.backgroundColor;
+                document
+                  .querySelectorAll('meta[name="theme-color"]')
+                  .forEach((meta) => {
+                    meta.setAttribute("content", bgColor);
+                  });
+              }
+            });
+          });
+
+          observer.observe(header, {
+            attributes: true,
+          });
+        } else {
+          console.error("Usuário não encontrado no localStorage");
+          window.location.href = "index.html";
+        }
+      });
+    </script>
+  </body>
+</html>

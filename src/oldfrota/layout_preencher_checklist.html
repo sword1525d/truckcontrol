@@ -1,0 +1,1041 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0f2954">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <title>FROTACONTROL - Checklist Completo</title>
+    <link href="https://fonts.googleapis.com/css2?family=Questrial&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: 'Questrial', sans-serif;
+            background: #2563eb;
+            min-height: 100vh;
+            min-height: 100dvh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            min-height: 100dvh;
+            width: 100%;
+        }
+
+        .header {
+            background-color: #0f2954;
+            color: white;
+            padding: 15px;
+            display: flex;
+            justify-content: flex-start;
+            align-items: center;
+        }
+
+        .back-button {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 50%;
+            transition: background-color 0.2s ease;
+        }
+
+        .back-button:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .back-button img {
+            width: 24px;
+            height: 24px;
+            filter: brightness(0) invert(1);
+        }
+
+        .form-container {
+            background: white;
+            border-radius: 24px 24px 0 0;
+            padding: 36px 20px 20px;
+            flex: 1;
+            box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.1);
+            position: relative;
+            width: 100%;
+            overflow-y: auto;
+            margin-top: -20px;
+        }
+
+        .form-title {
+            color: #4b4b4b;
+            text-align: center;
+            margin-bottom: 25px;
+            font-size: 1.4rem;
+        }
+
+        .form-group {
+            position: relative;
+            margin-bottom: 25px;
+        }
+
+        .form-input, .form-select {
+            width: 100%;
+            padding: 14px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            font-family: 'Questrial', sans-serif;
+            background: transparent;
+            transition: all 0.2s ease;
+            outline: none;
+            -webkit-appearance: none;
+            appearance: none;
+            height: 58px;
+        }
+
+        .form-input:focus, .form-select:focus {
+            border-color: #0f2954;
+            border-width: 2px;
+            padding: 13px;
+            box-shadow: 0 0 0 4px rgba(15, 41, 84, 0.1);
+        }
+
+        .form-label {
+            position: absolute;
+            left: 14px;
+            top: 16px;
+            color: #757575;
+            font-size: 16px;
+            transition: all 0.2s ease;
+            pointer-events: none;
+            background: white;
+            padding: 0 4px;
+            transform-origin: left center;
+        }
+
+        .form-input:focus + .form-label,
+        .form-input:not(:placeholder-shown) + .form-label,
+        .form-select:focus + .form-label,
+        .form-select:not([value=""]) + .form-label {
+            transform: translateY(-28px) scale(0.875);
+            color: #0f2954;
+            font-weight: 500;
+        }
+
+        .form-select {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23757575' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: calc(100% - 14px) center;
+            padding-right: 36px;
+        }
+
+        .form-select:focus {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%230f2954' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+        }
+
+        .form-select option {
+            background-color: white;
+            color: #333;
+            padding: 12px;
+        }
+
+        .btn-primary {
+            width: 100%;
+            background: #0f2954;
+            border: none;
+            border-radius: 12px;
+            padding: 16px;
+            color: white;
+            font-size: 16px;
+            font-weight: 500;
+            font-family: 'Questrial', sans-serif;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin-top: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 52px;
+            box-shadow: 0 2px 4px rgba(15, 41, 84, 0.3);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-primary:hover {
+            background: #1a3a6e;
+            box-shadow: 0 4px 8px rgba(15, 41, 84, 0.3);
+        }
+
+        .btn-primary:active {
+            transform: translateY(1px);
+            box-shadow: 0 1px 2px rgba(15, 41, 84, 0.3);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            background: #0f2954;
+            box-shadow: none;
+        }
+
+        .loading-spinner {
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s linear infinite;
+            margin-right: 8px;
+            display: none;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .btn-primary.loading .loading-spinner {
+            display: inline-block;
+        }
+
+        .toast {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-100px);
+            padding: 12px 20px;
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+            opacity: 0;
+            transition: all 0.3s ease;
+            z-index: 1000;
+            max-width: 90%;
+            text-align: center;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .toast.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+
+        .toast.error {
+            background: #dc2626;
+        }
+
+        .toast.success {
+            background: #16a34a;
+        }
+
+        .form-group.error .form-input,
+        .form-group.error .form-select {
+            border-color: #dc2626;
+            border-width: 2px;
+            padding: 13px;
+            animation: shake 0.3s ease-in-out;
+        }
+
+        .form-group.error .form-label {
+            color: #dc2626;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-4px); }
+            75% { transform: translateX(4px); }
+        }
+
+        /* Honda Theme */
+        .honda-theme {
+            --color-primary: #c62828;
+            --color-primary-dark: #8e0000;
+        }
+
+        .honda-theme .header {
+            background-color: var(--color-primary) !important;
+        }
+
+        .honda-theme .form-input:focus,
+        .honda-theme .form-select:focus {
+            border-color: var(--color-primary);
+            box-shadow: 0 0 0 4px rgba(198, 40, 40, 0.1);
+        }
+
+        .honda-theme .form-input:focus + .form-label,
+        .honda-theme .form-input:not(:placeholder-shown) + .form-label,
+        .honda-theme .form-select:focus + .form-label,
+        .honda-theme .form-select:not([value=""]) + .form-label {
+            color: var(--color-primary);
+        }
+
+        .honda-theme .form-select:focus {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23c62828' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+        }
+
+        .honda-theme .btn-primary {
+            background: var(--color-primary);
+            box-shadow: 0 2px 4px rgba(198, 40, 40, 0.3);
+        }
+
+        .honda-theme .btn-primary:hover {
+            background: var(--color-primary-dark);
+            box-shadow: 0 4px 8px rgba(198, 40, 40, 0.3);
+        }
+
+        .honda-theme .btn-primary:disabled {
+            background: var(--color-primary);
+        }
+
+        .honda-theme .loading-spinner {
+            border-top-color: white;
+        }
+
+        /* Safe area adjustments */
+        @supports (padding: max(0px)) {
+            .header {
+                padding-top: max(15px, env(safe-area-inset-top));
+                padding-bottom: max(15px, env(safe-area-inset-bottom));
+            }
+            
+            .form-container {
+                padding-bottom: max(20px, env(safe-area-inset-bottom) + 20px);
+            }
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 480px) {
+            .form-container {
+                padding: 25px 15px 15px;
+            }
+            
+            .form-input, .form-select {
+                height: 50px;
+                font-size: 15px;
+                padding: 12px;
+            }
+            
+            .btn-primary {
+                padding: 14px;
+                font-size: 15px;
+            }
+        }
+
+        /* Checklist specific styles */
+        .inputs {
+            display: none;
+            flex-direction: column;
+            width: 100%;
+        }
+        
+        .section-title {
+            color: #4b4b4b;
+            margin: 20px 0 10px;
+            font-size: 1.1rem;
+            border-bottom: 1px solid #0f2954;
+            padding-bottom: 5px;
+        }
+        
+        .image-container {
+            position: relative;
+            margin: 20px 0;
+            text-align: center;
+        }
+        
+        .image {
+            max-width: 100%;
+            height: auto;
+        }
+        
+        .checkbox {
+            position: absolute;
+            transform: scale(1.5);
+            cursor: pointer;
+        }
+        
+        .checkbox-frente {top: 0%; left: 47%;}
+        .checkbox-tras {top: 95%; left: 47%;}
+        .checkbox-frente-esquerda {top: 30%; left: 20%;}
+        .checkbox-frente-direita {top: 30%; left: 73%;}
+        .checkbox-tras-direita {top: 70%; left: 73%;}
+        .checkbox-tras-esquerda {top: 70%; left: 20%;}
+        
+        .input-group {
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .input-group label {
+            flex: 1;
+            color: #4b4b4b;
+            margin-right: 10px;
+        }
+        
+        .input-group input {
+            padding: 12px;
+            border: 1.5px solid #e0e0e0;
+            border-radius: 8px;
+            background-color: transparent;
+            color: #4b4b4b;
+            flex: 2;
+            font-family: 'Questrial', sans-serif;
+            transition: all 0.2s ease;
+        }
+        
+        .input-group input.ok-text {
+            color: green;
+            border-color: green;
+        }
+        
+        .input-group input:disabled {
+            background-color: #f0f0f0;
+        }
+        
+        .equipment-checkbox {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .equipment-checkbox input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            margin-right: 10px;
+        }
+        
+        .equipment-checkbox label {
+            color: #4b4b4b;
+        }
+        
+        .equipment-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .observations-container {
+            margin: 20px 0;
+            position: relative;
+        }
+        
+        .observations-label {
+            display: block;
+            margin-bottom: 8px;
+            color: #4b4b4b;
+            font-weight: 500;
+        }
+        
+        .observations-textarea {
+            width: 100%;
+            min-height: 120px;
+            padding: 15px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            background-color: #f8f8f8;
+            font-size: 1rem;
+            color: #4b4b4b;
+            resize: vertical;
+            transition: all 0.3s ease;
+            font-family: 'Questrial', sans-serif;
+        }
+        
+        .observations-textarea:focus {
+            outline: none;
+            border-color: #0f2954;
+            border-width: 2px;
+            padding: 14px;
+            box-shadow: 0 0 0 4px rgba(15, 41, 84, 0.1);
+        }
+        
+        .char-counter {
+            text-align: right;
+            font-size: 0.8rem;
+            color: #666;
+            margin-top: 5px;
+        }
+        
+        /* Estilos para upload de imagens */
+        .upload-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 2px dashed #e0e0e0;
+            border-radius: 8px;
+            text-align: center;
+            background-color: #f8f8f8;
+        }
+        
+        .upload-btn {
+            background-color: #0f2954;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            display: inline-block;
+            margin-top: 10px;
+            transition: all 0.3s;
+            font-family: 'Questrial', sans-serif;
+        }
+        
+        .upload-btn:hover {
+            background-color: #1a3a6e;
+        }
+        
+        .upload-btn input {
+            display: none;
+        }
+        
+        .preview-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .image-preview {
+            position: relative;
+            width: 100px;
+            height: 100px;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid #e0e0e0;
+        }
+        
+        .image-preview img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        .remove-btn {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background-color: rgba(255,0,0,0.7);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            font-size: 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .upload-status {
+            margin-top: 10px;
+            font-size: 0.9rem;
+            color: #666;
+        }
+        
+        .loading-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        /* Honda theme adjustments */
+        .honda-theme .section-title,
+        .honda-theme .input-group input:focus,
+        .honda-theme .observations-textarea:focus {
+            border-color: var(--color-primary);
+        }
+        
+        .honda-theme .section-title {
+            color: var(--color-primary);
+            border-bottom-color: var(--color-primary);
+        }
+        
+        .honda-theme .upload-section,
+        .honda-theme .input-group input:focus {
+            border-color: var(--color-primary);
+        }
+        
+        .honda-theme .upload-btn {
+            background-color: var(--color-primary);
+        }
+        
+        .honda-theme .upload-btn:hover {
+            background-color: var(--color-primary-dark);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <button class="back-button" onclick="window.history.back()">
+                <img src="assets/icon_arrow.svg" alt="Voltar">
+            </button>
+        </div>
+
+        <div class="form-container">
+            <div class="form-group">
+                <select id="veiculo" class="form-select" required>
+                    <option value="" disabled selected hidden></option>
+                </select>
+                <label class="form-label" for="veiculo">Veículo</label>
+            </div>
+
+            <div class="inputs" id="inputs-container">
+                <h3 class="section-title">Inspeção Externa</h3>
+                <div class="image-container">
+                    <img src="car.png" alt="Imagem do veículo" class="image">
+                    <input type="checkbox" class="checkbox checkbox-frente" id="checkbox-frente">
+                    <input type="checkbox" class="checkbox checkbox-frente-esquerda" id="checkbox-frente-esquerda">
+                    <input type="checkbox" class="checkbox checkbox-tras-esquerda" id="checkbox-tras-esquerda">
+                    <input type="checkbox" class="checkbox checkbox-tras" id="checkbox-tras">
+                    <input type="checkbox" class="checkbox checkbox-tras-direita" id="checkbox-tras-direita">
+                    <input type="checkbox" class="checkbox checkbox-frente-direita" id="checkbox-frente-direita">
+                </div>
+
+                <div class="input-group">
+                    <label for="input-frente">Frente</label>
+                    <input type="text" id="input-frente" placeholder="Insira observações">
+                </div>
+                <div class="input-group">
+                    <label for="input-frente-esquerda">Frente Esquerda</label>
+                    <input type="text" id="input-frente-esquerda" placeholder="Insira observações">
+                </div>
+                <div class="input-group">
+                    <label for="input-tras-esquerda">Trás Esquerda</label>
+                    <input type="text" id="input-tras-esquerda" placeholder="Insira observações">
+                </div>
+                <div class="input-group">
+                    <label for="input-tras">Trás</label>
+                    <input type="text" id="input-tras" placeholder="Insira observações">
+                </div>
+                <div class="input-group">
+                    <label for="input-tras-direita">Trás Direita</label>
+                    <input type="text" id="input-tras-direita" placeholder="Insira observações">
+                </div>
+                <div class="input-group">
+                    <label for="input-frente-direita">Frente Direita</label>
+                    <input type="text" id="input-frente-direita" placeholder="Insira observações">
+                </div>
+
+                <h3 class="section-title">Equipamentos Obrigatórios</h3>
+                <div class="equipment-grid">
+                    <div class="equipment-checkbox">
+                        <input type="checkbox" id="equip-macaco">
+                        <label for="equip-macaco">Macaco</label>
+                    </div>
+                    <div class="equipment-checkbox">
+                        <input type="checkbox" id="equip-estepe">
+                        <label for="equip-estepe">Estepe</label>
+                    </div>
+                    <div class="equipment-checkbox">
+                        <input type="checkbox" id="equip-chave">
+                        <label for="equip-chave">Chave de Roda</label>
+                    </div>
+                    <div class="equipment-checkbox">
+                        <input type="checkbox" id="equip-triangulo">
+                        <label for="equip-triangulo">Triângulo</label>
+                    </div>
+                    <div class="equipment-checkbox">
+                        <input type="checkbox" id="equip-tapete">
+                        <label for="equip-tapete">Tapete</label>
+                    </div>
+                    <div class="equipment-checkbox">
+                        <input type="checkbox" id="equip-som">
+                        <label for="equip-som">Sistema de Som</label>
+                    </div>
+                </div>
+
+                <h3 class="section-title">Observações Adicionais</h3>
+                <div class="observations-container">
+                    <label for="observacoes" class="observations-label">Descreva qualquer observação relevante sobre o veículo:</label>
+                    <textarea id="observacoes" class="observations-textarea" 
+                              placeholder="Ex: Arranhões na porta direita, farol esquerdo com condensação, etc."></textarea>
+                    <div class="char-counter"><span id="char-count">0</span>/500 caracteres</div>
+                </div>
+
+                <h3 class="section-title">Anexar Imagens</h3>
+                <div class="upload-section">
+                    <p>Adicione fotos para documentar o estado do veículo (máx. 10 imagens)</p>
+                    <label class="upload-btn">
+                        Selecionar Imagens
+                        <input type="file" id="file-input" accept="image/*" multiple>
+                    </label>
+                    <div class="preview-container" id="preview-container"></div>
+                    <div class="upload-status" id="upload-status"></div>
+                </div>
+
+                <button class="btn-primary" id="btn-concluir" disabled>
+                    <div class="loading-spinner"></div>
+                    <span class="button-text">CONCLUIR CHECKLIST</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-spinner" style="width: 50px; height: 50px; border-width: 5px;"></div>
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            // Verifica a empresa do usuário e aplica o tema correspondente
+            const usuario = JSON.parse(localStorage.getItem('usuario'));
+            if (!usuario) {
+                window.location.href = 'index.html';
+                return;
+            }
+
+            // Aplicar tema conforme a empresa
+            if (usuario.empresa === 'HONDA') {
+                document.body.classList.add('honda-theme');
+                document.querySelector('meta[name="theme-color"]').content = '#c62828';
+            }
+
+            const veiculoSelect = document.getElementById('veiculo');
+            const toast = document.getElementById('toast');
+            const loadingOverlay = document.getElementById('loadingOverlay');
+            const btnConcluir = document.getElementById('btn-concluir');
+            const observacoesTextarea = document.getElementById('observacoes');
+            const charCount = document.getElementById('char-count');
+            const fileInput = document.getElementById('file-input');
+            const previewContainer = document.getElementById('preview-container');
+            const uploadStatus = document.getElementById('upload-status');
+
+            // Configuração Supabase
+            const SUPABASE_URL = 'https://console.swordbase.cloud';
+            const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsImlhdCI6MTc3MjA2MTA0OCwiZXhwIjoyNTI0NjA4MDAwLCJyb2xlIjoiYW5vbiJ9.y_znR577w2B0r-gKxzVa9kD5KvlZqPR9L8IZww0GoWg';
+            const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+            // Armazena as imagens selecionadas
+            let uploadedImages = [];
+
+            // Função para mostrar toast
+            function showToast(message, type = 'error') {
+                toast.textContent = message;
+                toast.className = `toast ${type}`;
+                toast.classList.add('show');
+                
+                setTimeout(() => {
+                    toast.classList.remove('show');
+                }, 4000);
+                
+                // Vibrar se suportado
+                if (navigator.vibrate) {
+                    navigator.vibrate(200);
+                }
+            }
+
+            // Função para ativar loading
+            function setLoading(loading) {
+                if (loading) {
+                    loadingOverlay.style.display = 'flex';
+                    btnConcluir.classList.add('loading');
+                    btnConcluir.disabled = true;
+                } else {
+                    loadingOverlay.style.display = 'none';
+                    btnConcluir.classList.remove('loading');
+                    btnConcluir.disabled = false;
+                }
+            }
+
+            // Contador de caracteres para o campo de observações
+            observacoesTextarea.addEventListener('input', function() {
+                const currentLength = this.value.length;
+                charCount.textContent = currentLength;
+                
+                if (currentLength > 500) {
+                    this.value = this.value.substring(0, 500);
+                    charCount.textContent = 500;
+                    charCount.style.color = 'red';
+                } else {
+                    charCount.style.color = '#666';
+                }
+            });
+
+            // Carrega a lista de veículos
+            if (usuario && usuario.empresa && usuario.setor) {
+                const empresa = usuario.empresa;
+                const setor = usuario.setor;
+
+                setLoading(true);
+
+                fetch(`https://lslcda-default-rtdb.firebaseio.com/${empresa}/${setor}/veiculos.json`)
+                    .then(response => response.json())
+                    .then(veiculos => {
+                        setLoading(false);
+                        if (veiculos) {
+                            for (const veiculo in veiculos) {
+                                if (veiculos[veiculo]) {
+                                    const option = document.createElement('option');
+                                    option.value = veiculo;
+                                    option.textContent = veiculo;
+                                    veiculoSelect.appendChild(option);
+                                }
+                            }
+                        } else {
+                            showToast('Nenhum veículo cadastrado', 'error');
+                        }
+                    })
+                    .catch(error => {
+                        setLoading(false);
+                        console.error('Erro ao carregar veículos:', error);
+                        showToast('Erro ao carregar lista de veículos', 'error');
+                    });
+            }
+
+            // Habilita o formulário quando um veículo é selecionado
+            veiculoSelect.addEventListener('change', function() {
+                document.getElementById('inputs-container').style.display = 'flex';
+                btnConcluir.disabled = false;
+            });
+
+            // Função para alternar entre OK e campo de texto
+            function toggleInput(checkboxId, inputId) {
+                var checkbox = document.getElementById(checkboxId);
+                var input = document.getElementById(inputId);
+                checkbox.addEventListener('change', function() {
+                    if (this.checked) {
+                        input.value = 'OK';
+                        input.disabled = true;
+                        input.classList.add('ok-text');
+                    } else {
+                        input.value = '';
+                        input.disabled = false;
+                        input.classList.remove('ok-text');
+                    }
+                });
+            }
+
+            // Configura os checkboxes da inspeção visual
+            toggleInput('checkbox-frente', 'input-frente');
+            toggleInput('checkbox-frente-esquerda', 'input-frente-esquerda');
+            toggleInput('checkbox-tras-esquerda', 'input-tras-esquerda');
+            toggleInput('checkbox-tras', 'input-tras');
+            toggleInput('checkbox-tras-direita', 'input-tras-direita');
+            toggleInput('checkbox-frente-direita', 'input-frente-direita');
+
+            // Manipulação de imagens
+            fileInput.addEventListener('change', function(e) {
+                const files = Array.from(e.target.files);
+                
+                if (files.length > 10) {
+                    showToast('Máximo de 10 imagens permitidas');
+                    return;
+                }
+                
+                // Verifica tamanho máximo de 5MB por imagem
+                const oversizedFiles = files.filter(file => file.size > 5 * 1024 * 1024);
+                if (oversizedFiles.length > 0) {
+                    showToast('Algumas imagens excedem 5MB e não serão carregadas');
+                }
+                
+                // Filtra apenas imagens válidas e dentro do tamanho
+                const validFiles = files.filter(file => 
+                    file.type.match('image.*') && file.size <= 5 * 1024 * 1024
+                );
+                
+                previewContainer.innerHTML = '';
+                uploadedImages = [];
+                
+                validFiles.forEach((file, index) => {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        const previewDiv = document.createElement('div');
+                        previewDiv.className = 'image-preview';
+                        
+                        const img = document.createElement('img');
+                        img.src = e.target.result;
+                        
+                        const removeBtn = document.createElement('button');
+                        removeBtn.className = 'remove-btn';
+                        removeBtn.innerHTML = '×';
+                        removeBtn.onclick = () => removeImage(index);
+                        
+                        previewDiv.appendChild(img);
+                        previewDiv.appendChild(removeBtn);
+                        previewContainer.appendChild(previewDiv);
+                        
+                        uploadedImages.push({
+                            file: file,
+                            preview: e.target.result
+                        });
+                    };
+                    reader.readAsDataURL(file);
+                });
+                
+                uploadStatus.textContent = `${validFiles.length} imagem(s) selecionada(s)`;
+            });
+
+            function removeImage(index) {
+                uploadedImages.splice(index, 1);
+                updatePreviews();
+            }
+
+            function updatePreviews() {
+                previewContainer.innerHTML = '';
+                uploadedImages.forEach((image, index) => {
+                    const previewDiv = document.createElement('div');
+                    previewDiv.className = 'image-preview';
+                    
+                    const img = document.createElement('img');
+                    img.src = image.preview;
+                    
+                    const removeBtn = document.createElement('button');
+                    removeBtn.className = 'remove-btn';
+                    removeBtn.innerHTML = '×';
+                    removeBtn.onclick = () => removeImage(index);
+                    
+                    previewDiv.appendChild(img);
+                    previewDiv.appendChild(removeBtn);
+                    previewContainer.appendChild(previewDiv);
+                });
+                
+                uploadStatus.textContent = `${uploadedImages.length} imagem(s) selecionada(s)`;
+            }
+
+            // Envio do formulário completo
+            btnConcluir.addEventListener('click', async function() {
+                const inputs = [
+                    'input-frente',
+                    'input-frente-direita',
+                    'input-frente-esquerda',
+                    'input-tras',
+                    'input-tras-direita',
+                    'input-tras-esquerda'
+                ];
+
+                let allFilled = true;
+                inputs.forEach(id => {
+                    const input = document.getElementById(id);
+                    if (!input.value) {
+                        allFilled = false;
+                        input.parentElement.classList.add('error');
+                    } else {
+                        input.parentElement.classList.remove('error');
+                    }
+                });
+
+                if (!allFilled) {
+                    showToast('Por favor, preencha todos os campos da inspeção visual.');
+                    return;
+                }
+
+                setLoading(true);
+                
+                try {
+                    // 1. Primeiro faz upload das imagens para o Supabase
+                    let imageLinks = [];
+                    if (uploadedImages.length > 0) {
+                        uploadStatus.textContent = "Enviando imagens para o Supabase...";
+
+                        for (const img of uploadedImages) {
+                            const fileExtension = img.file.name.split('.').pop();
+                            const fileName = `${crypto.randomUUID()}.${fileExtension}`;
+                            const filePath = `checklist/${fileName}`;
+
+                            const { data, error } = await _supabase.storage
+                                .from('frotacontrol')
+                                .upload(filePath, img.file, {
+                                    cacheControl: '3600',
+                                    upsert: false
+                                });
+
+                            if (error) {
+                                console.error('Erro Supabase:', error);
+                                throw new Error(`Falha no upload da imagem ${img.file.name}: ${error.message}`);
+                            }
+
+                            // Obter URL pública
+                            const { data: publicUrlData } = _supabase.storage
+                                .from('frotacontrol')
+                                .getPublicUrl(filePath);
+                            
+                            if (publicUrlData && publicUrlData.publicUrl) {
+                                imageLinks.push(publicUrlData.publicUrl);
+                            }
+                        }
+
+                        if (imageLinks.length === 0) {
+                            throw new Error('Nenhuma imagem foi enviada. O checklist não será salvo.');
+                        }
+                    }
+                    
+                    // 2. Prepara os dados do checklist
+                    const data = new Date();
+                    const dia = String(data.getDate()).padStart(2, '0');
+                    const mes = String(data.getMonth() + 1).padStart(2, '0');
+                    const ano = data.getFullYear();
+                    const horas = String(data.getHours()).padStart(2, '0');
+                    const minutos = String(data.getMinutes()).padStart(2, '0');
+
+                    const equipamentos = {
+                        macaco: document.getElementById('equip-macaco').checked,
+                        estepe: document.getElementById('equip-estepe').checked,
+                        chaveRoda: document.getElementById('equip-chave').checked,
+                        triangulo: document.getElementById('equip-triangulo').checked,
+                        tapete: document.getElementById('equip-tapete').checked,
+                        som: document.getElementById('equip-som').checked
+                    };
+
+                    const checklistData = {
+                        FRENTE: document.getElementById('input-frente').value,
+                        F_DIREITO: document.getElementById('input-frente-direita').value,
+                        F_ESQUERDO: document.getElementById('input-frente-esquerda').value,
+                        TRAS: document.getElementById('input-tras').value,
+                        T_DIREITO: document.getElementById('input-tras-direita').value,
+                        T_ESQUERDO: document.getElementById('input-tras-esquerda').value,
+                        EQUIPAMENTOS: equipamentos,
+                        OBSERVACOES: document.getElementById('observacoes').value,
+                        anexos: imageLinks,
+                        DATA: `${dia}/${mes}/${ano}`,
+                        HORA: `${horas}:${minutos}`,
+                        RESPONSAVEL: usuario.nome,
+                        VEICULO: veiculoSelect.value
+                    };
+
+                    // 3. Salva o checklist no Firebase
+                    const saveResponse = await fetch(`https://lslcda-default-rtdb.firebaseio.com/${usuario.empresa}/${usuario.setor}/relatorio.json`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(checklistData)
+                    });
+                    
+                    if (!saveResponse.ok) {
+                        throw new Error('Falha ao salvar checklist');
+                    }
+                    
+                    showToast('Checklist concluído com sucesso!', 'success');
+                    
+                    setTimeout(() => {
+                        window.location.href = 'layout_home.html';
+                    }, 2000);
+                } catch (error) {
+                    console.error('Erro:', error);
+                    showToast(error.message || 'Erro ao processar checklist');
+                } finally {
+                    setLoading(false);
+                }
+            });
+        });
+    </script>
+</body>
+</html>

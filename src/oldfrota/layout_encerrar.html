@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0f2954">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <title>FROTACONTROL - Encerrar Corrida</title>
+    <link href="https://fonts.googleapis.com/css2?family=Questrial&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: 'Questrial', sans-serif;
+            background: #2563eb;
+            min-height: 100vh;
+            min-height: 100dvh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            min-height: 100dvh;
+            width: 100%;
+        }
+
+        .header {
+            background-color: #0f2954;
+            color: white;
+            padding: 15px;
+            display: flex;
+            justify-content: flex-start;
+            align-items: center;
+        }
+
+        .back-button {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 50%;
+            transition: background-color 0.2s ease;
+        }
+
+        .back-button:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .back-button img {
+            width: 24px;
+            height: 24px;
+            filter: brightness(0) invert(1);
+        }
+
+        .form-container {
+            background: white;
+            border-radius: 24px 24px 0 0;
+            padding: 36px 20px 20px;
+            flex: 1;
+            box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.1);
+            position: relative;
+            width: 100%;
+            overflow-y: auto;
+            margin-top: -20px;
+        }
+
+        .form-title {
+            color: #4b4b4b;
+            text-align: center;
+            margin-bottom: 25px;
+            font-size: 1.4rem;
+        }
+
+        .form-group {
+            position: relative;
+            margin-bottom: 25px;
+        }
+
+        .form-input, .form-select {
+            width: 100%;
+            padding: 14px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            font-family: 'Questrial', sans-serif;
+            background: transparent;
+            transition: all 0.2s ease;
+            outline: none;
+            -webkit-appearance: none;
+            appearance: none;
+            height: 58px;
+        }
+
+        .form-input:focus, .form-select:focus {
+            border-color: #0f2954;
+            border-width: 2px;
+            padding: 13px;
+            box-shadow: 0 0 0 4px rgba(15, 41, 84, 0.1);
+        }
+
+        .form-label {
+            position: absolute;
+            left: 14px;
+            top: 16px;
+            color: #757575;
+            font-size: 16px;
+            transition: all 0.2s ease;
+            pointer-events: none;
+            background: white;
+            padding: 0 4px;
+            transform-origin: left center;
+        }
+
+        .form-input:focus + .form-label,
+        .form-input:not(:placeholder-shown) + .form-label,
+        .form-select:focus + .form-label,
+        .form-select:not([value=""]) + .form-label {
+            transform: translateY(-28px) scale(0.875);
+            color: #0f2954;
+            font-weight: 500;
+        }
+
+        .form-select {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23757575' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: calc(100% - 14px) center;
+            padding-right: 36px;
+        }
+
+        .form-select:focus {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%230f2954' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+        }
+
+        .form-select option {
+            background-color: white;
+            color: #333;
+            padding: 12px;
+        }
+
+        .btn-encerrar-corrida {
+            width: 100%;
+            background: #0f2954;
+            border: none;
+            border-radius: 12px;
+            padding: 16px;
+            color: white;
+            font-size: 16px;
+            font-weight: 500;
+            font-family: 'Questrial', sans-serif;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin-top: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 52px;
+            box-shadow: 0 2px 4px rgba(15, 41, 84, 0.3);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-encerrar-corrida:hover {
+            background: #1a3a6e;
+            box-shadow: 0 4px 8px rgba(15, 41, 84, 0.3);
+        }
+
+        .btn-encerrar-corrida:active {
+            transform: translateY(1px);
+            box-shadow: 0 1px 2px rgba(15, 41, 84, 0.3);
+        }
+
+        .btn-encerrar-corrida:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            background: #0f2954;
+            box-shadow: none;
+        }
+
+        .loading-spinner {
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s linear infinite;
+            margin-right: 8px;
+            display: none;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .btn-encerrar-corrida.loading .loading-spinner {
+            display: inline-block;
+        }
+
+        .toast {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-100px);
+            padding: 12px 20px;
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+            opacity: 0;
+            transition: all 0.3s ease;
+            z-index: 1000;
+            max-width: 90%;
+            text-align: center;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .toast.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+
+        .toast.error {
+            background: #dc2626;
+        }
+
+        .toast.success {
+            background: #16a34a;
+        }
+
+        .form-group.error .form-input,
+        .form-group.error .form-select {
+            border-color: #dc2626;
+            border-width: 2px;
+            padding: 13px;
+            animation: shake 0.3s ease-in-out;
+        }
+
+        .form-group.error .form-label {
+            color: #dc2626;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-4px); }
+            75% { transform: translateX(4px); }
+        }
+
+       /* NOVOS ESTILOS PARA BARRA DE GASOLINA */
+        .gasolina-container {
+            margin-top: 15px;
+        }
+        
+        .gasolina-title {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            color: #555;
+        }
+        
+        .gasolina-bar-wrapper {
+            position: relative;
+            height: 40px;
+            margin-bottom: 5px;
+        }
+        
+        .gasolina-bar {
+            height: 30px;
+            background: #f0f0f0;
+            border-radius: 15px;
+            overflow: hidden;
+            position: relative;
+            border: 1px solid #ddd;
+            cursor: pointer;
+        }
+        
+        .gasolina-level {
+            position: absolute;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            width: 0%;
+            background: #4CAF50; /* Verde padrão */
+            transition: width 0.3s ease, background 0.3s ease;
+        }
+        
+        /* Cores diferentes para cada nível */
+        .gasolina-level[data-level="1"] { background: #FF5252; } /* Vermelho - Crítico */
+        .gasolina-level[data-level="2"] { background: #FFC107; } /* Amarelo - Atenção */
+        .gasolina-level[data-level="3"] { background: #FFEB3B; } /* Amarelo claro */
+        .gasolina-level[data-level="4"] { background: #4CAF50; } /* Verde - Normal */
+        
+        .gasolina-markers {
+            display: flex;
+            justify-content: space-between;
+            position: relative;
+            height: 10px;
+        }
+        
+        .gasolina-marker {
+            width: 2px;
+            height: 10px;
+            background: #888;
+            position: relative;
+        }
+        
+        .gasolina-labels {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 5px;
+        }
+        
+        .gasolina-label {
+            font-size: 12px;
+            color: #555;
+            position: relative;
+            width: 25%;
+            text-align: center;
+        }
+        
+        .gasolina-label:not(:last-child)::after {
+            content: "";
+            position: absolute;
+            right: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 1px;
+            height: 12px;
+            background: #ddd;
+        }
+        
+        /* Tema Honda */
+        .honda-theme .gasolina-level[data-level="1"] { background: #D32F2F; }
+        .honda-theme .gasolina-level[data-level="2"] { background: #FFA000; }
+        .honda-theme .gasolina-level[data-level="3"] { background: #FFC107; }
+        .honda-theme .gasolina-level[data-level="4"] { background: #689F38; }
+
+        /* Honda Theme */
+        .honda-theme {
+            --color-primary: #c62828;
+            --color-primary-dark: #8e0000;
+        }
+
+        .honda-theme .header {
+            background-color: var(--color-primary) !important;
+        }
+
+        .honda-theme .form-input:focus,
+        .honda-theme .form-select:focus {
+            border-color: var(--color-primary);
+            box-shadow: 0 0 0 4px rgba(198, 40, 40, 0.1);
+        }
+
+        .honda-theme .form-input:focus + .form-label,
+        .honda-theme .form-input:not(:placeholder-shown) + .form-label,
+        .honda-theme .form-select:focus + .form-label,
+        .honda-theme .form-select:not([value=""]) + .form-label {
+            color: var(--color-primary);
+        }
+
+        .honda-theme .form-select:focus {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23c62828' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+        }
+
+        .honda-theme .btn-encerrar-corrida {
+            background: var(--color-primary);
+            box-shadow: 0 2px 4px rgba(198, 40, 40, 0.3);
+        }
+
+        .honda-theme .btn-encerrar-corrida:hover {
+            background: var(--color-primary-dark);
+            box-shadow: 0 4px 8px rgba(198, 40, 40, 0.3);
+        }
+
+        .honda-theme .btn-encerrar-corrida:disabled {
+            background: var(--color-primary);
+        }
+
+        .honda-theme .loading-spinner {
+            border-top-color: white;
+        }
+
+        .honda-theme .gasolina-level {
+            background: linear-gradient(to right, #ff0000, #ff6600, #ffcc00);
+        }
+
+        /* Safe area adjustments */
+        @supports (padding: max(0px)) {
+            .header {
+                padding-top: max(15px, env(safe-area-inset-top));
+                padding-bottom: max(15px, env(safe-area-inset-bottom));
+            }
+            
+            .form-container {
+                padding-bottom: max(20px, env(safe-area-inset-bottom) + 20px);
+            }
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 480px) {
+            .form-container {
+                padding: 25px 15px 15px;
+            }
+            
+            .form-input, .form-select {
+                height: 50px;
+                font-size: 15px;
+                padding: 12px;
+            }
+            
+            .btn-encerrar-corrida {
+                padding: 14px;
+                font-size: 15px;
+            }
+
+            .gasolina-bar {
+                height: 25px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <button class="back-button" onclick="window.history.back()">
+                <img src="assets/icon_arrow.svg" alt="Voltar">
+            </button>
+        </div>
+
+        <div class="form-container">
+        <form id="encerrarCorridaForm">
+            <div class="form-group">
+                <input type="number" id="quilometragemFinal" class="form-input" placeholder=" " required>
+                <label class="form-label" for="quilometragemFinal">Quilometragem Final</label>
+            </div>
+            
+            <div class="form-group">
+                <span class="gasolina-title">Nível de Gasolina</span>
+                <div class="gasolina-container">
+                    <div class="gasolina-bar-wrapper">
+                        <div class="gasolina-bar" id="gasolinaBar">
+                            <div class="gasolina-level" id="gasolinaLevel" data-level="4"></div>
+                        </div>
+                    </div>
+                    <div class="gasolina-labels">
+                        <div class="gasolina-label">Vazio</div>
+                        <div class="gasolina-label">¼</div>
+                        <div class="gasolina-label">½</div>
+                        <div class="gasolina-label">Cheio</div>
+                    </div>
+                </div>
+                <input type="hidden" id="gasolina" name="gasolina" value="4" required>
+            </div>
+            
+            <button type="submit" class="btn-encerrar-corrida">
+                <div class="loading-spinner"></div>
+                <span class="button-text">ENCERRAR CORRIDA</span>
+            </button>
+        </form>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            // Verifica a empresa do usuário e aplica o tema correspondente
+            const usuario = JSON.parse(localStorage.getItem('usuario'));
+            if (!usuario) {
+                window.location.href = 'index.html';
+                return;
+            }
+
+            // Aplicar tema conforme a empresa
+            if (usuario.empresa === 'HONDA') {
+                document.body.classList.add('honda-theme');
+                document.querySelector('meta[name="theme-color"]').content = '#c62828';
+            }
+
+            const empresa = usuario.empresa;
+            const setor = usuario.setor;
+            const matricula = usuario.mat;
+            const encerrarCorridaForm = document.getElementById('encerrarCorridaForm');
+            const quilometragemFinalInput = document.getElementById('quilometragemFinal');
+            const encerrarCorridaButton = document.querySelector('.btn-encerrar-corrida');
+            const toast = document.getElementById('toast');
+
+            // Controle da barra de gasolina
+            const gasolinaBar = document.getElementById('gasolinaBar');
+            const gasolinaLevel = document.getElementById('gasolinaLevel');
+            const gasolinaInput = document.getElementById('gasolina');
+            
+            // Níveis de gasolina (0-3 correspondendo a Vazio, 1/4, 1/2, Cheio)
+            const levels = [
+                { percent: 25, value: 1, class: 'critical' },  // 1/4 (Vermelho)
+                { percent: 50, value: 2, class: 'warning' },    // 1/2 (Amarelo)
+                { percent: 75, value: 3, class: 'ok' },         // 3/4 (Amarelo claro)
+                { percent: 100, value: 4, class: 'good' }       // Cheio (Verde)
+            ];
+            
+            gasolinaBar.addEventListener('click', (e) => {
+                const rect = gasolinaBar.getBoundingClientRect();
+                const clickPosition = e.clientX - rect.left;
+                const percentClicked = (clickPosition / rect.width) * 100;
+                
+                // Determinar qual nível foi selecionado
+                let selectedLevel;
+                if (percentClicked < 12.5) {
+                    selectedLevel = 0; // Vazio
+                } else if (percentClicked < 37.5) {
+                    selectedLevel = 0; // 1/4
+                } else if (percentClicked < 62.5) {
+                    selectedLevel = 1; // 1/2
+                } else if (percentClicked < 87.5) {
+                    selectedLevel = 2; // 3/4
+                } else {
+                    selectedLevel = 3; // Cheio
+                }
+                
+                const level = levels[selectedLevel];
+                gasolinaLevel.style.width = level.percent + '%';
+                gasolinaLevel.setAttribute('data-level', level.value);
+                gasolinaInput.value = level.value;
+                
+                // Feedback visual
+                gasolinaBar.style.transform = 'scale(1.02)';
+                setTimeout(() => {
+                    gasolinaBar.style.transform = 'scale(1)';
+                }, 200);
+            });
+
+            // Animação de feedback
+            gasolinaBar.addEventListener('mousedown', () => {
+                gasolinaBar.classList.add('pressed');
+            });
+
+            gasolinaBar.addEventListener('mouseup', () => {
+                gasolinaBar.classList.remove('pressed');
+            });
+
+            gasolinaBar.addEventListener('mouseleave', () => {
+                gasolinaBar.classList.remove('pressed');
+            });
+
+            // Função para mostrar toast
+            function showToast(message, type = 'error') {
+                toast.textContent = message;
+                toast.className = `toast ${type}`;
+                toast.classList.add('show');
+                
+                setTimeout(() => {
+                    toast.classList.remove('show');
+                }, 4000);
+                
+                if (navigator.vibrate) {
+                    navigator.vibrate(200);
+                }
+            }
+
+            // Função para ativar loading
+            function setLoading(loading) {
+                encerrarCorridaButton.classList.toggle('loading', loading);
+                encerrarCorridaButton.disabled = loading;
+                quilometragemFinalInput.disabled = loading;
+            }
+
+            // Função para encerrar corrida
+            encerrarCorridaForm.addEventListener('submit', async function(event) {
+                event.preventDefault();
+                
+                const quilometragemFinal = quilometragemFinalInput.value;
+                const gasolina = gasolinaInput.value || '0';
+                
+                if (!quilometragemFinal) {
+                    showToast('Informe a quilometragem final');
+                    quilometragemFinalInput.parentElement.classList.add('error');
+                    return;
+                }
+
+                if (!gasolinaInput.value) {
+                    showToast('Selecione o nível de gasolina');
+                    return;
+                }
+
+                setLoading(true);
+                const horario_fim = new Date().toLocaleTimeString('pt-BR');
+
+                try {
+                    // Obter todas as corridas do setor
+                    const corridasResponse = await fetch(`https://lslcda-default-rtdb.firebaseio.com/${empresa}/${setor}/corridas.json`);
+                    const corridas = await corridasResponse.json();
+                    
+                    if (!corridas) {
+                        showToast('Nenhuma corrida encontrada');
+                        setLoading(false);
+                        return;
+                    }
+
+                    // Encontrar a corrida ativa do usuário
+                    let corridaKey = null;
+                    let corridaAberta = null;
+                    
+                    for (const key in corridas) {
+                        if (corridas[key] && 
+                            corridas[key].responsavel === usuario.nome && 
+                            !corridas[key].horario_fim) {
+                            corridaKey = key;
+                            corridaAberta = corridas[key];
+                            break;
+                        }
+                    }
+
+                    if (!corridaAberta) {
+                        showToast('Nenhuma corrida aberta encontrada');
+                        setLoading(false);
+                        return;
+                    }
+
+                    // Atualizar dados da corrida
+                    const corridaAtualizada = {
+                        km_final: quilometragemFinal,
+                        horario_fim: horario_fim,
+                        gasolina: gasolina
+                    };
+
+                    const corridaUpdateResponse = await fetch(`https://lslcda-default-rtdb.firebaseio.com/${empresa}/${setor}/corridas/${corridaKey}.json`, {
+                        method: 'PATCH',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(corridaAtualizada)
+                    });
+
+                    if (!corridaUpdateResponse.ok) throw new Error('Erro ao atualizar corrida');
+
+                    // Atualizar dados do veículo
+                    const veiculo = corridaAberta.veículo;
+                    const veiculoAtualizado = {
+                        status: "NO ESTACIONAMENTO",
+                        "ÚLTIMO A USAR": usuario.nome,
+                        motorista: "",
+                        destino: "",
+                        km_rodados: quilometragemFinal,
+                        gasolina: gasolina
+                    };
+
+                    const veiculoResponse = await fetch(`https://lslcda-default-rtdb.firebaseio.com/${empresa}/${setor}/veiculos/${veiculo}.json`, {
+                        method: 'PATCH',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(veiculoAtualizado)
+                    });
+
+                    if (!veiculoResponse.ok) throw new Error('Erro ao atualizar veículo');
+
+                    // Atualizar dados do usuário
+                    const usuarioAtualizado = {
+                        em_corrida: false
+                    };
+
+                    const usuarioUpdateResponse = await fetch(`https://lslcda-default-rtdb.firebaseio.com/${empresa}/user/${matricula}.json`, {
+                        method: 'PATCH',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(usuarioAtualizado)
+                    });
+
+                    if (!usuarioUpdateResponse.ok) throw new Error('Erro ao atualizar usuário');
+
+                    // Mostrar mensagem de sucesso
+                    showToast('Corrida encerrada com sucesso!', 'success');
+                    
+                    // Redirecionar para tela de sucesso após 1.5s
+                    setTimeout(() => {
+                        window.location.href = 'layout_sucesso1.html';
+                    }, 1500);
+
+                } catch (error) {
+                    console.error('Erro:', error);
+                    showToast('Erro ao encerrar corrida. Tente novamente.');
+                    setLoading(false);
+                }
+            });
+
+            // Remover erro ao focar
+            quilometragemFinalInput.addEventListener('focus', function() {
+                this.parentElement.classList.remove('error');
+            });
+        });
+    </script>
+</body>
+</html>

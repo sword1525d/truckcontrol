@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dashboard - Acompanhamento de Pontos</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      :root {
+        --primary: #0f2954;
+        --primary-dark: #0a1f3d;
+        --success: #10b981;
+        --warning: #f59e0b;
+        --danger: #ef4444;
+        --gray-50: #f9fafb;
+        --gray-100: #f3f4f6;
+        --gray-200: #e5e7eb;
+        --gray-500: #6b7280;
+        --gray-700: #374151;
+        --gray-900: #111827;
+      }
+
+      body {
+        font-family: "Inter", sans-serif;
+        background: var(--gray-50);
+        color: var(--gray-900);
+        min-height: 100vh;
+        padding: 2rem;
+      }
+
+      .honda-theme {
+        --primary: #c62828;
+        --primary-dark: #8e0000;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+
+      .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2rem;
+        padding-bottom: 1rem;
+        border-bottom: 2px solid var(--gray-200);
+      }
+
+      .header-title {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: var(--primary);
+      }
+
+      .user-info {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+      }
+
+      .btn {
+        padding: 0.75rem 1.5rem;
+        border: none;
+        border-radius: 8px;
+        font-family: inherit;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .btn-primary {
+        background: var(--primary);
+        color: white;
+      }
+
+      .btn-primary:hover {
+        background: var(--primary-dark);
+      }
+
+      /* Progress Section */
+      .progress-section {
+        background: white;
+        border-radius: 16px;
+        padding: 2rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      }
+
+      .progress-header {
+        display: flex;
+        justify-content: between;
+        align-items: center;
+        margin-bottom: 2rem;
+      }
+
+      .progress-title {
+        font-size: 1.5rem;
+        font-weight: 600;
+      }
+
+      .progress-stats {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+      }
+
+      .stat-card {
+        text-align: center;
+        padding: 1.5rem;
+        border-radius: 12px;
+        background: var(--gray-50);
+      }
+
+      .stat-number {
+        font-size: 2.5rem;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+      }
+
+      .stat-label {
+        color: var(--gray-500);
+        font-size: 0.875rem;
+      }
+
+      /* Progress Bar */
+      .progress-container {
+        margin: 2rem 0;
+      }
+
+      .progress-bar {
+        height: 12px;
+        background: var(--gray-200);
+        border-radius: 6px;
+        overflow: hidden;
+        margin-bottom: 1rem;
+      }
+
+      .progress-fill {
+        height: 100%;
+        background: var(--primary);
+        border-radius: 6px;
+        transition: width 0.5s ease;
+      }
+
+      .progress-text {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.875rem;
+        color: var(--gray-500);
+      }
+
+      /* Points Timeline */
+      .timeline-section {
+        background: white;
+        border-radius: 16px;
+        padding: 2rem;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      }
+
+      .timeline-title {
+        font-size: 1.5rem;
+        font-weight: 600;
+        margin-bottom: 2rem;
+      }
+
+      .timeline {
+        display: grid;
+        gap: 1rem;
+      }
+
+      .timeline-item {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 1.5rem;
+        border-radius: 12px;
+        border-left: 4px solid var(--gray-300);
+        background: var(--gray-50);
+        transition: all 0.2s;
+      }
+
+      .timeline-item.completed {
+        border-left-color: var(--success);
+        background: #f0fdf4;
+      }
+
+      .timeline-item.current {
+        border-left-color: var(--primary);
+        background: #eff6ff;
+        box-shadow: 0 2px 4px rgba(15, 41, 84, 0.1);
+      }
+
+      .timeline-item.pending {
+        border-left-color: var(--gray-300);
+      }
+
+      .timeline-marker {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+
+      .timeline-item.completed .timeline-marker {
+        background: var(--success);
+        color: white;
+      }
+
+      .timeline-item.current .timeline-marker {
+        background: var(--primary);
+        color: white;
+      }
+
+      .timeline-item.pending .timeline-marker {
+        background: var(--gray-300);
+        color: var(--gray-500);
+      }
+
+      .timeline-content {
+        flex: 1;
+      }
+
+      .timeline-point {
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+      }
+
+      .timeline-details {
+        display: flex;
+        gap: 1rem;
+        font-size: 0.875rem;
+        color: var(--gray-500);
+      }
+
+      .timeline-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.25rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 500;
+      }
+
+      .status-completed {
+        background: #d1fae5;
+        color: #065f46;
+      }
+
+      .status-current {
+        background: #dbeafe;
+        color: var(--primary);
+      }
+
+      .status-pending {
+        background: #f3f4f6;
+        color: var(--gray-500);
+      }
+
+      /* Vehicle Info */
+      .vehicle-info {
+        background: white;
+        border-radius: 16px;
+        padding: 2rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      }
+
+      .vehicle-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.5rem;
+      }
+
+      .vehicle-details {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1.5rem;
+      }
+
+      .detail-card {
+        padding: 1.5rem;
+        border-radius: 12px;
+        background: var(--gray-50);
+      }
+
+      .detail-label {
+        font-size: 0.875rem;
+        color: var(--gray-500);
+        margin-bottom: 0.5rem;
+      }
+
+      .detail-value {
+        font-size: 1.25rem;
+        font-weight: 600;
+      }
+
+      /* Responsive */
+      @media (max-width: 1024px) {
+        .progress-stats {
+          grid-template-columns: repeat(2, 1fr);
+        }
+
+        .vehicle-details {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 768px) {
+        body {
+          padding: 1rem;
+        }
+
+        .progress-stats {
+          grid-template-columns: 1fr;
+        }
+
+        .header {
+          flex-direction: column;
+          gap: 1rem;
+          align-items: flex-start;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <!-- Header -->
+      <div class="header">
+        <div>
+          <h1 class="header-title">Acompanhamento de Pontos</h1>
+          <div
+            style="color: var(--gray-500); margin-top: 0.5rem"
+            id="currentDateTime"
+          >
+            Carregando...
+          </div>
+        </div>
+        <div class="user-info">
+          <div style="text-align: right">
+            <div id="userName" style="font-weight: 600">Usuário</div>
+            <div
+              id="vehicleInfo"
+              style="font-size: 0.875rem; color: var(--gray-500)"
+            >
+              Veículo
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="refreshData()">
+            <i class="fas fa-sync-alt"></i>
+            Atualizar
+          </button>
+        </div>
+      </div>
+
+      <!-- Vehicle Info -->
+      <div class="vehicle-info">
+        <div class="vehicle-header">
+          <h2 style="font-size: 1.25rem; font-weight: 600">
+            Informações do Veículo
+          </h2>
+          <div class="timeline-status status-current" id="overallStatus">
+            <i class="fas fa-truck"></i>
+            Em Andamento
+          </div>
+        </div>
+        <div class="vehicle-details">
+          <div class="detail-card">
+            <div class="detail-label">Caminhão</div>
+            <div class="detail-value" id="vehiclePlate">NAQ9H24</div>
+          </div>
+          <div class="detail-card">
+            <div class="detail-label">KM Atual</div>
+            <div class="detail-value" id="currentKm">45.280 km</div>
+          </div>
+          <div class="detail-card">
+            <div class="detail-label">Início da Rota</div>
+            <div class="detail-value" id="routeStart">08:30</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Progress Section -->
+      <div class="progress-section">
+        <div class="progress-header">
+          <h2 class="progress-title">Progresso da Rota</h2>
+          <div
+            id="progressText"
+            style="font-size: 1.125rem; font-weight: 600; color: var(--primary)"
+          >
+            0 de 0 pontos
+          </div>
+        </div>
+
+        <div class="progress-stats">
+          <div class="stat-card">
+            <div class="stat-number" id="completedPoints">0</div>
+            <div class="stat-label">Concluídos</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-number" id="currentPoint">-</div>
+            <div class="stat-label">Atual</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-number" id="pendingPoints">0</div>
+            <div class="stat-label">Pendentes</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-number" id="totalPoints">0</div>
+            <div class="stat-label">Total</div>
+          </div>
+        </div>
+
+        <div class="progress-container">
+          <div class="progress-bar">
+            <div
+              class="progress-fill"
+              id="progressFill"
+              style="width: 0%"
+            ></div>
+          </div>
+          <div class="progress-text">
+            <span>Início</span>
+            <span id="progressPercentage">0%</span>
+            <span>Conclusão</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Timeline Section -->
+      <div class="timeline-section">
+        <h2 class="timeline-title">Pontos da Rota</h2>
+        <div class="timeline" id="pointsTimeline">
+          <!-- Points will be populated by JavaScript -->
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // Sample data - In real app, this would come from API
+      const acompanhamentoData = {
+        vehicle: {
+          plate: "NAQ9H24",
+          type: "ASTEC",
+          currentKm: "45.280",
+          routeStart: "08:30",
+          status: "active",
+        },
+        points: [
+          {
+            name: "PINT. ABS",
+            status: "completed",
+            time: "08:45",
+            cars: 12,
+            items: 24,
+            km: "45.120",
+          },
+          {
+            name: "MOCOM",
+            status: "completed",
+            time: "09:15",
+            cars: 8,
+            items: 16,
+            km: "45.180",
+          },
+          {
+            name: "INJ. PLÁSTICA",
+            status: "completed",
+            time: "09:45",
+            cars: 15,
+            items: 30,
+            km: "45.230",
+          },
+          {
+            name: "PINT. PÓ",
+            status: "current",
+            time: "10:30",
+            cars: null,
+            items: null,
+            km: null,
+          },
+          {
+            name: "USINAGEM",
+            status: "pending",
+            time: null,
+            cars: null,
+            items: null,
+            km: null,
+          },
+          {
+            name: "SOLDA CHASSI",
+            status: "pending",
+            time: null,
+            cars: null,
+            items: null,
+            km: null,
+          },
+          {
+            name: "MONT. RODA",
+            status: "pending",
+            time: null,
+            cars: null,
+            items: null,
+            km: null,
+          },
+          {
+            name: "LINHA MONT.",
+            status: "pending",
+            time: null,
+            cars: null,
+            items: null,
+            km: null,
+          },
+        ],
+      };
+
+      // Initialize dashboard
+      function initializeDashboard() {
+        updateDateTime();
+        updateVehicleInfo();
+        updateProgress();
+        populateTimeline();
+      }
+
+      // Update date and time
+      function updateDateTime() {
+        const now = new Date();
+        const options = {
+          weekday: "long",
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        };
+        document.getElementById("currentDateTime").textContent =
+          now.toLocaleDateString("pt-BR", options);
+      }
+
+      // Update vehicle information
+      function updateVehicleInfo() {
+        const vehicle = acompanhamentoData.vehicle;
+
+        document.getElementById("vehiclePlate").textContent = vehicle.plate;
+        document.getElementById("currentKm").textContent =
+          vehicle.currentKm + " km";
+        document.getElementById("routeStart").textContent = vehicle.routeStart;
+
+        // Set user info from localStorage
+        const usuario = JSON.parse(localStorage.getItem("usuario"));
+        if (usuario) {
+          document.getElementById("userName").textContent = usuario.nome;
+          document.getElementById(
+            "vehicleInfo"
+          ).textContent = `${vehicle.plate} - ${vehicle.type}`;
+
+          // Apply theme
+          if (usuario.empresa === "HONDA") {
+            document.body.classList.add("honda-theme");
+          }
+        }
+      }
+
+      // Update progress information
+      function updateProgress() {
+        const points = acompanhamentoData.points;
+        const completed = points.filter((p) => p.status === "completed").length;
+        const current = points.findIndex((p) => p.status === "current") + 1;
+        const total = points.length;
+        const pending = total - completed - (current > completed ? 1 : 0);
+
+        const percentage = Math.round((completed / total) * 100);
+
+        // Update stats
+        document.getElementById("completedPoints").textContent = completed;
+        document.getElementById("currentPoint").textContent =
+          current > completed ? current : "-";
+        document.getElementById("pendingPoints").textContent = pending;
+        document.getElementById("totalPoints").textContent = total;
+
+        // Update progress bar
+        document.getElementById("progressFill").style.width = `${percentage}%`;
+        document.getElementById(
+          "progressPercentage"
+        ).textContent = `${percentage}%`;
+        document.getElementById(
+          "progressText"
+        ).textContent = `${completed} de ${total} pontos`;
+
+        // Update overall status
+        const statusElement = document.getElementById("overallStatus");
+        if (completed === total) {
+          statusElement.innerHTML =
+            '<i class="fas fa-check-circle"></i> Concluído';
+          statusElement.className = "timeline-status status-completed";
+        } else if (current > completed) {
+          statusElement.innerHTML =
+            '<i class="fas fa-truck-moving"></i> Em Andamento';
+          statusElement.className = "timeline-status status-current";
+        }
+      }
+
+      // Populate timeline
+      function populateTimeline() {
+        const timeline = document.getElementById("pointsTimeline");
+        timeline.innerHTML = "";
+
+        acompanhamentoData.points.forEach((point, index) => {
+          const item = document.createElement("div");
+          item.className = `timeline-item ${point.status}`;
+
+          let markerIcon = "fas fa-circle";
+          let statusText = "Pendente";
+          let statusClass = "status-pending";
+
+          if (point.status === "completed") {
+            markerIcon = "fas fa-check";
+            statusText = "Concluído";
+            statusClass = "status-completed";
+          } else if (point.status === "current") {
+            markerIcon = "fas fa-play";
+            statusText = "Em Andamento";
+            statusClass = "status-current";
+          }
+
+          let detailsHtml = "";
+          if (point.status === "completed") {
+            detailsHtml = `
+                        <div class="timeline-details">
+                            <span><i class="fas fa-car"></i> ${point.cars} carros</span>
+                            <span><i class="fas fa-box"></i> ${point.items} itens</span>
+                            <span><i class="fas fa-road"></i> ${point.km} km</span>
+                            <span><i class="fas fa-clock"></i> ${point.time}</span>
+                        </div>
+                    `;
+          } else if (point.status === "current") {
+            detailsHtml = `
+                        <div class="timeline-details">
+                            <span style="color: var(--primary); font-weight: 500;">
+                                <i class="fas fa-hourglass-half"></i> Aguardando dados...
+                            </span>
+                        </div>
+                    `;
+          }
+
+          item.innerHTML = `
+                    <div class="timeline-marker">
+                        <i class="${markerIcon}"></i>
+                    </div>
+                    <div class="timeline-content">
+                        <div style="display: flex; justify-content: between; align-items: center; margin-bottom: 0.5rem;">
+                            <div class="timeline-point">${point.name}</div>
+                            <span class="timeline-status ${statusClass}">
+                                <i class="fas fa-${
+                                  point.status === "completed"
+                                    ? "check"
+                                    : point.status === "current"
+                                    ? "play"
+                                    : "clock"
+                                }"></i>
+                                ${statusText}
+                            </span>
+                        </div>
+                        ${detailsHtml}
+                    </div>
+                `;
+
+          timeline.appendChild(item);
+        });
+      }
+
+      // Refresh data
+      function refreshData() {
+        const btn = event.target.closest(".btn");
+        const originalHtml = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Atualizando...';
+        btn.disabled = true;
+
+        // Simulate API call
+        setTimeout(() => {
+          // In real app, fetch new data from API
+          updateDateTime();
+          updateProgress();
+
+          btn.innerHTML = originalHtml;
+          btn.disabled = false;
+
+          showNotification("Dados atualizados!", "success");
+        }, 1000);
+      }
+
+      // Simple notification
+      function showNotification(message, type) {
+        // Simple notification implementation
+        console.log(`${type}: ${message}`);
+      }
+
+      // Auto-update every 30 seconds
+      setInterval(() => {
+        updateDateTime();
+        // In real app, this would fetch new data
+      }, 30000);
+
+      // Initialize on load
+      document.addEventListener("DOMContentLoaded", initializeDashboard);
+    </script>
+  </body>
+</html>

@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <link rel="manifest" href="manifest.json" />
+    <!-- Cores do tema para diferentes esquemas de cores -->
+    <meta
+      name="theme-color"
+      content="#0f2954"
+      media="(prefers-color-scheme: light)"
+    />
+    <meta
+      name="theme-color"
+      content="#0f2954"
+      media="(prefers-color-scheme: dark)"
+    />
+    <link rel="icon" type="image/png" href="favicon.png" />
+    <title>FROTACONTROL - Caminhões</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Questrial&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family: "Questrial", sans-serif;
+        background-color: #0f2954;
+        display: flex;
+        flex-direction: column;
+        min-height: 100vh;
+        min-height: -webkit-fill-available; /* Para Chrome no Android */
+        padding-top: env(
+          safe-area-inset-top
+        ); /* Previne conteúdo atrás da status bar */
+      }
+      header {
+        background-color: #0f2954;
+        color: #d9eafa;
+        padding: 20px 15px;
+        display: flex;
+        flex-direction: column;
+        position: relative;
+        box-shadow: none !important; /* Remove qualquer sombra/divisória */
+      }
+      header img.header-title {
+        width: 220px;
+        height: auto;
+        margin-bottom: 15px;
+      }
+      header p {
+        font-size: 16px;
+        margin: 2px 0;
+      }
+      header img.logo-top-right {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        width: 50px;
+        height: auto;
+        z-index: 2;
+      }
+      header img.logo {
+        position: absolute;
+        bottom: 10px;
+        right: 10px;
+        width: 50px;
+        height: auto;
+        z-index: 1;
+      }
+      main {
+        flex: 1;
+        background-color: #f5f5f5;
+        border-top-left-radius: 20px;
+        border-top-right-radius: 20px;
+        padding: 20px 15px;
+      }
+      .section-title {
+        font-size: 18px;
+        color: #757575;
+        font-weight: normal;
+        margin: 20px 0 15px 0;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        gap: 8px;
+        margin-bottom: 25px;
+      }
+      .grid button {
+        background-color: white;
+        border: none;
+        height: 80px;
+        border-radius: 8px;
+        padding: 10px;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        justify-content: space-between;
+        box-shadow: 0 2px 2px rgba(0, 0, 0, 0.1);
+        cursor: pointer;
+        box-sizing: border-box;
+        font-family: "Questrial", sans-serif;
+        transition: background-color 0.3s ease;
+        position: relative;
+      }
+      .grid button:hover {
+        background-color: #bbbbbb;
+      }
+      .grid button:disabled {
+        background-color: #a0a0a0;
+        cursor: not-allowed;
+        opacity: 0.7;
+      }
+      .grid button img {
+        width: 24px;
+        height: 24px;
+      }
+      .grid button span {
+        font-size: 14px;
+        text-align: left;
+        color: #757575;
+      }
+
+      .badge {
+        position: absolute;
+        top: 5px;
+        right: 5px;
+        background-color: #f32121;
+        color: white;
+        border-radius: 50%;
+        width: 20px;
+        height: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        font-weight: bold;
+      }
+
+      /* Estilos atualizados para a seção de status dos veículos */
+      .vehicles-status-container {
+        margin-bottom: 25px;
+        background: white;
+        border-radius: 12px;
+        padding: 15px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+
+      .loading-vehicles,
+      .no-vehicles,
+      .error-vehicles {
+        text-align: center;
+        color: #757575;
+        padding: 10px;
+      }
+
+      .vehicles-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 10px;
+      }
+
+      .vehicle-card {
+        border-radius: 8px;
+        padding: 12px;
+        text-align: center;
+        font-size: 14px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        position: relative;
+        /* Adicionado para um melhor alinhamento interno */
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+
+      .vehicle-name {
+        font-weight: bold;
+        margin-bottom: 3px;
+        color: #333;
+      }
+
+      .vehicle-placa {
+        font-size: 11px;
+        margin-bottom: 5px;
+        color: #555;
+      }
+
+      .vehicle-status {
+        font-size: 12px;
+        padding: 3px 6px;
+        border-radius: 12px;
+        display: inline-block;
+        color: white;
+      }
+
+      .vehicle-driver {
+        font-size: 11px;
+        margin-top: 5px;
+        color: #555;
+        font-style: italic;
+        /* Garante que o nome do motorista não ocupe espaço desnecessário */
+        flex-grow: 1;
+        display: flex;
+        align-items: flex-end;
+      }
+
+      /* --- ESTILOS ATUALIZADOS PARA A BARRA DE GASOLINA (LAYOUT DE LINHA) --- */
+      .gas-bar-container-full-width {
+        width: 100%; /* Ocupa toda a largura do card */
+        height: 6px; /* Altura da linha/barra */
+        background-color: #e0e0e0; /* Cor de fundo (trilho) da barra */
+        border-radius: 3px;
+        margin-top: 8px; /* Espaço entre o status e a barra */
+        overflow: hidden; /* Esconde o que sobrar da barra interna */
+      }
+
+      .gas-bar-inner {
+        height: 100%;
+        border-radius: 3px;
+        transition: width 0.5s ease, background-color 0.5s ease;
+      }
+
+      /* Cores da barra interna de acordo com o nível */
+      .gas-bar-inner.full {
+        background-color: #4caf50;
+      } /* Verde */
+      .gas-bar-inner.medium {
+        background-color: #ffc107;
+      } /* Amarelo */
+      .gas-bar-inner.low {
+        background-color: #f44336;
+      } /* Vermelho */
+      /* --- FIM DOS ESTILOS ATUALIZADOS --- */
+
+      /* Cores para os status simplificados */
+      .vehicle-card.no-estacionamento {
+        background-color: #e8f5e9;
+      }
+
+      .vehicle-card.no-estacionamento .vehicle-status {
+        background-color: #4caf50; /* Verde para disponível */
+      }
+
+      .vehicle-card.em-corrida {
+        background-color: #ffebee;
+      }
+
+      .vehicle-card.em-corrida .vehicle-status {
+        background-color: #f44336; /* Vermelho para em uso */
+      }
+
+      .vehicle-card.em-acompanhamento {
+        background-color: #fff3e0;
+      }
+
+      .vehicle-card.em-acompanhamento .vehicle-status {
+        background-color: #ff9800; /* Laranja para em acompanhamento */
+      }
+
+      /* Garante que o header preenche toda a área superior */
+      @supports (padding: max(0px)) {
+        header {
+          padding-top: max(20px, env(safe-area-inset-top));
+        }
+      }
+
+      /* Estilo para o botão principal de acompanhamento */
+      .btn-acompanhamento {
+        background: linear-gradient(135deg, #0f2954, #1a3a6e) !important;
+        color: white !important;
+      }
+
+      .btn-acompanhamento span {
+        color: white !important;
+        font-weight: bold;
+      }
+
+      .btn-acompanhamento:hover {
+        background: linear-gradient(135deg, #1a3a6e, #0f2954) !important;
+      }
+
+      .honda-theme .btn-acompanhamento {
+        background: linear-gradient(135deg, #c62828, #8e0000) !important;
+      }
+
+      .honda-theme .btn-acompanhamento:hover {
+        background: linear-gradient(135deg, #8e0000, #c62828) !important;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <img
+        src="assets/img_head_frotacontrol.png"
+        alt="FROTACONTROL"
+        class="header-title"
+      />
+      <p id="nomeColaborador">LUCAS DE LIMA E LIMA</p>
+      <p id="matriculaColaborador">801584</p>
+      <!-- Novo logo no canto superior direito -->
+      <img src="assets/pecas.png" alt="Logo Peças" class="logo-top-right" />
+      <img src="assets/logo.png" alt="Logo" class="logo" />
+    </header>
+
+    <main>
+      <!-- Nova Seção: Status dos Veículos -->
+      <h2 class="section-title">Status dos Caminhões</h2>
+      <div class="vehicles-status-container" id="vehiclesStatusContainer">
+        <div class="loading-vehicles">Carregando status dos caminhões...</div>
+      </div>
+
+      <!-- Seção Acompanhamento de Caminhões -->
+      <h2 class="section-title">Acompanhamento</h2>
+      <div class="grid">
+        <button id="acompanharCorridaBtn" class="btn-acompanhamento">
+          <img
+            src="assets/icon_play.svg"
+            alt="Acompanhar Corrida"
+            style="filter: brightness(0) invert(1)"
+          />
+          <span>Iniciar/Acompanhar</span>
+        </button>
+      </div>
+
+      <!-- Seção Conta -->
+      <h2 class="section-title">Conta</h2>
+      <div class="grid">
+        <button id="logoutBtn">
+          <img src="assets/icon_logout.svg" alt="Deslogar Conta" />
+          <span>Sair</span>
+        </button>
+      </div>
+    </main>
+
+    <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        const usuario = JSON.parse(localStorage.getItem("usuario"));
+
+        if (usuario) {
+          // Atualiza informações do perfil
+          document.getElementById("nomeColaborador").textContent = usuario.nome;
+          document.getElementById("matriculaColaborador").textContent =
+            usuario.mat;
+
+          // Trocar cor e logo conforme empresa
+          const header = document.querySelector("header");
+          const logo = document.querySelector("header img.logo");
+
+          if (usuario.empresa === "LSL") {
+            header.style.backgroundColor = "#0f2954";
+            logo.src = "assets/logo-lsl.png";
+            document.body.style.backgroundColor = "#0f2954";
+            document
+              .querySelector('meta[name="theme-color"]')
+              .setAttribute("content", "#0f2954");
+          } else if (usuario.empresa === "HONDA") {
+            header.style.backgroundColor = "#c62828";
+            logo.src = "assets/logo-honda.png";
+            document.body.style.backgroundColor = "#c62828";
+            document.body.classList.add("honda-theme");
+            document
+              .querySelector('meta[name="theme-color"]')
+              .setAttribute("content", "#c62828");
+          }
+
+          // Função para carregar status dos caminhões
+          function carregarStatusCaminhoes() {
+            const container = document.getElementById(
+              "vehiclesStatusContainer"
+            );
+
+            // Usar o banco de dados dos caminhões
+            fetch(
+              `https://frotacontrol-milkrun-mao-default-rtdb.firebaseio.com/veiculos.json`
+            )
+              .then((response) => response.json())
+              .then((veiculos) => {
+                if (!veiculos) {
+                  container.innerHTML =
+                    '<div class="no-vehicles">Nenhum caminhão cadastrado</div>';
+                  return;
+                }
+
+                // Buscar acompanhamentos ativos
+                fetch(
+                  `https://lslcda-default-rtdb.firebaseio.com/${usuario.empresa}/${usuario.setor}/acompanhamentos_caminhoes.json`
+                )
+                  .then((response) => response.json())
+                  .then((acompanhamentos) => {
+                    const caminhoesEmUso = {};
+                    const caminhoesEmAcompanhamento = {};
+
+                    if (acompanhamentos) {
+                      Object.values(acompanhamentos)
+                        .filter((a) => a !== null)
+                        .forEach((acompanhamento) => {
+                          if (acompanhamento.status === "EM ANDAMENTO") {
+                            caminhoesEmAcompanhamento[acompanhamento.veiculo] =
+                              acompanhamento.responsavel;
+                          }
+                        });
+                    }
+
+                    // Buscar corridas regulares também
+                    fetch(
+                      `https://lslcda-default-rtdb.firebaseio.com/${usuario.empresa}/${usuario.setor}/corridas.json`
+                    )
+                      .then((response) => response.json())
+                      .then((corridas) => {
+                        if (corridas) {
+                          Object.values(corridas)
+                            .filter((c) => c !== null)
+                            .forEach((corrida) => {
+                              if (!corrida.horario_fim) {
+                                caminhoesEmUso[corrida.veículo] =
+                                  corrida.responsavel;
+                              }
+                            });
+                        }
+
+                        // Criar HTML para mostrar o status
+                        let html = '<div class="vehicles-grid">';
+
+                        for (const veiculo in veiculos) {
+                          if (veiculos[veiculo]) {
+                            const dadosVeiculo = veiculos[veiculo];
+                            const emUso = caminhoesEmUso[veiculo];
+                            const emAcompanhamento =
+                              caminhoesEmAcompanhamento[veiculo];
+
+                            let status, classe, motorista;
+
+                            if (emAcompanhamento) {
+                              status = "EM ACOMPANHAMENTO";
+                              classe = "em-acompanhamento";
+                              motorista = emAcompanhamento;
+                            } else if (emUso) {
+                              status = "EM CORRIDA";
+                              classe = "em-corrida";
+                              motorista = emUso;
+                            } else {
+                              status = "NO ESTACIONAMENTO";
+                              classe = "no-estacionamento";
+                              motorista = null;
+                            }
+
+                            const placa = veiculo; // A placa é a própria chave
+                            const tipo = dadosVeiculo; // O tipo está no valor (ASTEC)
+
+                            // Barra de gasolina (simulada para caminhões)
+                            const gasLevel = 4; // Nível máximo para caminhões
+                            let gasBarWidth = "100%";
+                            let gasBarClass = "full";
+
+                            html += `
+                                                <div class="vehicle-card ${classe}">
+                                                    <div class="vehicle-name">${placa}</div>
+                                                    <div class="vehicle-placa">${tipo}</div>
+                                                    <div class="vehicle-status">${status}</div>
+                                                    
+                                                    <div class="gas-bar-container-full-width">
+                                                        <div class="gas-bar-inner ${gasBarClass}" style="width: ${gasBarWidth};"></div>
+                                                    </div>
+
+                                                    ${
+                                                      motorista
+                                                        ? `<div class="vehicle-driver">${motorista}</div>`
+                                                        : ""
+                                                    }
+                                                </div>
+                                            `;
+                          }
+                        }
+
+                        html += "</div>";
+                        container.innerHTML = html;
+                      })
+                      .catch((error) => {
+                        console.error("Erro ao buscar corridas:", error);
+                        container.innerHTML =
+                          '<div class="error-vehicles">Erro ao carregar status</div>';
+                      });
+                  })
+                  .catch((error) => {
+                    console.error("Erro ao buscar acompanhamentos:", error);
+                    container.innerHTML =
+                      '<div class="error-vehicles">Erro ao carregar status</div>';
+                  });
+              })
+              .catch((error) => {
+                console.error("Erro ao buscar caminhões:", error);
+                container.innerHTML =
+                  '<div class="error-vehicles">Erro ao carregar caminhões</div>';
+              });
+          }
+
+          // Chamar a função para carregar os caminhões
+          carregarStatusCaminhoes();
+
+          // Atualizar a cada 30 segundos
+          setInterval(carregarStatusCaminhoes, 30000);
+
+          // Verificar se o usuário já está em um acompanhamento
+          function verificarAcompanhamentoAtivo() {
+            fetch(
+              `https://lslcda-default-rtdb.firebaseio.com/${usuario.empresa}/${usuario.setor}/acompanhamentos_caminhoes.json`
+            )
+              .then((response) => response.json())
+              .then((acompanhamentos) => {
+                if (acompanhamentos) {
+                  const acompanhamentoAtivo = Object.values(
+                    acompanhamentos
+                  ).find(
+                    (a) =>
+                      a !== null &&
+                      a.responsavel === usuario.nome &&
+                      a.status === "EM ANDAMENTO"
+                  );
+
+                  const btnAcompanhar = document.getElementById(
+                    "acompanharCorridaBtn"
+                  );
+
+                  if (acompanhamentoAtivo) {
+                    // Usuário está em acompanhamento ativo
+                    btnAcompanhar.innerHTML = `
+                                <img src="assets/icon_play.svg" alt="Continuar Acompanhamento" style="filter: brightness(0) invert(1);">
+                                <span>Continuar Acompanhamento</span>
+                            `;
+
+                    // Adicionar badge indicando acompanhamento ativo
+                    let badge = btnAcompanhar.querySelector(".badge");
+                    if (!badge) {
+                      badge = document.createElement("div");
+                      badge.className = "badge";
+                      badge.textContent = "!";
+                      btnAcompanhar.appendChild(badge);
+                    }
+                  } else {
+                    // Usuário não está em acompanhamento
+                    btnAcompanhar.innerHTML = `
+                                <img src="assets/icon_play.svg" alt="Iniciar Acompanhamento" style="filter: brightness(0) invert(1);">
+                                <span>Iniciar Acompanhamento</span>
+                            `;
+
+                    // Remover badge se existir
+                    const badge = btnAcompanhar.querySelector(".badge");
+                    if (badge) {
+                      badge.remove();
+                    }
+                  }
+                }
+              })
+              .catch((error) => {
+                console.error("Erro ao verificar acompanhamentos:", error);
+              });
+          }
+
+          // Verificar acompanhamento ativo
+          verificarAcompanhamentoAtivo();
+
+          // Evento do botão de acompanhamento
+          document
+            .getElementById("acompanharCorridaBtn")
+            .addEventListener("click", () => {
+              window.location.href = "layout_iniciar_truck.html";
+            });
+
+          // Botão de Deslogar
+          document.getElementById("logoutBtn").addEventListener("click", () => {
+            const confirma = confirm("Tem certeza que deseja sair da conta?");
+            if (confirma) {
+              localStorage.removeItem("usuario");
+              window.location.href = "index.html";
+            }
+          });
+
+          // Atualiza dinamicamente a cor do tema quando muda a empresa
+          const observer = new MutationObserver(function (mutations) {
+            mutations.forEach(function (mutation) {
+              if (mutation.attributeName === "style") {
+                const bgColor = header.style.backgroundColor;
+                document
+                  .querySelectorAll('meta[name="theme-color"]')
+                  .forEach((meta) => {
+                    meta.setAttribute("content", bgColor);
+                  });
+              }
+            });
+          });
+
+          observer.observe(header, {
+            attributes: true,
+          });
+        } else {
+          console.error("Usuário não encontrado no localStorage");
+          window.location.href = "index.html";
+        }
+      });
+    </script>
+  </body>
+</html>
