@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Car, Loader2, Milestone, Fuel, CheckCircle2, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Car, Loader2, Milestone, Fuel, CheckCircle2, GitBranch, Plus, X, Trash2 } from 'lucide-react';
 import {
   getCarUsuario,
   getCorridaAtiva,
@@ -40,6 +40,11 @@ export default function CarActiveRunPage() {
 
   const [kmFinal, setKmFinal] = useState('');
   const [gasolina, setGasolina] = useState<FuelLevel>(4);
+
+  type Desvio = { destino: string; hora: string };
+  const [desvios, setDesvios] = useState<Desvio[]>([]);
+  const [novoDesvio, setNovoDesvio] = useState('');
+  const [showDesvioForm, setShowDesvioForm] = useState(false);
 
   useEffect(() => {
     const u = getCarUsuario();
@@ -93,6 +98,7 @@ export default function CarActiveRunPage() {
         km_final: kmFinal,
         horario_fim,
         gasolina,
+        ...(desvios.length > 0 ? { desvios } : {}),
       });
 
       await updateVeiculo(usuario.empresa, usuario.setor, corrida['veículo'], {
@@ -160,6 +166,115 @@ export default function CarActiveRunPage() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Desvios de Rota */}
+        {corrida && (
+          <Card className="shadow-md border-dashed">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-bold flex items-center gap-2">
+                  <GitBranch className="w-4 h-4 text-primary" /> DESVIOS DE ROTA
+                  {desvios.length > 0 && (
+                    <span className="ml-1 bg-primary text-primary-foreground text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                      {desvios.length}
+                    </span>
+                  )}
+                </CardTitle>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 gap-1 text-xs"
+                  onClick={() => setShowDesvioForm(v => !v)}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Adicionar
+                </Button>
+              </div>
+              <CardDescription className="text-xs">Registre paradas ou destinos adicionais durante a viagem</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {/* Form de novo desvio */}
+              {showDesvioForm && (
+                <div className="flex gap-2 animate-in slide-in-from-top-2 duration-200">
+                  <Input
+                    id="novo-desvio"
+                    placeholder="Ex: Banco Itaú — Centro"
+                    value={novoDesvio}
+                    onChange={e => setNovoDesvio(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (novoDesvio.trim()) {
+                          const hora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                          setDesvios(prev => [...prev, { destino: novoDesvio.trim(), hora }]);
+                          setNovoDesvio('');
+                          setShowDesvioForm(false);
+                        }
+                      }
+                    }}
+                    className="flex-1 h-10"
+                    autoFocus
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-10 px-3"
+                    onClick={() => {
+                      if (novoDesvio.trim()) {
+                        const hora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                        setDesvios(prev => [...prev, { destino: novoDesvio.trim(), hora }]);
+                        setNovoDesvio('');
+                        setShowDesvioForm(false);
+                      }
+                    }}
+                    disabled={!novoDesvio.trim()}
+                  >
+                    <Plus className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-10 px-3"
+                    onClick={() => { setShowDesvioForm(false); setNovoDesvio(''); }}
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              )}
+
+              {/* Lista de desvios */}
+              {desvios.length === 0 && !showDesvioForm ? (
+                <p className="text-xs text-muted-foreground text-center py-2">Nenhum desvio registrado</p>
+              ) : (
+                <div className="space-y-2">
+                  {/* Origem */}
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-blue-500 shrink-0 ml-1" />
+                    <span className="text-xs text-muted-foreground flex-1">{corrida.destino}</span>
+                    <span className="text-[10px] text-muted-foreground">{corrida.horario_inicio}</span>
+                  </div>
+                  {/* Desvios */}
+                  {desvios.map((d, i) => (
+                    <div key={i} className="flex items-center gap-2 group">
+                      <div className="w-2 h-2 rounded-full bg-orange-400 shrink-0 ml-1" />
+                      <span className="text-xs flex-1 font-medium">{d.destino}</span>
+                      <span className="text-[10px] text-muted-foreground">{d.hora}</span>
+                      <button
+                        type="button"
+                        onClick={() => setDesvios(prev => prev.filter((_, j) => j !== i))}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:text-destructive"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         )}
 
         <form onSubmit={handleEncerrar} className="space-y-4">

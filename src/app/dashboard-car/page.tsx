@@ -6,7 +6,7 @@ import Link from 'next/link';
 import {
   Car, Play, StopCircle, Eye, Clock, ClipboardCheck,
   Fuel, BarChart2, Download, LogOut, Calendar, Wrench,
-  Loader2, RefreshCw,
+  Loader2, RefreshCw, CreditCard, Shield,
 } from 'lucide-react';
 import {
   getCarUsuario,
@@ -150,8 +150,21 @@ export default function DashboardCarPage() {
       items: [
         { id: 'registrar-abastecimento', href: '/dashboard-car/refuel', label: 'Registrar Abastecimento', icon: Fuel },
         { id: 'ver-abastecimento', href: '/dashboard-car/view-refuel', label: 'Visualizar Abastecimento', icon: Eye },
+        { id: 'cartao-abastecimento', href: '/dashboard-car/card', label: 'Cartão de Abastecimento', icon: CreditCard },
       ],
     },
+    {
+      title: 'Veículos',
+      items: [
+        { id: 'consultar-veiculo', href: '/dashboard-car/view-vehicle', label: 'Consultar Veículo', icon: Car },
+      ],
+    },
+    ...(usuario.adm || usuario.role === 'adm' ? [{
+      title: 'Administração',
+      items: [
+        { id: 'painel-admin', href: '/dashboard-car/admin', label: 'Painel Admin', icon: Shield },
+      ],
+    }] : []),
     {
       title: 'Conta',
       items: [

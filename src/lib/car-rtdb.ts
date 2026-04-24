@@ -37,6 +37,9 @@ export type CarVeiculo = {
   km_rodados?: string | number;
   gasolina?: number | string;
   modelo?: string;
+  image?: string;
+  motivo?: string;
+  previsao?: string;
   'ÚLTIMO A USAR'?: string;
 };
 
@@ -50,6 +53,7 @@ export type CarCorrida = {
   responsavel: string;
   veículo: string;
   gasolina?: string | number;
+  desvios?: { destino: string; hora: string }[];
 };
 
 export type CarAgendamento = {
@@ -301,4 +305,62 @@ export function agendamentoAtivoAgora(
         a.hora_fim >= horaAtual
     ) ?? null
   );
+}
+
+// ---------- Cartão de Abastecimento -----------------------------------
+
+export type CartaoRecarga = {
+  valor: number;
+  data: string;
+  hora: string;
+  responsavel: string;
+};
+
+export type CartaoData = {
+  saldo: number;
+  recargas?: Record<string, CartaoRecarga>;
+};
+
+export async function fetchCartao(
+  empresa: string,
+  setor: string,
+  veiculoId: string
+): Promise<CartaoData | null> {
+  return rtdbGet<CartaoData>(`${empresa}/${setor}/cartao/${encodeURIComponent(veiculoId)}`);
+}
+
+export async function registrarRecarga(
+  empresa: string,
+  setor: string,
+  veiculoId: string,
+  recarga: CartaoRecarga,
+  saldoAtual: number
+): Promise<void> {
+  const agora = Date.now();
+  const novoSaldo = saldoAtual + recarga.valor;
+  // Salva a recarga e atualiza o saldo em paralelo
+  await Promise.all([
+    rtdbPut(
+      `${empresa}/${setor}/cartao/${encodeURIComponent(veiculoId)}/recargas/${agora}`,
+      recarga
+    ),
+    rtdbPatch(`${empresa}/${setor}/cartao/${encodeURIComponent(veiculoId)}`, {
+      saldo: novoSaldo,
+    }),
+  ]);
+}
+
+export async function descontarSaldo(
+  empresa: string,
+  setor: string,
+  veiculoId: string,
+  valor: number
+): Promise<number> {
+  const cartao = await fetchCartao(empresa, setor, veiculoId);
+  const saldoAtual = cartao?.saldo ?? 0;
+  const novoSaldo = saldoAtual - valor;
+  await rtdbPatch(`${empresa}/${setor}/cartao/${encodeURIComponent(veiculoId)}`, {
+    saldo: novoSaldo,
+  });
+  return novoSaldo;
 }
