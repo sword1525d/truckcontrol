@@ -15,8 +15,18 @@ import {
 import { CarHeader } from '@/components/car-header';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
-type AgendEntry = { key: string; veiculo: string } & CarAgendamento;
+type AgendEntry = { key: string; veiculo: string; id: string } & CarAgendamento;
 
 export default function ViewSchedulePage() {
   const router = useRouter();
@@ -25,6 +35,8 @@ export default function ViewSchedulePage() {
   const [agendamentos, setAgendamentos] = useState<AgendEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
+  const [agToCancel, setAgToCancel] = useState<{ veiculo: string, id: string } | null>(null);
   
   const hojeInput = new Date().toISOString().split('T')[0];
   const [filterDateStart, setFilterDateStart] = useState<string>(hojeInput);
@@ -37,43 +49,71 @@ export default function ViewSchedulePage() {
 
   const isFiltering = filterQuery !== deferredQuery || filterDateStart !== deferredStart || filterDateEnd !== deferredEnd;
 
+  const loadAgendamentos = async (u: CarUsuario) => {
+    setIsLoading(true);
+    try {
+      const data = await fetchTodosAgendamentos(u.empresa, u.setor);
+      if (data) {
+        const list: AgendEntry[] = [];
+        Object.entries(data).forEach(([veiculo, agends]) => {
+          if (!agends) return;
+          Object.entries(agends).forEach(([id, ag]) => {
+            if (ag) list.push({ 
+              key: `${veiculo}-${id}`, 
+              veiculo, 
+              ...ag,
+              id: id // Store original RTDB ID
+            } as AgendEntry & { id: string });
+          });
+        });
+        // Sort by data desc
+        list.sort((a, b) => {
+          const toMs = (ag: AgendEntry) => {
+            const [d, m, y] = (ag.data || '01/01/2000').split('/');
+            return new Date(`${y}-${m}-${d}T${ag.hora_inicio ?? '00:00'}`).getTime();
+          };
+          return toMs(b) - toMs(a);
+        });
+        setAgendamentos(list);
+      }
+    } catch {
+      toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível carregar os agendamentos.' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
     const u = getCarUsuario();
     if (!u) { router.replace('/login-car'); return; }
     setUsuario(u);
-
-    const load = async () => {
-      setIsLoading(true);
-      try {
-        const data = await fetchTodosAgendamentos(u.empresa, u.setor);
-        if (data) {
-          const list: AgendEntry[] = [];
-          Object.entries(data).forEach(([veiculo, agends]) => {
-            if (!agends) return;
-            Object.entries(agends).forEach(([key, ag]) => {
-              if (ag) list.push({ key: `${veiculo}-${key}`, veiculo, ...ag });
-            });
-          });
-          // Sort by data desc
-          list.sort((a, b) => {
-            const toMs = (ag: AgendEntry) => {
-              const [d, m, y] = (ag.data || '01/01/2000').split('/');
-              return new Date(`${y}-${m}-${d}T${ag.hora_inicio ?? '00:00'}`).getTime();
-            };
-            return toMs(b) - toMs(a);
-          });
-          setAgendamentos(list);
-        }
-      } catch {
-        toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível carregar os agendamentos.' });
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    load();
+    loadAgendamentos(u);
   }, [router, toast]);
 
+  const confirmCancel = async () => {
+    if (!usuario || !agToCancel) return;
+
+    try {
+      const { cancelarAgendamento } = await import('@/lib/car-rtdb');
+      await cancelarAgendamento(usuario.empresa, usuario.setor, agToCancel.veiculo, agToCancel.id);
+      toast({ title: 'Sucesso', description: 'Agendamento cancelado com sucesso.' });
+      loadAgendamentos(usuario);
+    } catch {
+      toast({ variant: 'destructive', title: 'Erro', description: 'Falha ao cancelar agendamento.' });
+    } finally {
+      setIsCancelDialogOpen(false);
+      setAgToCancel(null);
+    }
+  };
+
+  const handleCancelClick = (veiculo: string, id: string) => {
+    setAgToCancel({ veiculo, id });
+    setIsCancelDialogOpen(true);
+  };
+
   const displayed = agendamentos.filter((a) => {
+    // ... filtering logic ...
+
     if (deferredStart || deferredEnd) {
       const [d, m, y] = (a.data || '01/01/2000').split('/');
       const itemDate = new Date(`${y}-${m}-${d}T00:00:00`).getTime();
@@ -202,10 +242,26 @@ export default function ViewSchedulePage() {
                     </div>
 
                     {isExpanded && (
-                      <div className="mt-3 pt-3 border-t grid grid-cols-2 gap-2 text-xs text-muted-foreground animate-in fade-in">
-                        <div><span className="font-semibold text-foreground">Responsável:</span> {ag.responsavel}</div>
-                        <div><span className="font-semibold text-foreground">Matrícula:</span> {ag.matricula}</div>
-                        {ag.motivo && <div className="col-span-2"><span className="font-semibold text-foreground">Motivo:</span> {ag.motivo}</div>}
+                      <div className="mt-3 pt-3 border-t space-y-3 animate-in fade-in">
+                        <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                          <div><span className="font-semibold text-foreground">Responsável:</span> {ag.responsavel}</div>
+                          <div><span className="font-semibold text-foreground">Matrícula:</span> {ag.matricula}</div>
+                          {ag.motivo && <div className="col-span-2"><span className="font-semibold text-foreground">Motivo:</span> {ag.motivo}</div>}
+                        </div>
+                        
+                        {(ag.matricula === usuario?.mat || usuario?.adm || usuario?.role === 'adm') && ag.status !== 'cancelado' && (
+                          <Button 
+                            variant="destructive" 
+                            size="sm" 
+                            className="w-full h-8 text-[10px] font-bold uppercase tracking-wider"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleCancelClick(ag.veiculo, ag.id);
+                            }}
+                          >
+                            {ag.matricula === usuario?.mat ? 'Cancelar Agendamento' : 'Cancelar (Admin)'}
+                          </Button>
+                        )}
                       </div>
                     )}
                   </CardContent>
@@ -215,6 +271,23 @@ export default function ViewSchedulePage() {
           </div>
         )}
       </main>
+
+      <AlertDialog open={isCancelDialogOpen} onOpenChange={setIsCancelDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancelar Agendamento?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação não pode ser desfeita. O veículo ficará disponível para outros motoristas neste horário.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Voltar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmCancel} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Confirmar Cancelamento
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

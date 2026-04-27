@@ -6,6 +6,7 @@ import { useEffect } from 'react';
 import { useFirebase } from '@/firebase';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
+import { Footer } from '@/components/footer';
 
 export default function ModeSelectPage() {
   const router = useRouter();
@@ -29,12 +30,18 @@ export default function ModeSelectPage() {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
-      <header className="border-b bg-background sticky top-0 z-10">
-        <div className="px-4 sm:px-6 h-16 flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-            <Truck className="h-4 w-4 text-primary-foreground" />
+      <header className="bg-background sticky top-0 z-10">
+        <div className="px-4 sm:px-6 h-16 flex items-center gap-3">
+          <div className="flex items-center gap-3">
+            <Truck className="h-7 w-7 text-primary" />
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-xl">Frotacontrol</span>
+              <div className="flex items-center gap-1 pt-1">
+                <span className="text-[10px] font-medium italic">by</span>
+                <img src="/logo_lsl.png" alt="LSL" className="h-3 w-auto" />
+              </div>
+            </div>
           </div>
-          <span className="font-bold text-lg">FrotaControl</span>
         </div>
       </header>
 
@@ -84,12 +91,9 @@ export default function ModeSelectPage() {
               </CardContent>
             </Card>
           </div>
-
-          <p className="text-center text-xs text-muted-foreground/50">
-            FrotaControl © {new Date().getFullYear()}
-          </p>
         </div>
       </main>
+      <Footer />
     </div>
   );
 }

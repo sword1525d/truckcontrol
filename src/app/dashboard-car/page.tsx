@@ -159,7 +159,7 @@ export default function DashboardCarPage() {
         { id: 'consultar-veiculo', href: '/dashboard-car/view-vehicle', label: 'Consultar Veículo', icon: Car },
       ],
     },
-    ...(usuario.adm || usuario.role === 'adm' ? [{
+    ...(usuario?.adm || usuario?.role === 'adm' ? [{
       title: 'Administração',
       items: [
         { id: 'painel-admin', href: '/dashboard-car/admin', label: 'Painel Admin', icon: Shield },

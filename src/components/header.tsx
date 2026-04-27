@@ -127,7 +127,7 @@ export function Header() {
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-bold text-foreground">Frotacontrol</h1>
               <div className="flex items-center gap-1.5 pt-1">
-                <span className="text-[10px] font-medium italic opacity-50">by</span>
+                <span className="text-[10px] font-medium italic">by</span>
                 <img src="/logo_lsl.png" alt="LSL" className="h-4 w-auto" />
               </div>
             </div>

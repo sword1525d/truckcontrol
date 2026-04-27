@@ -25,7 +25,7 @@ export function CarHeader({ usuario, onLogout }: CarHeaderProps) {
     : '?';
 
   return (
-    <header className="bg-background sticky top-0 z-40 border-b">
+    <header className="bg-background sticky top-0 z-40">
       <div className="px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           <Link href="/dashboard-car" className="flex items-center gap-3">
@@ -33,7 +33,7 @@ export function CarHeader({ usuario, onLogout }: CarHeaderProps) {
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-bold text-foreground">Frotacontrol</h1>
               <div className="flex items-center gap-1.5 pt-1">
-                <span className="text-[10px] font-medium italic opacity-50">by</span>
+                <span className="text-[10px] font-medium italic">by</span>
                 <img src="/logo_lsl.png" alt="LSL" className="h-4 w-auto" />
               </div>
             </div>

@@ -258,6 +258,17 @@ export async function criarAgendamento(
   return novoId;
 }
 
+export async function cancelarAgendamento(
+  empresa: string,
+  setor: string,
+  veiculoId: string,
+  agendamentoId: string
+): Promise<void> {
+  return rtdbPatch(`${empresa}/${setor}/agendamentos/${veiculoId}/${agendamentoId}`, {
+    status: 'cancelado',
+  });
+}
+
 // ---------- Usuário ---------------------------------------------------
 
 export async function updateUsuarioStatus(

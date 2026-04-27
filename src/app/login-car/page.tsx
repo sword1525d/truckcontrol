@@ -23,6 +23,7 @@ import {
   getCarUsuario,
 } from '@/lib/car-rtdb';
 import Link from 'next/link';
+import { Footer } from '@/components/footer';
 
 type Company = { id: string; name: string };
 type Sector = { id: string; name: string };
@@ -100,7 +101,7 @@ export default function LoginCarPage() {
     setIsLoading(true);
     try {
       await carLogin(empresa, setor, matricula.trim(), senha.trim());
-      toast({ title: 'Login realizado!', description: 'Bem-vindo ao FrotaControl.' });
+      toast({ title: 'Login realizado!', description: 'Bem-vindo ao Frotacontrol.' });
       router.push('/dashboard-car');
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Erro no Login', description: err.message });
@@ -112,13 +113,14 @@ export default function LoginCarPage() {
   return (
     <>
       {/* Header minimal */}
-      <header className="bg-background sticky top-0 z-40 border-b">
-        <div className="px-4 sm:px-6 h-16 flex items-center gap-3">
-          <Link href="/" className="text-muted-foreground hover:text-foreground transition-colors">
-            <ArrowLeft className="h-5 w-5" />
-          </Link>
-          <Car className="h-6 w-6 text-primary" />
-          <h1 className="text-lg font-bold">FrotaControl <span className="text-primary text-sm font-medium">Carro</span></h1>
+      <header className="bg-background sticky top-0 z-40">
+        <div className="px-4 sm:px-6 lg:px-8 h-16 flex items-center gap-3">
+          <Car className="h-7 w-7 text-primary" />
+          <h1 className="text-xl font-bold">Frotacontrol</h1>
+          <div className="flex items-center gap-1 pt-1">
+            <span className="text-[10px] font-medium italic">by</span>
+            <img src="/logo_lsl.png" alt="LSL" className="h-4 w-auto" />
+          </div>
         </div>
       </header>
 
@@ -136,7 +138,7 @@ export default function LoginCarPage() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleLogin} className="space-y-4">
-              {/* Empresa */}
+              {/* ... form fields ... */}
               <div className="space-y-1">
                 <Label htmlFor="car-empresa">Empresa</Label>
                 <Select value={empresa} onValueChange={setEmpresa} disabled={isFetchingCompanies}>
@@ -153,7 +155,6 @@ export default function LoginCarPage() {
                 </Select>
               </div>
 
-              {/* Setor */}
               <div className="space-y-1">
                 <Label htmlFor="car-setor">Setor</Label>
                 <Select value={setor} onValueChange={setSetor} disabled={!empresa || isFetchingSectors}>
@@ -170,7 +171,6 @@ export default function LoginCarPage() {
                 </Select>
               </div>
 
-              {/* Matrícula */}
               <div className="space-y-1">
                 <Label htmlFor="car-matricula">Matrícula</Label>
                 <Input
@@ -182,7 +182,6 @@ export default function LoginCarPage() {
                 />
               </div>
 
-              {/* Senha */}
               <div className="space-y-1">
                 <Label htmlFor="car-senha">Senha</Label>
                 <Input
@@ -190,19 +189,25 @@ export default function LoginCarPage() {
                   type="password"
                   placeholder="Sua senha"
                   autoComplete="off"
-                  value={senha}
+                  value={matricula && senha === '' ? '' : senha}
                   onChange={(e) => setSenha(e.target.value)}
                 />
               </div>
 
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Entrar
-              </Button>
+              <div className="flex flex-col gap-2 pt-2">
+                <Button type="submit" className="w-full" disabled={isLoading}>
+                  {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Entrar
+                </Button>
+                <Button variant="ghost" className="w-full" asChild>
+                  <Link href="/">Voltar</Link>
+                </Button>
+              </div>
             </form>
           </CardContent>
         </Card>
       </div>
+      <Footer />
     </>
   );
 }
