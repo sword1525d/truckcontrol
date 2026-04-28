@@ -1,6 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = 'https://console.swordbase.cloud';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsImlhdCI6MTc3MjA2MTA0OCwiZXhwIjoyNTI0NjA4MDAwLCJyb2xlIjoiYW5vbiJ9.y_znR577w2B0r-gKxzVa9kD5KvlZqPR9L8IZww0GoWg';
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('As variáveis de ambiente do Supabase estão ausentes. Verifique o arquivo .env');
+}
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);

@@ -56,7 +56,7 @@ export default function CarChecklistPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showForm, setShowForm] = useState(false);
-  const [images, setImages] = useState<{file: File, preview: string}[]>([]);
+  const [images, setImages] = useState<{ file: File, preview: string }[]>([]);
 
   const [zones, setZones] = useState<Record<ZoneKey, ZoneData>>(
     Object.fromEntries(ZONES.map((z) => [z.key, { obs: '', ok: false }])) as Record<ZoneKey, ZoneData>
@@ -357,33 +357,33 @@ export default function CarChecklistPage() {
                     <Camera className="w-4 h-4 text-primary" /> FOTOS E ANEXOS
                   </Label>
                   <p className="text-xs text-muted-foreground mb-4">Adicione fotos de avarias ou comprovantes do estado do veículo.</p>
-                  
+
                   <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
                     {images.map((img, i) => (
                       <div key={i} className="relative aspect-square bg-muted rounded-md overflow-hidden group">
                         <img src={img.preview} alt={`Preview ${i}`} className="w-full h-full object-cover" />
-                        <button 
-                          type="button" 
-                          onClick={() => removeImage(i)} 
+                        <button
+                          type="button"
+                          onClick={() => removeImage(i)}
                           className="absolute top-1 right-1 bg-black/60 text-white rounded-full p-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
                         >
                           <XIcon className="w-3 h-3" />
                         </button>
                       </div>
                     ))}
-                    <label 
-                      htmlFor="file-input" 
+                    <label
+                      htmlFor="file-input"
                       className="aspect-square flex flex-col items-center justify-center border-2 border-dashed border-border rounded-md hover:border-primary hover:bg-primary/5 hover:text-primary cursor-pointer transition-colors"
                     >
                       <Camera className="w-6 h-6 text-muted-foreground mb-1" />
                       <span className="text-[10px] font-medium text-muted-foreground text-center px-1">Adicionar Foto</span>
-                      <input 
-                        id="file-input" 
-                        type="file" 
-                        accept="image/*" 
-                        multiple 
-                        className="hidden" 
-                        onChange={handleFileSelect} 
+                      <input
+                        id="file-input"
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        className="hidden"
+                        onChange={handleFileSelect}
                         disabled={isSubmitting}
                       />
                     </label>
