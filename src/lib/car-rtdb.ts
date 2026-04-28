@@ -340,6 +340,13 @@ export async function fetchCartao(
   return rtdbGet<CartaoData>(`${empresa}/${setor}/cartao/${encodeURIComponent(veiculoId)}`);
 }
 
+export async function fetchTodosCartoes(
+  empresa: string,
+  setor: string
+): Promise<Record<string, CartaoData> | null> {
+  return rtdbGet<Record<string, CartaoData>>(`${empresa}/${setor}/cartao`);
+}
+
 export async function registrarRecarga(
   empresa: string,
   setor: string,

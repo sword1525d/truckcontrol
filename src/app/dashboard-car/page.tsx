@@ -17,6 +17,7 @@ import {
   type CarVeiculo,
   type CarCorrida,
   veiculoEmCorridaAtiva,
+  fetchTodosCartoes,
 } from '@/lib/car-rtdb';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -30,6 +31,7 @@ type VehicleStatus = {
   motorista?: string;
   gasolina?: number | string;
   km?: string | number;
+  saldo?: number;
   classe: 'disponivel' | 'em-corrida' | 'manutencao';
 };
 
@@ -66,12 +68,13 @@ export default function DashboardCarPage() {
   const loadData = async (u: CarUsuario) => {
     setIsLoadingVehicles(true);
     try {
-      const [veiculosData, corridasData] = await Promise.all([
+      const [veiculosData, corridasData, cartoesData] = await Promise.all([
         fetchVeiculos(u.empresa, u.setor),
         fetch(
           `https://lslcda-default-rtdb.firebaseio.com/${u.empresa}/${u.setor}/corridas.json`,
           { cache: 'no-store' }
         ).then((r) => r.json() as Promise<Record<string, CarCorrida> | null>),
+        fetchTodosCartoes(u.empresa, u.setor),
       ]);
 
       // Verifica corrida ativa do usuário
@@ -98,6 +101,7 @@ export default function DashboardCarPage() {
             motorista: corridaVeiculo?.responsavel,
             gasolina: v.gasolina,
             km: v.km_rodados,
+            saldo: cartoesData?.[id]?.saldo ?? 0,
             classe,
           };
         });
@@ -319,8 +323,16 @@ function VehicleCard({ vehicle }: { vehicle: VehicleStatus }) {
       {vehicle.motorista && (
         <span className="text-[10px] text-muted-foreground italic truncate">{vehicle.motorista}</span>
       )}
+      
+      <div className="flex items-center gap-1 mt-0.5">
+        <CreditCard className="w-3 h-3 text-muted-foreground" />
+        <span className="text-[10px] text-muted-foreground font-medium">
+          {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(vehicle.saldo || 0)}
+        </span>
+      </div>
+
       {/* Gas bar */}
-      <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+      <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden mt-0.5">
         <div
           className="h-full rounded-full transition-all"
           style={{ width: `${gasPercent}%`, backgroundColor: gasColor }}
