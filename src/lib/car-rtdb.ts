@@ -28,6 +28,8 @@ export type CarUsuario = {
   em_corrida?: boolean;
   permitidos?: string[];
   pass?: string;
+  grupo?: string;
+  setoresGrupo?: string[];
 };
 
 export type CarVeiculo = {
@@ -172,6 +174,115 @@ export async function removerSetor(empresa: string, setorKey: string): Promise<v
   await rtdbPut(`${empresa}/SETORES`, setores);
 }
 
+// ---------- Grupos de Setores ------------------------------------------
+
+export async function fetchGrupos(empresa: string): Promise<Record<string, { nome: string }> | null> {
+  return rtdbGet<Record<string, { nome: string }>>(`${empresa}/GRUPOS`);
+}
+
+export async function criarGrupo(empresa: string, grupoId: string): Promise<void> {
+  const grupos = await fetchGrupos(empresa);
+  const merged = { ...(grupos || {}), [grupoId]: { nome: grupoId } };
+  await rtdbPut(`${empresa}/GRUPOS`, merged);
+}
+
+export async function removerGrupo(empresa: string, grupoId: string): Promise<void> {
+  const allSetoresGrupo = await rtdbGet<Record<string, string>>(`${empresa}/GRUPOS_SETORES`);
+  if (allSetoresGrupo) {
+    const hasSetores = Object.values(allSetoresGrupo).some(g => g === grupoId);
+    if (hasSetores) throw new Error('Grupo possui setores vinculados. Remova-os primeiro.');
+  }
+  const grupos = await fetchGrupos(empresa);
+  if (!grupos || !grupos[grupoId]) return;
+  delete grupos[grupoId];
+  await rtdbPut(`${empresa}/GRUPOS`, grupos);
+}
+
+export async function assignSetorToGrupo(empresa: string, setor: string, grupoId: string): Promise<void> {
+  await rtdbPut(`${empresa}/GRUPOS_SETORES/${setor}`, grupoId);
+}
+
+export async function removeSetorFromGrupo(empresa: string, setor: string): Promise<void> {
+  const gruposSetores = await rtdbGet<Record<string, string>>(`${empresa}/GRUPOS_SETORES`);
+  if (!gruposSetores || !gruposSetores[setor]) return;
+  // delete the key by setting to null
+  await fetch(`${CAR_RTDB_URL}/${empresa}/GRUPOS_SETORES/${setor}.json`, { method: 'DELETE' });
+}
+
+// ---------- Multi-Setor (Grupo) ----------------------------------------
+
+/**
+ * Busca veículos de múltiplos setores. Retorna chave composta "SETOR/VEICULO".
+ */
+export async function fetchVeiculosMultiSetor(
+  empresa: string,
+  setores: string[]
+): Promise<Record<string, CarVeiculo> | null> {
+  const result: Record<string, CarVeiculo> = {};
+  for (const setor of setores) {
+    const veiculos = await rtdbGet<Record<string, CarVeiculo>>(`${empresa}/${setor}/veiculos`);
+    if (veiculos) {
+      for (const [key, v] of Object.entries(veiculos)) {
+        if (v) result[`${setor}/${key}`] = v;
+      }
+    }
+  }
+  return Object.keys(result).length > 0 ? result : null;
+}
+
+/**
+ * Busca veículos permitidos de múltiplos setores.
+ */
+export async function fetchVeiculosPermitidosMultiSetor(
+  empresa: string,
+  setores: string[],
+  permitidos: string[]
+): Promise<Record<string, CarVeiculo>> {
+  const all = await fetchVeiculosMultiSetor(empresa, setores);
+  if (!all) return {};
+  return Object.fromEntries(
+    Object.entries(all).filter(([, v]) => v && permitidos.includes(v.placa ?? ''))
+  );
+}
+
+/**
+ * Busca corridas de múltiplos setores. Retorna chave composta "SETOR/CORRIDA_ID".
+ */
+export async function fetchCorridasMultiSetor(
+  empresa: string,
+  setores: string[]
+): Promise<Record<string, CarCorrida> | null> {
+  const result: Record<string, CarCorrida> = {};
+  for (const setor of setores) {
+    const corridas = await rtdbGet<Record<string, CarCorrida>>(`${empresa}/${setor}/corridas`);
+    if (corridas) {
+      for (const [key, c] of Object.entries(corridas)) {
+        if (c) result[`${setor}/${key}`] = c;
+      }
+    }
+  }
+  return Object.keys(result).length > 0 ? result : null;
+}
+
+/**
+ * Busca agendamentos de múltiplos setores.
+ */
+export async function fetchAgendamentosMultiSetor(
+  empresa: string,
+  setores: string[]
+): Promise<Record<string, Record<string, any>> | null> {
+  const result: Record<string, Record<string, any>> = {};
+  for (const setor of setores) {
+    const agendamentos = await rtdbGet<Record<string, Record<string, any>>>(`${empresa}/${setor}/agendamentos`);
+    if (agendamentos) {
+      for (const [vKey, ags] of Object.entries(agendamentos)) {
+        result[`${setor}/${vKey}`] = ags;
+      }
+    }
+  }
+  return Object.keys(result).length > 0 ? result : null;
+}
+
 // ---------- Autenticação ----------------------------------------------
 
 export async function carLogin(
@@ -186,6 +297,24 @@ export async function carLogin(
   if (!userData || userData.pass !== senha) {
     throw new Error('Matrícula ou senha incorretos.');
   }
+
+  // Resolve grupo de setores
+  let grupo: string | undefined;
+  let setoresGrupo: string[] | undefined;
+  try {
+    const grupoId = await rtdbGet<string>(`${empresa}/GRUPOS_SETORES/${setor}`);
+    if (grupoId && typeof grupoId === 'string') {
+      grupo = grupoId;
+      // Encontra todos os setores que pertencem a este grupo
+      const allSetoresGrupo = await rtdbGet<Record<string, string>>(`${empresa}/GRUPOS_SETORES`);
+      if (allSetoresGrupo) {
+        setoresGrupo = Object.entries(allSetoresGrupo)
+          .filter(([, g]) => g === grupoId)
+          .map(([s]) => s);
+      }
+    }
+  } catch { /* grupo não configurado, segue sem grupo */ }
+
   const usuario: CarUsuario = {
     nome: userData.nome,
     mat: matricula,
@@ -197,6 +326,8 @@ export async function carLogin(
     truck: userData.truck,
     em_corrida: userData.em_corrida,
     permitidos: userData.permitidos,
+    grupo,
+    setoresGrupo,
   };
   setCarUsuario(usuario);
   return usuario;

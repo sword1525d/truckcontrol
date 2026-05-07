@@ -15,7 +15,7 @@ import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { CarHeader } from '@/components/car-header';
 import {
-  getCarUsuario, fetchVeiculos,
+  getCarUsuario, fetchVeiculos, fetchVeiculosMultiSetor,
   fetchCartao, registrarRecarga,
   type CarUsuario, type CartaoData, type CartaoRecarga,
 } from '@/lib/car-rtdb';
@@ -44,16 +44,22 @@ export default function CardPage() {
     const u = getCarUsuario();
     if (!u) { router.replace('/login-car'); return; }
     setUsuario(u);
-    fetchVeiculos(u.empresa, u.setor)
-      .then(data => { if (data) setVeiculos(Object.keys(data).map(id => ({ id }))); })
-      .finally(() => setIsLoadingList(false));
+    const isGrupo = u.setoresGrupo && u.setoresGrupo.length > 0;
+    (isGrupo
+      ? fetchVeiculosMultiSetor(u.empresa, u.setoresGrupo!)
+      : fetchVeiculos(u.empresa, u.setor)
+    ).then(data => { if (data) setVeiculos(Object.keys(data).map(id => ({ id }))); })
+     .finally(() => setIsLoadingList(false));
   }, [router]);
 
   const loadCartao = useCallback(async (veiculoId: string) => {
     if (!usuario) return;
     setIsLoadingCartao(true);
     try {
-      const data = await fetchCartao(usuario.empresa, usuario.setor, veiculoId);
+      const parts = veiculoId.split('/');
+      const targetSetor = parts.length > 1 ? parts[0] : usuario.setor;
+      const targetVeiculo = parts.length > 1 ? parts.slice(1).join('/') : veiculoId;
+      const data = await fetchCartao(usuario.empresa, targetSetor, targetVeiculo);
       setCartao(data ?? { saldo: 0 });
     } catch {
       toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível carregar o cartão.' });
@@ -87,8 +93,11 @@ export default function CardPage() {
         hora: agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
         responsavel: usuario.nome,
       };
+      const parts = selectedVeiculo.split('/');
+      const targetSetor = parts.length > 1 ? parts[0] : usuario.setor;
+      const targetVeiculo = parts.length > 1 ? parts.slice(1).join('/') : selectedVeiculo;
       await registrarRecarga(
-        usuario.empresa, usuario.setor, selectedVeiculo,
+        usuario.empresa, targetSetor, targetVeiculo,
         recarga, cartao?.saldo ?? 0
       );
       toast({ title: 'Recarga registrada!', description: `${formatBRL(valor)} adicionado ao cartão de ${selectedVeiculo}.` });

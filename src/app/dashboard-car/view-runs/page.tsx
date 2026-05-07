@@ -9,6 +9,7 @@ import { ArrowLeft, Loader2, Car, MapPin, Clock, CheckCircle2, XCircle, ChevronD
 import {
   getCarUsuario,
   fetchCorridas,
+  fetchCorridasMultiSetor,
   type CarUsuario,
   type CarCorrida,
 } from '@/lib/car-rtdb';
@@ -46,7 +47,10 @@ export default function ViewRunsPage() {
     const load = async () => {
       setIsLoading(true);
       try {
-        const data = await fetchCorridas(u.empresa, u.setor);
+        const isGrupo = u.setoresGrupo && u.setoresGrupo.length > 0;
+        const data = isGrupo
+          ? await fetchCorridasMultiSetor(u.empresa, u.setoresGrupo!)
+          : await fetchCorridas(u.empresa, u.setor);
         if (data) {
           const list = Object.entries(data)
             .filter(([, c]) => c != null)

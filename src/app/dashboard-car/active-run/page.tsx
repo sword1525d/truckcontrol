@@ -11,6 +11,7 @@ import { ArrowLeft, Car, Loader2, Milestone, Fuel, CheckCircle2, GitBranch, Plus
 import {
   getCarUsuario,
   getCorridaAtiva,
+  fetchCorridas,
   encerrarCorrida,
   updateVeiculo,
   updateUsuarioStatus,
@@ -35,6 +36,7 @@ export default function CarActiveRunPage() {
   const [usuario, setUsuario] = useState<CarUsuario | null>(null);
   const [corridaKey, setCorridaKey] = useState<string | null>(null);
   const [corrida, setCorrida] = useState<CarCorrida | null>(null);
+  const [corridaSetor, setCorridaSetor] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -54,7 +56,17 @@ export default function CarActiveRunPage() {
     const load = async () => {
       setIsLoading(true);
       try {
-        const ativa = await getCorridaAtiva(u.empresa, u.setor, u.nome);
+        const isGrupo = u.setoresGrupo && u.setoresGrupo.length > 0;
+        let ativa: { key: string; corrida: CarCorrida; setor: string } | null = null;
+        if (isGrupo) {
+          for (const setor of u.setoresGrupo!) {
+            const c = await getCorridaAtiva(u.empresa, setor, u.nome);
+            if (c) { ativa = { ...c, setor }; break; }
+          }
+        } else {
+          const c = await getCorridaAtiva(u.empresa, u.setor, u.nome);
+          if (c) ativa = { ...c, setor: u.setor };
+        }
         if (!ativa) {
           toast({ variant: 'destructive', title: 'Nenhuma corrida ativa', description: 'Você não tem nenhuma corrida em aberto.' });
           router.push('/dashboard-car');
@@ -62,6 +74,7 @@ export default function CarActiveRunPage() {
         }
         setCorridaKey(ativa.key);
         setCorrida(ativa.corrida);
+        setCorridaSetor(ativa.setor);
       } catch {
         toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível carregar a corrida ativa.' });
       } finally {
@@ -94,14 +107,15 @@ export default function CarActiveRunPage() {
     try {
       const horario_fim = new Date().toLocaleTimeString('pt-BR');
 
-      await encerrarCorrida(usuario.empresa, usuario.setor, corridaKey, {
+      const targetSetor = corridaSetor || usuario.setor;
+      await encerrarCorrida(usuario.empresa, targetSetor, corridaKey, {
         km_final: kmFinal,
         horario_fim,
         gasolina,
         ...(desvios.length > 0 ? { desvios } : {}),
       });
 
-      await updateVeiculo(usuario.empresa, usuario.setor, corrida['veículo'], {
+      await updateVeiculo(usuario.empresa, targetSetor, corrida['veículo'], {
         status: 'NO ESTACIONAMENTO',
         'ÚLTIMO A USAR': usuario.nome,
         motorista: '',

@@ -47,11 +47,18 @@ export default function ViewRefuelPage() {
     const load = async () => {
       setIsLoading(true);
       try {
-        const res = await fetch(
-          `${CAR_RTDB_URL}/${u.empresa}/${u.setor}/abastecimentos.json`,
-          { cache: 'no-store' }
-        );
-        const data = await res.json();
+        const isGrupo = u.setoresGrupo && u.setoresGrupo.length > 0;
+        const setores = isGrupo ? u.setoresGrupo! : [u.setor];
+        let allData: Record<string, RefuelEntry> = {};
+        for (const setor of setores) {
+          const res = await fetch(
+            `${CAR_RTDB_URL}/${u.empresa}/${setor}/abastecimentos.json`,
+            { cache: 'no-store' }
+          );
+          const setorData = await res.json();
+          if (setorData) Object.assign(allData, setorData);
+        }
+        const data = Object.keys(allData).length > 0 ? allData : null;
         if (data) {
           const list: RefuelEntry[] = Object.entries(data as Record<string, RefuelEntry>)
             .filter(([, r]) => r != null)

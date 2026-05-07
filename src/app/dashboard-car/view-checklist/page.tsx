@@ -69,11 +69,18 @@ export default function ViewChecklistPage() {
     const load = async () => {
       setIsLoading(true);
       try {
-        const res = await fetch(
-          `${CAR_RTDB_URL}/${u.empresa}/${u.setor}/relatorio.json`,
-          { cache: 'no-store' }
-        );
-        const data = await res.json();
+        const isGrupo = u.setoresGrupo && u.setoresGrupo.length > 0;
+        const setores = isGrupo ? u.setoresGrupo! : [u.setor];
+        let allData: Record<string, any> = {};
+        for (const setor of setores) {
+          const res = await fetch(
+            `${CAR_RTDB_URL}/${u.empresa}/${setor}/relatorio.json`,
+            { cache: 'no-store' }
+          );
+          const setorData = await res.json();
+          if (setorData) Object.assign(allData, setorData);
+        }
+        const data = Object.keys(allData).length > 0 ? allData : null;
         if (data) {
           const list: CheckEntry[] = Object.entries(data as Record<string, any>)
             .filter(([, c]) => c != null)

@@ -12,7 +12,8 @@ import {
   getCarUsuario,
   clearCarUsuario,
   fetchVeiculos,
-  fetchCorridas,
+  fetchVeiculosMultiSetor,
+  fetchCorridasMultiSetor,
   type CarUsuario,
   type CarVeiculo,
   type CarCorrida,
@@ -68,24 +69,40 @@ export default function DashboardCarPage() {
   const loadData = async (u: CarUsuario) => {
     setIsLoadingVehicles(true);
     try {
-      const [veiculosData, corridasData, cartoesData] = await Promise.all([
-        fetchVeiculos(u.empresa, u.setor),
-        fetch(
-          `https://lslcda-default-rtdb.firebaseio.com/${u.empresa}/${u.setor}/corridas.json`,
-          { cache: 'no-store' }
-        ).then((r) => r.json() as Promise<Record<string, CarCorrida> | null>),
-        fetchTodosCartoes(u.empresa, u.setor),
+      const isGrupo = u.setoresGrupo && u.setoresGrupo.length > 0;
+      const setores = isGrupo ? u.setoresGrupo! : [u.setor];
+
+      const [veiculosData, corridasData] = await Promise.all([
+        isGrupo
+          ? fetchVeiculosMultiSetor(u.empresa, setores)
+          : fetchVeiculos(u.empresa, u.setor),
+        isGrupo
+          ? fetchCorridasMultiSetor(u.empresa, setores)
+          : fetch(
+              `https://lslcda-default-rtdb.firebaseio.com/${u.empresa}/${u.setor}/corridas.json`,
+              { cache: 'no-store' }
+            ).then((r) => r.json() as Promise<Record<string, CarCorrida> | null>),
+        // Cartões carregados por setor separadamente abaixo
       ]);
 
       // Verifica corrida ativa do usuário
       if (corridasData) {
         const corridaAtiva = Object.values(corridasData).some(
-          (c) => c && c.responsavel === u.nome && !c.horario_fim
+          (c: any) => c && c.responsavel === u.nome && !c.horario_fim
         );
         setTemCorridaAtiva(corridaAtiva);
       }
 
       if (veiculosData) {
+        // Carrega cartões para todos os setores
+        let cartoesData: Record<string, any> = {};
+        for (const setor of setores) {
+          try {
+            const cartoes = await fetchTodosCartoes(u.empresa, setor);
+            if (cartoes) Object.assign(cartoesData, cartoes);
+          } catch { /* ignore */ }
+        }
+
         const statuses: VehicleStatus[] = Object.entries(veiculosData).map(([id, v]) => {
           const corridaVeiculo = corridasData ? veiculoEmCorridaAtiva(corridasData, id) : null;
           let classe: VehicleStatus['classe'] = 'disponivel';
@@ -96,7 +113,7 @@ export default function DashboardCarPage() {
           return {
             id,
             nome: id,
-            placa: v.placa ?? id,
+            placa: v.placa ?? id.split('/').pop() ?? id,
             status,
             motorista: corridaVeiculo?.responsavel,
             gasolina: v.gasolina,

@@ -18,6 +18,7 @@ import { ArrowLeft, Fuel, Loader2, Wallet, AlertTriangle } from 'lucide-react';
 import {
   getCarUsuario,
   fetchVeiculos,
+  fetchVeiculosMultiSetor,
   fetchCartao,
   descontarSaldo,
   type CarUsuario,
@@ -53,7 +54,10 @@ export default function CarRefuelPage() {
     const load = async () => {
       setIsLoading(true);
       try {
-        const veiculosData = await fetchVeiculos(u.empresa, u.setor);
+        const isGrupo = u.setoresGrupo && u.setoresGrupo.length > 0;
+        const veiculosData = isGrupo
+          ? await fetchVeiculosMultiSetor(u.empresa, u.setoresGrupo!)
+          : await fetchVeiculos(u.empresa, u.setor);
         if (veiculosData) {
           setVeiculos(
             Object.entries(veiculosData).map(([id, v]) => ({
@@ -74,7 +78,10 @@ export default function CarRefuelPage() {
 
   const loadSaldo = async (u: CarUsuario, veiculoId: string) => {
     try {
-      const cartao = await fetchCartao(u.empresa, u.setor, veiculoId);
+      const parts = veiculoId.split('/');
+      const targetSetor = parts.length > 1 ? parts[0] : u.setor;
+      const targetVeiculo = parts.length > 1 ? parts.slice(1).join('/') : veiculoId;
+      const cartao = await fetchCartao(u.empresa, targetSetor, targetVeiculo);
       setSaldoCartao(cartao?.saldo ?? 0);
     } catch {
       setSaldoCartao(null);
@@ -93,9 +100,13 @@ export default function CarRefuelPage() {
 
     setIsSubmitting(true);
     try {
+      const parts = selectedVeiculo.split('/');
+      const targetSetor = parts.length > 1 ? parts[0] : usuario.setor;
+      const targetVeiculo = parts.length > 1 ? parts.slice(1).join('/') : selectedVeiculo;
+
       // Busca abastecimentos existentes para gerar ID
       const existentes = await fetch(
-        `${CAR_RTDB_URL}/${usuario.empresa}/${usuario.setor}/abastecimentos.json`,
+        `${CAR_RTDB_URL}/${usuario.empresa}/${targetSetor}/abastecimentos.json`,
         { cache: 'no-store' }
       ).then((r) => r.json());
 
@@ -113,7 +124,7 @@ export default function CarRefuelPage() {
       };
 
       const res = await fetch(
-        `${CAR_RTDB_URL}/${usuario.empresa}/${usuario.setor}/abastecimentos/${novoId}.json`,
+        `${CAR_RTDB_URL}/${usuario.empresa}/${targetSetor}/abastecimentos/${novoId}.json`,
         {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -124,7 +135,7 @@ export default function CarRefuelPage() {
       if (!res.ok) throw new Error('Erro ao registrar abastecimento');
 
       // Desconta do saldo do cartão do veículo
-      const novoSaldo = await descontarSaldo(usuario.empresa, usuario.setor, selectedVeiculo, parseFloat(amount));
+      const novoSaldo = await descontarSaldo(usuario.empresa, targetSetor, targetVeiculo, parseFloat(amount));
       setSaldoCartao(novoSaldo);
 
       toast({ title: 'Sucesso!', description: 'Abastecimento registrado.' });

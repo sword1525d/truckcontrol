@@ -18,6 +18,8 @@ import { ArrowLeft, Car, Loader2, MapPin, Milestone, AlertCircle } from 'lucide-
 import {
   getCarUsuario,
   fetchVeiculosPermitidos,
+  fetchVeiculosMultiSetor,
+  fetchVeiculosPermitidosMultiSetor,
   fetchCorridas,
   criarCorrida,
   updateVeiculo,
@@ -27,6 +29,7 @@ import {
   fetchAgendamentosVeiculo,
   type CarUsuario,
   type CarVeiculo,
+  CAR_RTDB_URL,
 } from '@/lib/car-rtdb';
 import { CarHeader } from '@/components/car-header';
 
@@ -58,25 +61,34 @@ export default function CarRunPage() {
     const load = async () => {
       setIsLoading(true);
       try {
-        const all = await fetch(
-          `https://lslcda-default-rtdb.firebaseio.com/${usuario.empresa}/${usuario.setor}/veiculos.json`,
-          { cache: 'no-store' }
-        ).then((r) => r.json() as Promise<Record<string, CarVeiculo> | null>);
+        const isGrupo = usuario.setoresGrupo && usuario.setoresGrupo.length > 0;
+        const setores = isGrupo ? usuario.setoresGrupo! : [usuario.setor];
 
-        const userData = await fetch(
-          `https://lslcda-default-rtdb.firebaseio.com/${usuario.empresa}/${usuario.setor}/users/${usuario.mat}.json`,
-          { cache: 'no-store' }
-        ).then((r) => r.json());
-
-        const permitidos: string[] = userData?.permitidos ?? [];
+        const all = isGrupo
+          ? await fetchVeiculosMultiSetor(usuario.empresa, setores)
+          : await fetchVeiculosPermitidos(usuario.empresa, usuario.setor, []);
 
         if (all) {
-          const opts: VeiculoOpt[] = Object.entries(all)
-            .filter(([, v]) => v && permitidos.includes(v.placa ?? ''))
+          // Filter by permitidos if user has restrictions (fetch user data from their own setor)
+          let permitidos: string[] = [];
+          try {
+            const userData = await fetch(
+              `${CAR_RTDB_URL}/${usuario.empresa}/${usuario.setor}/users/${usuario.mat}.json`,
+              { cache: 'no-store' }
+            ).then((r) => r.json());
+            permitidos = userData?.permitidos ?? [];
+          } catch { /* ignore */ }
+
+          const filtered = permitidos.length > 0
+            ? Object.fromEntries(Object.entries(all).filter(([, v]) => v && permitidos.includes(v.placa ?? '')))
+            : all;
+
+          const opts: VeiculoOpt[] = Object.entries(filtered)
+            .filter(([, v]) => v)
             .map(([id, v]) => ({
               id,
               nome: id,
-              placa: v.placa ?? id,
+              placa: v.placa ?? id.split('/').pop() ?? id,
               km: v.km_rodados,
               status: v.status,
             }));
@@ -100,12 +112,17 @@ export default function CarRunPage() {
       setQuilometragem('');
 
       try {
+        // Resolve setor/veiculo from selected ID
+        const parts = selectedVeiculo.split('/');
+        const targetSetor = parts.length > 1 ? parts[0] : usuario.setor;
+        const targetVeiculo = parts.length > 1 ? parts.slice(1).join('/') : selectedVeiculo;
+
         const agora = new Date();
         const dataAtual = agora.toLocaleDateString('pt-BR');
         const horaAtual = agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
         // Verificar agendamentos
-        const agendamentos = await fetchAgendamentosVeiculo(usuario.empresa, usuario.setor, selectedVeiculo);
+        const agendamentos = await fetchAgendamentosVeiculo(usuario.empresa, targetSetor, targetVeiculo);
         const agendAtivo = agendamentoAtivoAgora(agendamentos);
         if (agendAtivo && agendAtivo.matricula !== usuario.mat) {
           setVeiculoBlockMsg(`Reservado por ${agendAtivo.responsavel} até ${agendAtivo.hora_fim}`);
@@ -114,8 +131,8 @@ export default function CarRunPage() {
         }
 
         // Verificar corridas ativas
-        const corridas = await fetchCorridas(usuario.empresa, usuario.setor);
-        const corridaAtiva = veiculoEmCorridaAtiva(corridas, selectedVeiculo);
+        const corridas = await fetchCorridas(usuario.empresa, targetSetor);
+        const corridaAtiva = veiculoEmCorridaAtiva(corridas, targetVeiculo);
         if (corridaAtiva) {
           if (corridaAtiva.responsavel !== usuario.nome) {
             setVeiculoBlockMsg(`Veículo em uso por ${corridaAtiva.responsavel}`);
@@ -158,6 +175,11 @@ export default function CarRunPage() {
 
     setIsSubmitting(true);
     try {
+      // Resolve setor/veiculo from selected ID (handles grupo prefix like "SETOR-A/V-01")
+      const parts = selectedVeiculo.split('/');
+      const targetSetor = parts.length > 1 ? parts[0] : usuario.setor;
+      const targetVeiculo = parts.length > 1 ? parts.slice(1).join('/') : selectedVeiculo;
+
       const agora = new Date();
       const novaCorrida = {
         data: agora.toLocaleDateString('pt-BR'),
@@ -168,8 +190,8 @@ export default function CarRunPage() {
         'veículo': selectedVeiculo,
       };
 
-      await criarCorrida(usuario.empresa, usuario.setor, novaCorrida);
-      await updateVeiculo(usuario.empresa, usuario.setor, selectedVeiculo, {
+      await criarCorrida(usuario.empresa, targetSetor, novaCorrida);
+      await updateVeiculo(usuario.empresa, targetSetor, targetVeiculo, {
         status: 'EM CORRIDA',
         motorista: usuario.nome,
         destino: destino.trim().toUpperCase(),

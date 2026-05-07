@@ -9,6 +9,7 @@ import { ArrowLeft, Loader2, Calendar, Car, Clock, ChevronDown, ChevronUp, Filte
 import {
   getCarUsuario,
   fetchTodosAgendamentos,
+  fetchAgendamentosMultiSetor,
   type CarUsuario,
   type CarAgendamento,
 } from '@/lib/car-rtdb';
@@ -52,7 +53,10 @@ export default function ViewSchedulePage() {
   const loadAgendamentos = async (u: CarUsuario) => {
     setIsLoading(true);
     try {
-      const data = await fetchTodosAgendamentos(u.empresa, u.setor);
+      const isGrupo = u.setoresGrupo && u.setoresGrupo.length > 0;
+      const data = isGrupo
+        ? await fetchAgendamentosMultiSetor(u.empresa, u.setoresGrupo!)
+        : await fetchTodosAgendamentos(u.empresa, u.setor);
       if (data) {
         const list: AgendEntry[] = [];
         Object.entries(data).forEach(([veiculo, agends]) => {
@@ -95,7 +99,10 @@ export default function ViewSchedulePage() {
 
     try {
       const { cancelarAgendamento } = await import('@/lib/car-rtdb');
-      await cancelarAgendamento(usuario.empresa, usuario.setor, agToCancel.veiculo, agToCancel.id);
+      const parts = agToCancel.veiculo.split('/');
+      const targetSetor = parts.length > 1 ? parts[0] : usuario.setor;
+      const targetVeiculo = parts.length > 1 ? parts.slice(1).join('/') : agToCancel.veiculo;
+      await cancelarAgendamento(usuario.empresa, targetSetor, targetVeiculo, agToCancel.id);
       toast({ title: 'Sucesso', description: 'Agendamento cancelado com sucesso.' });
       loadAgendamentos(usuario);
     } catch {

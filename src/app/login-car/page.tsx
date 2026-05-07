@@ -46,8 +46,11 @@ export default function LoginCarPage() {
 
   // Se já logado, redireciona
   useEffect(() => {
-    if (getCarUsuario()) {
-      router.replace('/dashboard-car');
+    const u = getCarUsuario();
+    if (u) {
+      const isAdminOrOP = u.adm || u.role === 'adm' || u.op;
+      const isDesktop = typeof window !== 'undefined' && window.innerWidth >= 768;
+      router.replace(isAdminOrOP && isDesktop ? '/dashboard-car/admin' : '/dashboard-car');
     }
   }, [router]);
 

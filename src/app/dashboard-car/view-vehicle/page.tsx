@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { CarHeader } from '@/components/car-header';
-import { getCarUsuario, fetchVeiculos, type CarUsuario, type CarVeiculo, CAR_RTDB_URL } from '@/lib/car-rtdb';
+import { getCarUsuario, fetchVeiculos, fetchVeiculosMultiSetor, type CarUsuario, type CarVeiculo, CAR_RTDB_URL } from '@/lib/car-rtdb';
 import { cn } from '@/lib/utils';
 import { Fuel } from 'lucide-react';
 
@@ -74,9 +74,18 @@ export default function ViewVehiclePage() {
     const u = getCarUsuario();
     if (!u) { router.replace('/login-car'); return; }
     setUsuario(u);
-    fetchVeiculos(u.empresa, u.setor).then(data => {
-      if (data) setVeiculos(Object.keys(data).map(id => ({ id })));
-    }).finally(() => setIsLoadingList(false));
+    const loadVehicles = async () => {
+      const isGrupo = u.setoresGrupo && u.setoresGrupo.length > 0;
+      if (isGrupo) {
+        const data = await fetchVeiculosMultiSetor(u.empresa, u.setoresGrupo!);
+        if (data) setVeiculos(Object.keys(data).map(id => ({ id })));
+      } else {
+        const data = await fetchVeiculos(u.empresa, u.setor);
+        if (data) setVeiculos(Object.keys(data).map(id => ({ id })));
+      }
+      setIsLoadingList(false);
+    };
+    loadVehicles();
   }, [router]);
 
   const handleSelect = async (id: string) => {
@@ -85,8 +94,11 @@ export default function ViewVehiclePage() {
     setVeiculo(null);
     setIsLoadingVeiculo(true);
     try {
+      const parts = id.split('/');
+      const targetSetor = parts.length > 1 ? parts[0] : usuario.setor;
+      const targetVeiculo = parts.length > 1 ? parts.slice(1).join('/') : id;
       const res = await fetch(
-        `${CAR_RTDB_URL}/${usuario.empresa}/${usuario.setor}/veiculos/${encodeURIComponent(id)}.json`,
+        `${CAR_RTDB_URL}/${usuario.empresa}/${targetSetor}/veiculos/${encodeURIComponent(targetVeiculo)}.json`,
         { cache: 'no-store' }
       );
       if (!res.ok) throw new Error('Erro ao buscar veículo');

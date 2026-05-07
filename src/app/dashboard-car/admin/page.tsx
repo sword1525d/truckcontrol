@@ -2,14 +2,14 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, LayoutDashboard, Users, Car, Play, ClipboardCheck, LogOut, Search, Plus, Pencil, Trash2, X, ChevronLeft, ChevronRight, Calendar, Clock, Building2, Grid } from 'lucide-react';
+import { Loader2, LayoutDashboard, Users, Car, Play, ClipboardCheck, LogOut, Search, Plus, Pencil, Trash2, X, ChevronLeft, ChevronRight, Calendar, Clock, Building2, Grid, Layers } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { getCarUsuario, clearCarUsuario, type CarUsuario, CAR_RTDB_URL, fetchEmpresas, fetchSetores, criarEmpresa, removerEmpresa, criarSetor, removerSetor } from '@/lib/car-rtdb';
+import { getCarUsuario, clearCarUsuario, type CarUsuario, CAR_RTDB_URL, fetchEmpresas, fetchSetores, criarEmpresa, removerEmpresa, criarSetor, removerSetor, fetchGrupos, criarGrupo, removerGrupo, assignSetorToGrupo, removeSetorFromGrupo } from '@/lib/car-rtdb';
 import { cn } from '@/lib/utils';
 
 import {
@@ -30,7 +30,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-type Section = 'dashboard' | 'users' | 'vehicles' | 'races' | 'checklists' | 'schedules' | 'empresas' | 'setores';
+type Section = 'dashboard' | 'users' | 'vehicles' | 'races' | 'checklists' | 'schedules' | 'empresas' | 'setores' | 'grupos';
 
 const BASE_SECTIONS: { id: Section; label: string; icon: React.ElementType }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -44,6 +44,7 @@ const BASE_SECTIONS: { id: Section; label: string; icon: React.ElementType }[] =
 const OP_SECTIONS: { id: Section; label: string; icon: React.ElementType }[] = [
   { id: 'empresas', label: 'Empresas', icon: Building2 },
   { id: 'setores', label: 'Setores', icon: Grid },
+  { id: 'grupos', label: 'Grupos', icon: Layers },
 ];
 
 const PAGE_SIZE = 30;
@@ -66,6 +67,10 @@ export default function AdminPage() {
   const [selectedSetor, setSelectedSetor] = useState('');
   const [allEmpresas, setAllEmpresas] = useState<string[]>([]);
   const [allSetores, setAllSetores] = useState<string[]>([]);
+  const [allGrupos, setAllGrupos] = useState<Record<string, { nome: string }>>({});
+  const [grupoSetores, setGrupoSetores] = useState<Record<string, string>>({});
+  const [newGrupoName, setNewGrupoName] = useState('');
+  const [assignSetorData, setAssignSetorData] = useState<{ grupoId: string; setor: string } | null>(null);
   const [isOpLoading, setIsOpLoading] = useState(false);
 
   // Specific filters
@@ -136,11 +141,28 @@ export default function AdminPage() {
     load();
   }, [isOP, selectedEmpresa]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Load grupos data for OP
+  const loadGruposData = useCallback(async () => {
+    if (!isOP || !selectedEmpresa) return;
+    try {
+      const [grupos, gsMap] = await Promise.all([
+        fetchGrupos(selectedEmpresa),
+        fetch(`${CAR_RTDB_URL}/${selectedEmpresa}/GRUPOS_SETORES.json`).then(r => r.json()) as Promise<Record<string, string> | null>,
+      ]);
+      setAllGrupos(grupos || {});
+      setGrupoSetores(gsMap || {});
+    } catch { /* silent */ }
+  }, [isOP, selectedEmpresa]);
+
+  useEffect(() => {
+    if (section === 'grupos') loadGruposData();
+  }, [section, loadGruposData]);
+
   const loadData = useCallback(async () => {
     if (!fbUrl) return;
     setIsLoading(true);
     try {
-      if (section === 'empresas' || section === 'setores') {
+      if (section === 'empresas' || section === 'setores' || section === 'grupos') {
         setIsLoading(false);
         return;
       }
@@ -182,7 +204,7 @@ export default function AdminPage() {
 
   useEffect(() => { if (usuario) loadData(); }, [usuario, section, selectedEmpresa, selectedSetor, loadData]);
 
-  const pathMap: Record<Section, string> = { dashboard: '', users: 'users', vehicles: 'veiculos', races: 'corridas', checklists: 'relatorio', schedules: 'agendamentos', empresas: '', setores: '' };
+  const pathMap: Record<Section, string> = { dashboard: '', users: 'users', vehicles: 'veiculos', races: 'corridas', checklists: 'relatorio', schedules: 'agendamentos', empresas: '', setores: '', grupos: '' };
 
   const openModal = (id: string | null = null) => {
     setModal({ open: true, id });
@@ -267,6 +289,57 @@ export default function AdminPage() {
       else setAllSetores([]);
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Erro', description: err.message || 'Não foi possível remover o setor.' });
+    } finally { setIsOpLoading(false); }
+  };
+
+  // Grupos handlers
+  const handleCreateGrupo = async () => {
+    if (!newGrupoName.trim() || !selectedEmpresa) return;
+    setIsOpLoading(true);
+    try {
+      await criarGrupo(selectedEmpresa, newGrupoName.trim().toUpperCase());
+      toast({ title: 'Grupo criado com sucesso!' });
+      setNewGrupoName('');
+      await loadGruposData();
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Erro', description: err.message || 'Não foi possível criar o grupo.' });
+    } finally { setIsOpLoading(false); }
+  };
+
+  const handleDeleteGrupo = async (grupoId: string) => {
+    if (!confirm(`Remover o grupo "${grupoId}"?`)) return;
+    setIsOpLoading(true);
+    try {
+      await removerGrupo(selectedEmpresa, grupoId);
+      toast({ title: 'Grupo removido.' });
+      await loadGruposData();
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Erro', description: err.message || 'Não foi possível remover o grupo.' });
+    } finally { setIsOpLoading(false); }
+  };
+
+  const handleAssignSetorToGrupo = async () => {
+    if (!assignSetorData || !selectedEmpresa) return;
+    setIsOpLoading(true);
+    try {
+      await assignSetorToGrupo(selectedEmpresa, assignSetorData.setor, assignSetorData.grupoId);
+      toast({ title: 'Setor vinculado ao grupo!' });
+      setAssignSetorData(null);
+      await loadGruposData();
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Erro', description: err.message || 'Não foi possível vincular o setor.' });
+    } finally { setIsOpLoading(false); }
+  };
+
+  const handleRemoveSetorFromGrupo = async (setor: string) => {
+    if (!confirm(`Remover o setor "${setor}" do grupo?`)) return;
+    setIsOpLoading(true);
+    try {
+      await removeSetorFromGrupo(selectedEmpresa, setor);
+      toast({ title: 'Setor desvinculado do grupo.' });
+      await loadGruposData();
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Erro', description: err.message || 'Não foi possível desvincular o setor.' });
     } finally { setIsOpLoading(false); }
   };
 
@@ -570,8 +643,113 @@ export default function AdminPage() {
             </div>
           )}
 
+          {/* OP Grupos Section */}
+          {isOP && section === 'grupos' && (
+            <div className="space-y-6">
+              {/* Create Grupo */}
+              <div className="bg-background rounded-xl border p-6 shadow-sm">
+                <h3 className="text-base font-bold mb-4">Criar Novo Grupo</h3>
+                <div className="flex gap-3">
+                  <Input
+                    placeholder="Nome do grupo (ex: GRUPO-A)"
+                    value={newGrupoName}
+                    onChange={e => setNewGrupoName(e.target.value.toUpperCase())}
+                    className="flex-1"
+                    onKeyDown={e => { if (e.key === 'Enter') handleCreateGrupo(); }}
+                  />
+                  <Button onClick={handleCreateGrupo} disabled={isOpLoading || !newGrupoName.trim()} className="gap-2">
+                    {isOpLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                    Criar Grupo
+                  </Button>
+                </div>
+              </div>
+
+              {/* Vincular Setor a Grupo */}
+              <div className="bg-background rounded-xl border p-6 shadow-sm">
+                <h3 className="text-base font-bold mb-4">Vincular Setor a Grupo</h3>
+                <div className="flex gap-3 flex-wrap">
+                  <Select value={assignSetorData?.grupoId ?? ''} onValueChange={v => setAssignSetorData(prev => prev ? { ...prev, grupoId: v } : { grupoId: v, setor: '' })}>
+                    <SelectTrigger className="w-[200px]">
+                      <SelectValue placeholder="Selecione o grupo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.keys(allGrupos).map(g => <SelectItem key={g} value={g}>{allGrupos[g]?.nome || g}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <Select value={assignSetorData?.setor ?? ''} onValueChange={v => setAssignSetorData(prev => prev ? { ...prev, setor: v } : { grupoId: '', setor: v })} disabled={allSetores.length === 0}>
+                    <SelectTrigger className="w-[200px]">
+                      <SelectValue placeholder="Selecione o setor" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {allSetores.map(s => (
+                        <SelectItem key={s} value={s} disabled={!!grupoSetores[s]}>
+                          {s}{grupoSetores[s] ? ` (já em ${allGrupos[grupoSetores[s]]?.nome || grupoSetores[s]})` : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button onClick={handleAssignSetorToGrupo} disabled={isOpLoading || !assignSetorData?.grupoId || !assignSetorData?.setor} className="gap-2">
+                    Vincular
+                  </Button>
+                </div>
+              </div>
+
+              {/* Lista de Grupos e seus Setores */}
+              <div className="bg-background rounded-xl border shadow-sm">
+                <div className="px-6 py-4 border-b bg-muted/30">
+                  <h3 className="text-base font-bold">Grupos Existentes</h3>
+                </div>
+                {Object.keys(allGrupos).length === 0 ? (
+                  <div className="text-center py-10 text-muted-foreground text-sm">Nenhum grupo cadastrado.</div>
+                ) : (
+                  <div className="divide-y divide-border">
+                    {Object.entries(allGrupos).map(([grupoId, grupo]) => {
+                      const setoresDoGrupo = Object.entries(grupoSetores)
+                        .filter(([, g]) => g === grupoId)
+                        .map(([s]) => s);
+                      return (
+                        <div key={grupoId} className="p-6 hover:bg-muted/20 transition-colors">
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-3">
+                              <Layers className="w-5 h-5 text-primary" />
+                              <div>
+                                <p className="font-bold text-lg">{grupo.nome || grupoId}</p>
+                                <p className="text-xs text-muted-foreground">{setoresDoGrupo.length} setor(es) vinculado(s)</p>
+                              </div>
+                            </div>
+                            <Button size="sm" variant="ghost" className="text-destructive h-8" onClick={() => handleDeleteGrupo(grupoId)}>
+                              <Trash2 className="w-3.5 h-3.5 mr-1" /> Remover Grupo
+                            </Button>
+                          </div>
+                          {setoresDoGrupo.length === 0 ? (
+                            <p className="text-xs text-muted-foreground italic ml-8">Nenhum setor vinculado a este grupo.</p>
+                          ) : (
+                            <div className="ml-8 flex flex-wrap gap-2">
+                              {setoresDoGrupo.map(s => (
+                                <Badge key={s} variant="secondary" className="gap-1.5 py-1 pr-1 pl-2.5">
+                                  {s}
+                                  <button
+                                    onClick={() => handleRemoveSetorFromGrupo(s)}
+                                    className="ml-0.5 hover:bg-destructive/20 rounded-full p-0.5 hover:text-destructive transition-colors"
+                                    title={`Desvincular ${s}`}
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Table Sections */}
-          {!isLoading && section !== 'dashboard' && section !== 'empresas' && section !== 'setores' && (() => {
+          {!isLoading && section !== 'dashboard' && section !== 'empresas' && section !== 'setores' && section !== 'grupos' && (() => {
             const allFiltered = Object.entries(data).filter(([k, v]) => {
               if (v === null) return false;
 

@@ -47,8 +47,18 @@ export default function CarSchedulePage() {
     const load = async () => {
       setIsLoading(true);
       try {
-        const v = await fetchVeiculos(u.empresa, u.setor);
-        if (v) setVeiculos(Object.keys(v).map((id) => ({ id })));
+        const isGrupo = u.setoresGrupo && u.setoresGrupo.length > 0;
+        const setores = isGrupo ? u.setoresGrupo! : [u.setor];
+        let allVeiculos: { id: string }[] = [];
+        for (const setor of setores) {
+          const v = await fetchVeiculos(u.empresa, setor);
+          if (v) {
+            for (const id of Object.keys(v)) {
+              allVeiculos.push({ id: isGrupo ? `${setor}/${id}` : id });
+            }
+          }
+        }
+        setVeiculos(allVeiculos);
       } catch {
         toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível carregar os veículos.' });
       } finally {
@@ -69,7 +79,10 @@ export default function CarSchedulePage() {
       return;
     }
     try {
-      const agendamentos = await fetchAgendamentosVeiculo(usuario.empresa, usuario.setor, selectedVeiculo);
+      const parts = selectedVeiculo.split('/');
+      const targetSetor = parts.length > 1 ? parts[0] : usuario.setor;
+      const targetVeiculo = parts.length > 1 ? parts.slice(1).join('/') : selectedVeiculo;
+      const agendamentos = await fetchAgendamentosVeiculo(usuario.empresa, targetSetor, targetVeiculo);
       if (!agendamentos) { setConflictMsg(null); return; }
 
       const dataBR = (() => {
@@ -112,7 +125,11 @@ export default function CarSchedulePage() {
       const [ano, mes, dia] = data.split('-');
       const dataBR = `${dia}/${mes}/${ano}`;
 
-      await criarAgendamento(usuario.empresa, usuario.setor, selectedVeiculo, {
+      const parts = selectedVeiculo.split('/');
+      const targetSetor = parts.length > 1 ? parts[0] : usuario.setor;
+      const targetVeiculo = parts.length > 1 ? parts.slice(1).join('/') : selectedVeiculo;
+
+      await criarAgendamento(usuario.empresa, targetSetor, targetVeiculo, {
         data: dataBR,
         hora_inicio: horaInicio,
         hora_fim: horaFim,

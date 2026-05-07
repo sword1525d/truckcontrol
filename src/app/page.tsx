@@ -24,7 +24,16 @@ export default function ModeSelectPage() {
       }
     }
     const carUser = localStorage.getItem('car_usuario');
-    if (carUser) router.replace('/dashboard-car');
+    if (carUser) {
+      try {
+        const u = JSON.parse(carUser);
+        const isAdminOrOP = u.adm || u.role === 'adm' || u.op;
+        const isDesktop = typeof window !== 'undefined' && window.innerWidth >= 768;
+        router.replace(isAdminOrOP && isDesktop ? '/dashboard-car/admin' : '/dashboard-car');
+      } catch {
+        router.replace('/dashboard-car');
+      }
+    }
   }, [user, isUserLoading, router]);
 
   return (

@@ -76,10 +76,18 @@ export default function CarChecklistPage() {
     const load = async () => {
       setIsLoading(true);
       try {
-        const data = await fetchVeiculos(u.empresa, u.setor);
-        if (data) {
-          setVeiculos(Object.entries(data).map(([id]) => ({ id, nome: id })));
+        const isGrupo = u.setoresGrupo && u.setoresGrupo.length > 0;
+        const setores = isGrupo ? u.setoresGrupo! : [u.setor];
+        let allVeiculos: { id: string; nome: string }[] = [];
+        for (const setor of setores) {
+          const data = await fetchVeiculos(u.empresa, setor);
+          if (data) {
+            for (const [id] of Object.entries(data)) {
+              allVeiculos.push({ id: isGrupo ? `${setor}/${id}` : id, nome: isGrupo ? `${setor}/${id}` : id });
+            }
+          }
         }
+        setVeiculos(allVeiculos);
       } catch {
         toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível carregar os veículos.' });
       } finally {
@@ -186,8 +194,11 @@ export default function CarChecklistPage() {
         anexos: imageLinks,
       };
 
+      const parts = selectedVeiculo.split('/');
+      const targetSetor = parts.length > 1 ? parts[0] : usuario.setor;
+
       const res = await fetch(
-        `${CAR_RTDB_URL}/${usuario.empresa}/${usuario.setor}/relatorio.json`,
+        `${CAR_RTDB_URL}/${usuario.empresa}/${targetSetor}/relatorio.json`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
