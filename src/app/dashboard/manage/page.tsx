@@ -9,12 +9,13 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { Loader2, User, Truck } from 'lucide-react';
+import { Loader2, User, Truck, Mail } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { UserManagement } from './UserManagement';
 import { VehicleManagement } from './VehicleManagement';
+import { EmailManagement } from './EmailManagement';
 
 export type FirestoreUser = {
   id: string;
@@ -44,6 +45,12 @@ export type MaintenanceRecord = {
     notes?: string;
 }
 
+export type FirestoreManager = {
+  id: string;
+  name: string;
+  email: string;
+};
+
 type SessionData = {
   companyId: string;
   sectorId: string;
@@ -57,6 +64,7 @@ const AdminManagementPage = () => {
   const [session, setSession] = useState<SessionData | null>(null);
   const [users, setUsers] = useState<FirestoreUser[]>([]);
   const [vehicles, setVehicles] = useState<FirestoreVehicle[]>([]);
+  const [managers, setManagers] = useState<FirestoreManager[]>([]);
   const [activeRuns, setActiveRuns] = useState<{ [key: string]: boolean }>({});
   const [isLoading, setIsLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<FirestoreUser | null>(null);
@@ -120,11 +128,25 @@ const AdminManagementPage = () => {
        }
   }, [firestore, session, toast]);
 
+  const fetchManagers = useCallback(async () => {
+       if (!firestore || !session) return;
+       try {
+           const managersCol = collection(firestore, `companies/${session.companyId}/sectors/${session.sectorId}/managers`);
+           const snapshot = await getDocs(managersCol);
+           const managerList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FirestoreManager));
+           setManagers(managerList.sort((a, b) => a.name.localeCompare(b.name)));
+       } catch (error) {
+            console.error("Error fetching managers:", error);
+            toast({ variant: "destructive", title: "Erro ao buscar gestores" });
+       }
+  }, [firestore, session, toast]);
+
 
   useEffect(() => {
     if(session) {
       fetchData();
       fetchVehicles();
+      fetchManagers();
 
       // Listener for active runs
       const runsCol = collection(firestore, `companies/${session.companyId}/sectors/${session.sectorId}/runs`);
@@ -141,23 +163,25 @@ const AdminManagementPage = () => {
           unsubscribeRuns();
       }
     }
-  }, [session, firestore, fetchData, fetchVehicles]);
+  }, [session, firestore, fetchData, fetchVehicles, fetchManagers]);
 
 
-  const handleDelete = async (type: 'user' | 'vehicle', id: string) => {
+  const handleDelete = async (type: 'user' | 'vehicle' | 'manager', id: string) => {
     if (!firestore || !session) return;
     
     // TODO: Add logic to prevent deleting a user or vehicle that is in an active run.
-    const collectionName = type === 'user' ? 'users' : 'vehicles';
+    const collectionName = type === 'user' ? 'users' : type === 'vehicle' ? 'vehicles' : 'managers';
     const docRef = doc(firestore, `companies/${session.companyId}/sectors/${session.sectorId}/${collectionName}`, id);
 
     try {
       await deleteDoc(docRef);
-      toast({ title: 'Sucesso', description: `${type === 'user' ? 'Usuário' : 'Veículo'} deletado com sucesso.` });
+      toast({ title: 'Sucesso', description: `${type === 'user' ? 'Usuário' : type === 'vehicle' ? 'Veículo' : 'Gestor'} deletado com sucesso.` });
       if (type === 'user') {
         fetchData();
-      } else {
+      } else if (type === 'vehicle') {
         fetchVehicles();
+      } else {
+        fetchManagers();
       }
     } catch (error) {
       console.error(`Error deleting ${type}:`, error);
@@ -184,6 +208,10 @@ const AdminManagementPage = () => {
           <TabsTrigger value="trucks">
             <Truck className="mr-2 h-4 w-4" />
             Gerenciar Caminhões
+          </TabsTrigger>
+          <TabsTrigger value="managers">
+            <Mail className="mr-2 h-4 w-4" />
+            Gestores do Setor
           </TabsTrigger>
         </TabsList>
         <TabsContent value="users" className="space-y-4">
@@ -226,6 +254,28 @@ const AdminManagementPage = () => {
                   activeRuns={activeRuns}
                   onDelete={handleDelete}
                   onUpdate={fetchVehicles}
+                  session={session}
+                />
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="managers" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Gestores do Setor</CardTitle>
+              <CardDescription>Gerencie os gestores que receberão cópias das notificações (ex: relatórios, alertas).</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="flex justify-center items-center h-40">
+                  <Loader2 className="h-8 w-8 animate-spin" />
+                </div>
+              ) : (
+                <EmailManagement
+                  managers={managers}
+                  onDelete={handleDelete}
+                  onUpdate={fetchManagers}
                   session={session}
                 />
               )}

@@ -100,9 +100,11 @@ export default function LoginCarPage() {
     }
     setIsLoading(true);
     try {
-      await carLogin(empresa, setor, matricula.trim(), senha.trim());
+      const usuario = await carLogin(empresa, setor, matricula.trim(), senha.trim());
       toast({ title: 'Login realizado!', description: 'Bem-vindo ao Frotacontrol.' });
-      router.push('/dashboard-car');
+      const isAdminOrOP = usuario.adm || usuario.role === 'adm' || usuario.op;
+      const isDesktop = typeof window !== 'undefined' && window.innerWidth >= 768;
+      router.push(isAdminOrOP && isDesktop ? '/dashboard-car/admin' : '/dashboard-car');
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Erro no Login', description: err.message });
     } finally {

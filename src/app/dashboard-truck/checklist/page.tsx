@@ -27,9 +27,11 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Loader2, Truck, Wrench } from 'lucide-react';
+import { ArrowLeft, Loader2, Truck, Wrench, Camera, X } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
+import { CameraCapture } from '@/components/CameraCapture';
+import { supabase } from '@/lib/supabase';
 
 type ChecklistItem = {
   id: string;
@@ -38,9 +40,10 @@ type ChecklistItem = {
   description: string;
   status: 'conforme' | 'nao_conforme' | 'na';
   observation?: string;
+  images: string[];
 };
 
-const CHECKLIST_ITEMS: Omit<ChecklistItem, 'status' | 'observation'>[] = [
+const CHECKLIST_ITEMS: Omit<ChecklistItem, 'status' | 'observation' | 'images'>[] = [
     { id: '1', location: 'D', title: 'Teto das carrocerias', description: 'Verificar se não possuem vazamentos.' },
     { id: '2', location: 'C', title: 'Piso do baú (Assoalho)', description: 'Deve estar sem depreciações, sem furos ou afundamentos ou algo que gere dificuldade da movimentação de carrinhos.' },
     { id: '3', location: 'B', title: 'Escada de acesso a cabine. Escada caminhão químico', description: 'Checar se estão em condição segura de acesso.' },
@@ -84,8 +87,9 @@ export default function ChecklistPage() {
   const [selectedVehicle, setSelectedVehicle] = useState('');
   const [manualPlate, setManualPlate] = useState('');
   const [isMaintenanceLoading, setIsMaintenanceLoading] = useState(false);
+  const [activeCameraItem, setActiveCameraItem] = useState<string | null>(null);
   const [checklist, setChecklist] = useState<ChecklistItem[]>(
-    CHECKLIST_ITEMS.map(item => ({ ...item, status: 'na', observation: '' }))
+    CHECKLIST_ITEMS.map(item => ({ ...item, status: 'na', observation: '', images: [] }))
   );
   
   const [isLoading, setIsLoading] = useState(true);
@@ -139,6 +143,54 @@ export default function ChecklistPage() {
       prev.map(item => (item.id === itemId ? { ...item, observation } : item))
     );
   };
+
+  const handleCaptureImage = async (blob: Blob) => {
+    if (!activeCameraItem) return;
+    const itemId = activeCameraItem;
+    setActiveCameraItem(null);
+    setIsSubmitting(true);
+    try {
+        const filename = `${Date.now()}_${itemId}.jpg`;
+        const { data, error } = await supabase.storage
+            .from('frotacontrol')
+            .upload(`fcde/${filename}`, blob, {
+                contentType: 'image/jpeg',
+                upsert: false
+            });
+            
+        if (error) throw error;
+        
+        const { data: publicData } = supabase.storage
+            .from('frotacontrol')
+            .getPublicUrl(`fcde/${filename}`);
+            
+        const imageUrl = publicData.publicUrl;
+        
+        setChecklist(prev => prev.map(item => {
+            if (item.id === itemId) {
+                return { ...item, images: [...item.images, imageUrl] };
+            }
+            return item;
+        }));
+        toast({ title: 'Sucesso', description: 'Foto adicionada!' });
+    } catch (error: any) {
+        console.error("Error uploading image:", error);
+        toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível fazer upload da foto.' });
+    } finally {
+        setIsSubmitting(false);
+    }
+  };
+
+  const handleRemoveImage = (itemId: string, indexToRemove: number) => {
+      setChecklist(prev => prev.map(item => {
+          if (item.id === itemId) {
+              const newImages = [...item.images];
+              newImages.splice(indexToRemove, 1);
+              return { ...item, images: newImages };
+          }
+          return item;
+      }));
+  }
 
   const handleMarkMaintenance = async () => {
     if (!firestore || !user || !selectedVehicle || selectedVehicle === 'OUTRO') return;
@@ -203,6 +255,40 @@ export default function ChecklistPage() {
               companyId: user.companyId,
               sectorId: user.sectorId,
           });
+
+          const nonConformingItems = checklist.filter(item => item.status === 'nao_conforme');
+          const blocksTruck = nonConformingItems.some(i => i.location === 'A' || i.location === 'B');
+          
+          if (blocksTruck) {
+              const vehicleRef = doc(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/vehicles`, finalVehicleId);
+              await setDoc(vehicleRef, { status: 'BLOQUEADO_CHECKLIST' }, { merge: true });
+          }
+
+          if (nonConformingItems.length > 0) {
+              try {
+                  const managersCol = collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/managers`);
+                  const managersSnapshot = await getDocs(managersCol);
+                  const managersEmails = managersSnapshot.docs.map(doc => doc.data().email).filter(email => !!email);
+                  
+                  if (managersEmails.length > 0) {
+                      await fetch('/api/send-email', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                              driverName: user.name,
+                              vehicleId: finalVehicleId,
+                              items: nonConformingItems,
+                              managersEmails: managersEmails,
+                              date: new Date().toLocaleString('pt-BR'),
+                              isBlocked: blocksTruck
+                          })
+                      });
+                  }
+              } catch (emailError) {
+                  console.error("Erro ao enviar e-mail de notificação:", emailError);
+                  toast({ variant: 'destructive', title: 'Aviso', description: 'Checklist salvo, mas houve erro ao notificar a gestão.' });
+              }
+          }
 
           toast({ title: 'Sucesso!', description: 'Checklist salvo com sucesso.' });
           router.push('/dashboard-truck');
@@ -311,7 +397,7 @@ export default function ChecklistPage() {
                     <p className="font-semibold text-base">
                         <span className="inline-flex items-center justify-center bg-primary text-primary-foreground rounded-full h-6 w-6 mr-2 text-xs">{item.id}</span>
                         {item.title}
-                        <span className="ml-2 text-xs font-mono text-muted-foreground bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">[{item.location}]</span>
+                        <span className={`ml-2 text-xs font-mono px-1.5 py-0.5 rounded ${(item.location === 'A' || item.location === 'B') ? 'bg-destructive/10 text-destructive font-bold' : 'text-muted-foreground bg-gray-100 dark:bg-gray-800'}`}>[{item.location}]</span>
                     </p>
                     <p className="text-sm text-muted-foreground ml-8">{item.description}</p>
                   </div>
@@ -331,22 +417,62 @@ export default function ChecklistPage() {
                     </div>
                   </RadioGroup>
                 </div>
+                {(item.location === 'A' || item.location === 'B') && (
+                    <div className="ml-8 mt-1">
+                        <p className="text-xs font-medium text-destructive">
+                            ⚠️ Item Crítico: A não conformidade deste item bloqueará o caminhão automaticamente.
+                        </p>
+                    </div>
+                )}
                 {item.status === 'nao_conforme' && (
-                  <div className="ml-8">
-                    <Label htmlFor={`obs-${item.id}`} className="text-xs text-muted-foreground">Observação da Não Conformidade:</Label>
-                    <Textarea
-                      id={`obs-${item.id}`}
-                      placeholder="Descreva o problema encontrado..."
-                      value={item.observation}
-                      onChange={(e) => handleObservationChange(item.id, e.target.value)}
-                      className="mt-1"
-                    />
+                  <div className="ml-8 space-y-4 mt-2">
+                    <div>
+                        <Label htmlFor={`obs-${item.id}`} className="text-xs text-muted-foreground">Observação da Não Conformidade:</Label>
+                        <Textarea
+                        id={`obs-${item.id}`}
+                        placeholder="Descreva o problema encontrado..."
+                        value={item.observation}
+                        onChange={(e) => handleObservationChange(item.id, e.target.value)}
+                        className="mt-1"
+                        />
+                    </div>
+                    <div>
+                        <Label className="text-xs font-bold text-primary block mb-2">Fotos (Máx 5):</Label>
+                        <div className="flex flex-wrap gap-3">
+                            {item.images.map((imgUrl, idx) => (
+                                <div key={idx} className="relative w-20 h-20 rounded-md overflow-hidden border shadow-sm group">
+                                    <img src={imgUrl} alt={`Foto ${idx+1}`} className="w-full h-full object-cover" />
+                                    <button 
+                                        onClick={() => handleRemoveImage(item.id, idx)}
+                                        className="absolute top-1 right-1 bg-destructive text-destructive-foreground rounded-full p-1 opacity-80 group-hover:opacity-100 transition-opacity shadow"
+                                    >
+                                        <X className="w-3 h-3" />
+                                    </button>
+                                </div>
+                            ))}
+                            {item.images.length < 5 && (
+                                <button 
+                                    onClick={() => setActiveCameraItem(item.id)}
+                                    className="w-20 h-20 rounded-md border-2 border-dashed flex flex-col items-center justify-center text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-all hover:border-primary/50"
+                                >
+                                    <Camera className="w-6 h-6 mb-1" />
+                                    <span className="text-[10px] font-medium">Tirar Foto</span>
+                                </button>
+                            )}
+                        </div>
+                    </div>
                   </div>
                 )}
               </CardContent>
             </Card>
           ))}
         </div>
+        {activeCameraItem && (
+            <CameraCapture 
+                onCapture={handleCaptureImage} 
+                onClose={() => setActiveCameraItem(null)} 
+            />
+        )}
       </main>
 
       <footer className="sticky bottom-0 left-0 right-0 p-4 bg-background/80 backdrop-blur-sm border-t">

@@ -105,11 +105,11 @@ export function Header() {
   };
 
   const handleLogout = () => {
+    localStorage.clear();
+    router.push('/');
     if (auth) {
         auth.signOut();
     }
-    localStorage.clear();
-    router.push('/login');
   };
 
   const getInitials = (name?: string | null) => {

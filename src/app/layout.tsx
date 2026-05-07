@@ -1,4 +1,4 @@
-import type {Metadata} from 'next';
+import type { Metadata } from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { FirebaseClientProvider } from '@/firebase/client-provider';
@@ -8,8 +8,16 @@ import { GeistMono } from 'geist/font/mono';
 
 export const metadata: Metadata = {
   title: 'Frotacontrol',
-  description: 'Gerado pelo Firebase Studio',
+  description: 'Controle de Frota',
   manifest: '/manifest.json',
+};
+
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: 'cover',
 };
 
 export default function RootLayout({
@@ -25,7 +33,8 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
       </head>
       <body className="font-sans antialiased flex flex-col min-h-screen bg-background text-foreground">
-        <script dangerouslySetInnerHTML={{ __html: `
+        <script dangerouslySetInnerHTML={{
+          __html: `
           window.addEventListener('contextmenu', function (e) {
             if (window.innerWidth <= 1024) {
               e.preventDefault();

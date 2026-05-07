@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useMemo, useEffect, type ReactNode } from 'react';
@@ -20,7 +21,7 @@ function AuthGuard({ children }: { children: ReactNode }) {
     const isPublicOrCarRoute = pathname === '/' || pathname === '/login-car' || pathname.startsWith('/dashboard-car');
 
     if (!isUserLoading && !user && pathname !== '/login' && !isPublicOrCarRoute) {
-      router.push('/login');
+      router.push('/');
     }
   }, [user, isUserLoading, pathname, router]);
 

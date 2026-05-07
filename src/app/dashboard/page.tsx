@@ -285,7 +285,7 @@ const AcompanhamentoTab = ({ activeTab, isMilkrunAstec }: { activeTab: string, i
     const [isClient, setIsClient] = useState(false);
 
     // From VisaoGeral
-    type Vehicle = { id: string; model: string; isTruck: boolean; status: 'PARADO' | 'EM_CORRIDA' | 'EM_MANUTENCAO'; };
+    type Vehicle = { id: string; model: string; isTruck: boolean; status: 'PARADO' | 'EM_CORRIDA' | 'EM_MANUTENCAO' | 'BLOQUEADO_CHECKLIST'; };
     const [vehicleStatuses, setVehicleStatuses] = useState<(Vehicle & { driverName?: string })[]>([]);
     const [isOverviewLoading, setIsOverviewLoading] = useState(true);
     const [isFleetMapOpen, setIsFleetMapOpen] = useState(false);
@@ -557,6 +557,37 @@ const AcompanhamentoTab = ({ activeTab, isMilkrunAstec }: { activeTab: string, i
         }
     };
 
+    const handleUnlockVehicle = async (vehicleId: string) => {
+        if (!firestore || !user) return;
+        try {
+            const vehicleRef = doc(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/vehicles`, vehicleId);
+            await setDoc(vehicleRef, { status: 'PARADO' }, { merge: true });
+
+            const managersCol = collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/managers`);
+            const managersSnapshot = await getDocs(managersCol);
+            const managersEmails = managersSnapshot.docs.map(doc => doc.data().email).filter(email => !!email);
+            
+            if (managersEmails.length > 0) {
+                await fetch('/api/send-email', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        type: 'UNLOCK',
+                        managerName: user.name,
+                        vehicleId: vehicleId,
+                        managersEmails: managersEmails,
+                        date: new Date().toLocaleString('pt-BR')
+                    })
+                });
+            }
+
+            toast({ title: 'Veículo Desbloqueado', description: `O caminhão ${vehicleId} foi liberado com sucesso.` });
+        } catch (error) {
+            console.error(error);
+            toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível desbloquear o caminhão.' });
+        }
+    };
+
     const selectedRunForMap = useMemo(() => {
         if (!selectedRunKeyForMap) return null;
         return aggregatedRuns.find(run => run.key === selectedRunKeyForMap) || null;
@@ -574,6 +605,7 @@ const AcompanhamentoTab = ({ activeTab, isMilkrunAstec }: { activeTab: string, i
         emCorrida: vehicleStatuses.filter(v => v.status === 'EM_CORRIDA').length,
         parado: vehicleStatuses.filter(v => v.status === 'PARADO').length,
         emManutencao: vehicleStatuses.filter(v => v.status === 'EM_MANUTENCAO').length,
+        bloqueado: vehicleStatuses.filter(v => v.status === 'BLOQUEADO_CHECKLIST').length,
     };
 
     const availableShifts = useMemo(() => {
@@ -594,7 +626,7 @@ const AcompanhamentoTab = ({ activeTab, isMilkrunAstec }: { activeTab: string, i
                 </div>
 
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                    {vehicleStatuses.map(v => <VehicleStatusCard key={v.id} vehicle={v} />)}
+                    {vehicleStatuses.map(v => <VehicleStatusCard key={v.id} vehicle={v} onUnlock={handleUnlockVehicle} />)}
                 </div>
 
                 <Separator className="my-8" />
@@ -684,6 +716,7 @@ const AcompanhamentoTab = ({ activeTab, isMilkrunAstec }: { activeTab: string, i
                         <KpiCard title="Em Corrida" value={kpis.emCorrida} icon={PlayCircle} />
                         <KpiCard title="Parados" value={kpis.parado} icon={Truck} />
                         <KpiCard title="Em Manutenção" value={kpis.emManutencao} icon={Wrench} />
+                        <KpiCard title="Bloqueados" value={kpis.bloqueado} icon={AlertCircle} alert={kpis.bloqueado > 0} />
                     </div>
 
                     {!isMilkrunAstec && (
@@ -724,7 +757,7 @@ const AcompanhamentoTab = ({ activeTab, isMilkrunAstec }: { activeTab: string, i
                                 <p className="text-muted-foreground text-center">Nenhum caminhão encontrado.</p>
                             ) : (
                                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
-                                    {vehicleStatuses.map(v => <VehicleStatusCard key={v.id} vehicle={v} />)}
+                                    {vehicleStatuses.map(v => <VehicleStatusCard key={v.id} vehicle={v} onUnlock={handleUnlockVehicle} />)}
                                 </div>
                             )}
                         </CardContent>
@@ -820,17 +853,64 @@ const KpiCard = ({ title, value, icon: Icon }: { title: string; value: string | 
     </Card>
 );
 
-const VehicleStatusCard = ({ vehicle }: { vehicle: any }) => {
+const VehicleStatusCard = ({ vehicle, onUnlock }: { vehicle: any, onUnlock?: (id: string) => void }) => {
+    const [confirmUnlock, setConfirmUnlock] = useState('');
+    const [isUnlocking, setIsUnlocking] = useState(false);
+
     const getStatusDetails = (status: string | undefined) => {
         switch (status) {
             case 'EM_CORRIDA': return { text: 'EM CORRIDA', badgeClass: 'bg-blue-600', cardClass: 'bg-blue-50 dark:bg-blue-900/30' };
             case 'EM_MANUTENCAO': return { text: 'MANUTENÇÃO', badgeClass: 'bg-yellow-500', cardClass: 'bg-yellow-50 dark:bg-yellow-900/30' };
+            case 'BLOQUEADO_CHECKLIST': return { text: 'BLOQUEADO', badgeClass: 'bg-destructive animate-pulse shadow-[0_0_10px_rgba(239,68,68,0.5)]', cardClass: 'bg-red-50 dark:bg-red-900/40 border-destructive border-2' };
             case 'PARADO': default: return { text: 'PARADO', badgeClass: 'bg-green-600', cardClass: 'bg-green-50 dark:bg-green-800/30' };
         }
     };
     const { text, badgeClass, cardClass } = getStatusDetails(vehicle.status);
     return (
-        <Card className={`flex flex-col items-center justify-center p-4 text-center ${cardClass}`}>
+        <Card className={`flex flex-col items-center justify-center p-4 text-center relative transition-all ${cardClass}`}>
+            {vehicle.status === 'BLOQUEADO_CHECKLIST' && onUnlock && (
+                <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                        <Button size="sm" variant="destructive" className="absolute -top-3 -right-3 rounded-full h-8 w-8 p-0 shadow-lg" title="Desbloquear">
+                            <Check className="h-4 w-4" />
+                        </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle className="text-destructive font-bold">Desbloqueio de Segurança</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                Este veículo foi bloqueado por apresentar não conformidades graves (Grau A ou B) no checklist.
+                                Ao desbloquear, você assume inteira responsabilidade pela liberação do veículo na operação.
+                            </AlertDialogDescription>
+                            <div className="my-4 p-4 bg-destructive/10 border border-destructive/20 rounded-md">
+                                <Label className="text-xs font-bold text-destructive uppercase mb-2 block">Para liberar, digite exatamente: EU ME RESPONSABILIZO</Label>
+                                <Input 
+                                    value={confirmUnlock}
+                                    onChange={(e) => setConfirmUnlock(e.target.value)}
+                                    placeholder="EU ME RESPONSABILIZO"
+                                    className="text-center font-bold"
+                                />
+                            </div>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel onClick={() => setConfirmUnlock('')}>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction 
+                                onClick={async () => {
+                                    setIsUnlocking(true);
+                                    await onUnlock(vehicle.id);
+                                    setIsUnlocking(false);
+                                    setConfirmUnlock('');
+                                }}
+                                disabled={confirmUnlock !== 'EU ME RESPONSABILIZO' || isUnlocking}
+                                className="bg-destructive hover:bg-destructive/90 text-white font-bold"
+                            >
+                                {isUnlocking ? <Loader2 className="h-4 w-4 animate-spin mr-2"/> : null}
+                                Confirmar Liberação
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            )}
             <p className="font-bold text-lg">{vehicle.id}</p>
             <p className="text-xs text-muted-foreground -mt-1 mb-2">{vehicle.model}</p>
             <Badge variant={'default'} className={`${badgeClass} hover:${badgeClass}`}>{text}</Badge>
@@ -1211,7 +1291,7 @@ const AnaliseTab = ({ activeTab }: { activeTab: string }) => {
 
         const finalFiltered = allRuns.filter(run => {
             const driver = users.get(run.driverId);
-            if (selectedShift !== 'Todos' && driver?.shift !== selectedShift) return false;
+            if (selectedShift !== 'TODOS' && driver?.shift !== selectedShift) return false;
             if (isSuperAdmin && selectedSector !== 'all' && run.sectorId !== selectedSector) return false;
             if (selectedVehicle !== 'all' && run.vehicleId !== selectedVehicle) return false;
             if (selectedDriver !== 'all' && run.driverId !== selectedDriver) return false;
@@ -1368,7 +1448,7 @@ const HistoricoTab = ({ activeTab }: { activeTab: string }) => {
         fetchHistoryData();
     }, [firestore, user, toast, isSuperAdmin, date, activeTab]);
 
-    const { filteredRuns, vehicleList, driverList, hasMore, totalFiltered } = useMemo(() => {
+    const { filteredRuns, allFilteredRuns, vehicleList, driverList, hasMore, totalFiltered } = useMemo(() => {
         const vehicles = new Set<string>();
         allRuns.forEach(run => vehicles.add(run.vehicleId));
         const drivers = new Map<string, FirestoreUser>();
@@ -1376,7 +1456,7 @@ const HistoricoTab = ({ activeTab }: { activeTab: string }) => {
 
         const finalFiltered = allRuns.filter(run => {
             const driver = users.get(run.driverId);
-            if (selectedShift !== 'Todos' && driver?.shift !== selectedShift) return false;
+            if (selectedShift !== 'TODOS' && driver?.shift !== selectedShift) return false;
             if (isSuperAdmin && selectedSector !== 'all' && run.sectorId !== selectedSector) return false;
             if (selectedVehicle !== 'all' && run.vehicleId !== selectedVehicle) return false;
             if (selectedDriver !== 'all' && run.driverId !== selectedDriver) return false;
@@ -1388,6 +1468,7 @@ const HistoricoTab = ({ activeTab }: { activeTab: string }) => {
 
         return {
             filteredRuns: paginatedRuns,
+            allFilteredRuns: finalFiltered,
             totalFiltered: finalFiltered.length,
             hasMore,
             vehicleList: Array.from(vehicles).sort(),
@@ -1441,11 +1522,11 @@ const HistoricoTab = ({ activeTab }: { activeTab: string }) => {
     };
 
     const handleExport = () => {
-        if (!filteredRuns.length) {
+        if (!allFilteredRuns.length) {
             toast({ variant: 'destructive', title: 'Nenhum dado para exportar.' });
             return;
         }
-        const runsByVehicle = filteredRuns.reduce((acc, run) => {
+        const runsByVehicle = allFilteredRuns.reduce((acc, run) => {
             if (!acc[run.vehicleId]) acc[run.vehicleId] = [];
             acc[run.vehicleId].push(run);
             return acc;
@@ -1737,7 +1818,56 @@ const ChecklistDetailsDialog = ({ checklist, isOpen, onClose }: { checklist: any
         return <Badge variant="secondary">N/A</Badge>;
     };
     return (
-        <Dialog open={isOpen} onOpenChange={onClose}><DialogContent className="max-w-2xl h-[80vh]"><DialogHeader><DialogTitle>Detalhes do Checklist</DialogTitle><DialogDescription>Realizado por {checklist.driverName} no veículo {checklist.vehicleId} em {format(checklist.timestamp.toDate(), "dd/MM/yyyy 'às' HH:mm")}.</DialogDescription></DialogHeader><div className="h-[calc(80vh-120px)] overflow-y-auto space-y-3 pr-2">{checklist.items.map((item: any) => (<div key={item.id} className="border rounded-md p-3"><div className="flex justify-between items-center"><p className="font-semibold">{item.id}. {item.title}</p>{getStatusBadge(item.status)}</div><p className="text-xs text-muted-foreground ml-6">{item.description}</p>{item.status === 'nao_conforme' && item.observation && <p className="text-sm text-destructive-foreground bg-destructive/80 p-2 rounded-md mt-2 ml-6"><strong>Observação:</strong> {item.observation}</p>}</div>))}</div></DialogContent></Dialog>
+        <Dialog open={isOpen} onOpenChange={onClose}>
+            <DialogContent className="max-w-3xl h-[90vh] flex flex-col p-6">
+                <DialogHeader className="pb-4 border-b">
+                    <DialogTitle className="text-xl">Detalhes do Checklist</DialogTitle>
+                    <DialogDescription>
+                        Realizado por <strong>{checklist.driverName}</strong> no veículo <strong>{checklist.vehicleId}</strong> em {format(checklist.timestamp.toDate(), "dd/MM/yyyy 'às' HH:mm")}.
+                    </DialogDescription>
+                </DialogHeader>
+                <ScrollArea className="flex-1 pr-4 -mr-4 mt-4">
+                    <div className="space-y-4">
+                        {checklist.items.map((item: any) => (
+                            <div key={item.id} className={`border rounded-lg p-4 ${item.status === 'nao_conforme' ? 'bg-destructive/5 border-destructive/20' : 'bg-card'}`}>
+                                <div className="flex justify-between items-center mb-2">
+                                    <p className="font-bold text-base flex items-center gap-2">
+                                        <span className="bg-primary/10 text-primary px-2 py-0.5 rounded text-sm">{item.id}</span>
+                                        {item.title}
+                                        <span className="text-xs font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">[{item.location}]</span>
+                                    </p>
+                                    {getStatusBadge(item.status)}
+                                </div>
+                                <p className="text-sm text-muted-foreground ml-10 mb-3">{item.description}</p>
+                                
+                                {item.status === 'nao_conforme' && (
+                                    <div className="ml-10 space-y-4">
+                                        {item.observation && (
+                                            <div className="bg-background border rounded-md p-3">
+                                                <p className="text-xs font-bold text-muted-foreground uppercase mb-1">Observação do Motorista:</p>
+                                                <p className="text-sm italic">{item.observation}</p>
+                                            </div>
+                                        )}
+                                        {item.images && item.images.length > 0 && (
+                                            <div>
+                                                <p className="text-xs font-bold text-muted-foreground uppercase mb-2">Evidências Fotográficas:</p>
+                                                <div className="flex flex-wrap gap-3">
+                                                    {item.images.map((img: string, idx: number) => (
+                                                        <a key={idx} href={img} target="_blank" rel="noopener noreferrer" className="block relative h-24 w-24 rounded-lg overflow-hidden border shadow-sm hover:ring-2 hover:ring-primary transition-all">
+                                                            <img src={img} alt={`Evidência ${idx}`} className="w-full h-full object-cover" />
+                                                        </a>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                </ScrollArea>
+            </DialogContent>
+        </Dialog>
     )
 };
 
@@ -2409,15 +2539,190 @@ const ConfiguracoesTab = () => {
 };
 
 const AbastecimentosTab = ({ activeTab }: { activeTab: string }) => {
+    const { firestore } = useFirebase();
+    const { toast } = useToast();
+    const [user, setUser] = useState<any>(null);
+    const [users, setUsers] = useState<Map<string, FirestoreUser>>(new Map());
+    const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+    const [allRefuels, setAllRefuels] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [date, setDate] = useState<DateRange | undefined>({ from: startOfDay(subDays(new Date(), 6)), to: endOfDay(new Date()) });
+    const [selectedVehicle, setSelectedVehicle] = useState<string>('all');
+
+    useEffect(() => {
+        const storedUser = localStorage.getItem('user');
+        const companyId = localStorage.getItem('companyId');
+        const sectorId = localStorage.getItem('sectorId');
+        const matricula = localStorage.getItem('matricula');
+        if (storedUser && companyId && sectorId && matricula) {
+            setUser({ ...JSON.parse(storedUser), companyId, sectorId, matricula });
+            if (matricula === '801231') setIsSuperAdmin(true);
+        }
+    }, []);
+
+    const fetchUsers = useCallback(async () => {
+        if (!firestore || !user) return;
+        const usersSnapshot = await getDocs(collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/users`));
+        const usersMap = new Map<string, FirestoreUser>();
+        usersSnapshot.forEach(doc => usersMap.set(doc.id, { id: doc.id, ...doc.data() } as FirestoreUser));
+        setUsers(usersMap);
+    }, [firestore, user]);
+
+    const fetchRefuelData = useCallback(async () => {
+        if (!firestore || !user) return;
+        setIsLoading(true);
+        try {
+            const refuelsQuery = query(
+                collection(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/refuels`),
+                orderBy('timestamp', 'desc')
+            );
+            const querySnapshot = await getDocs(refuelsQuery);
+            const refuels = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setAllRefuels(refuels);
+        } catch (error) {
+            console.error(error);
+            toast({ variant: 'destructive', title: 'Erro ao buscar abastecimentos' });
+        } finally {
+            setIsLoading(false);
+        }
+    }, [firestore, user, toast]);
+
+    useEffect(() => {
+        if (user && activeTab === 'abastecimentos') {
+            fetchUsers();
+            fetchRefuelData();
+        }
+    }, [user, activeTab, fetchRefuelData, fetchUsers]);
+
+    const handleDelete = async (refuelId: string) => {
+        if (!firestore || !user || !isSuperAdmin) return;
+        try {
+            await deleteDoc(doc(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/refuels`, refuelId));
+            toast({ title: 'Sucesso', description: 'Abastecimento removido com sucesso.' });
+            setAllRefuels(prev => prev.filter(r => r.id !== refuelId));
+        } catch (error) {
+            toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível remover o abastecimento.' });
+        }
+    };
+
+    const { filteredRefuels, vehicleList } = useMemo(() => {
+        const vehicles = new Set<string>();
+        allRefuels.forEach(r => vehicles.add(r.vehicleId));
+
+        const filtered = allRefuels.filter(r => {
+            const rDate = new Date(r.timestamp.seconds * 1000);
+            if (date?.from && rDate < startOfDay(date.from)) return false;
+            if (date?.to && rDate > endOfDay(date.to)) return false;
+            if (selectedVehicle !== 'all' && r.vehicleId !== selectedVehicle) return false;
+            return true;
+        });
+
+        return {
+            filteredRefuels: filtered,
+            vehicleList: Array.from(vehicles).sort(),
+        };
+    }, [allRefuels, date, selectedVehicle]);
+
+    if (isLoading) {
+        return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+    }
+
     return (
-        <Card>
+        <Card className="shadow-sm border-t-4 border-primary">
             <CardHeader>
-                <CardTitle>Abastecimentos</CardTitle>
-                <CardDescription>Histórico de combustível da frota.</CardDescription>
+                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+                    <div>
+                        <CardTitle className="text-xl font-bold flex items-center gap-2">
+                            <Fuel className="h-6 w-6 text-primary" /> Histórico de Abastecimentos
+                        </CardTitle>
+                        <CardDescription>Lista de abastecimentos registrados no período.</CardDescription>
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                        <VehicleFilter vehicles={vehicleList} selectedVehicle={selectedVehicle} onVehicleChange={setSelectedVehicle} />
+                        <DateFilter date={date} setDate={setDate} />
+                    </div>
+                </div>
             </CardHeader>
             <CardContent>
-                <div className="text-center py-12 text-muted-foreground border-t">
-                   Módulo de abastecimento em atualização.
+                <div className="rounded-md border overflow-hidden">
+                    <Table>
+                        <TableHeader className="bg-muted/50">
+                            <TableRow>
+                                <TableHead className="font-bold">Data/Hora</TableHead>
+                                <TableHead className="font-bold">Veículo</TableHead>
+                                <TableHead className="font-bold">Motorista</TableHead>
+                                <TableHead className="font-bold">Litros</TableHead>
+                                <TableHead className="text-right font-bold">Valor</TableHead>
+                                {isSuperAdmin && <TableHead className="text-right font-bold">Ações</TableHead>}
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {filteredRefuels.length > 0 ? (
+                                filteredRefuels.map((refuel) => {
+                                    const driver = users.get(refuel.driverId);
+                                    const getInitials = (name: string) => name.split(' ').map(n => n[0]).slice(0, 2).join('');
+                                    return (
+                                        <TableRow key={refuel.id}>
+                                            <TableCell>{format(new Date(refuel.timestamp.seconds * 1000), 'dd/MM/yy HH:mm')}</TableCell>
+                                            <TableCell>
+                                                <div className="flex items-center gap-2">
+                                                    <Truck className="h-4 w-4 text-muted-foreground" />
+                                                    {refuel.vehicleId}
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>
+                                                <div className="font-medium flex items-center gap-2">
+                                                    <Avatar className="h-6 w-6">
+                                                        <AvatarImage src={driver?.photoURL} alt={refuel.driverName} />
+                                                        <AvatarFallback className="text-xs">{getInitials(refuel.driverName)}</AvatarFallback>
+                                                    </Avatar>
+                                                    {refuel.driverName}
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>
+                                                <div className="flex items-center gap-2">
+                                                    <Fuel className="h-4 w-4 text-muted-foreground" />
+                                                    {refuel.liters != null ? `${Number(refuel.liters).toFixed(2)} L` : '-'}
+                                                </div>
+                                            </TableCell>
+                                            <TableCell className="text-right font-medium">
+                                                {refuel.amount != null
+                                                    ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(refuel.amount)
+                                                    : '-'}
+                                            </TableCell>
+                                            {isSuperAdmin && (
+                                                <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                                                    <AlertDialog>
+                                                        <AlertDialogTrigger asChild>
+                                                            <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10">
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </Button>
+                                                        </AlertDialogTrigger>
+                                                        <AlertDialogContent>
+                                                            <AlertDialogHeader>
+                                                                <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+                                                                <AlertDialogDescription>Deseja realmente excluir este registro de abastecimento? Esta ação não pode ser desfeita.</AlertDialogDescription>
+                                                            </AlertDialogHeader>
+                                                            <AlertDialogFooter>
+                                                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                                                <AlertDialogAction onClick={() => handleDelete(refuel.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Confirmar</AlertDialogAction>
+                                                            </AlertDialogFooter>
+                                                        </AlertDialogContent>
+                                                    </AlertDialog>
+                                                </TableCell>
+                                            )}
+                                        </TableRow>
+                                    );
+                                })
+                            ) : (
+                                <TableRow>
+                                    <TableCell colSpan={isSuperAdmin ? 6 : 5} className="text-center py-10 text-muted-foreground italic">
+                                        Nenhum abastecimento encontrado para este filtro.
+                                    </TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
+                    </Table>
                 </div>
             </CardContent>
         </Card>
@@ -2505,19 +2810,12 @@ const ChecklistsTab = ({ activeTab }: { activeTab: string }) => {
         try {
             const vehicleRef = doc(firestore, `companies/${user.companyId}/sectors/${user.sectorId}/vehicles`, vehicleId);
             await setDoc(vehicleRef, { 
-                status: 'EM_MANUTENCAO',
+                status: 'BLOQUEADO_CHECKLIST',
                 isTruck: true,
                 model: vehicleId
             }, { merge: true });
             
-            const maintenanceCol = collection(vehicleRef, 'maintenance');
-            await addDoc(maintenanceCol, {
-                startTime: Timestamp.now(),
-                endTime: null,
-                notes: 'Bloqueado devido a não conformidade no checklist.',
-            });
-            
-            toast({ title: 'Veículo Bloqueado', description: `O caminhão ${vehicleId} foi enviado para manutenção.` });
+            toast({ title: 'Veículo Bloqueado', description: `O caminhão ${vehicleId} foi bloqueado com sucesso.` });
         } catch (error) {
             console.error(error);
             toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível bloquear o caminhão.' });

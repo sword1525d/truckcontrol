@@ -388,6 +388,12 @@ export default function TruckRunPage() {
     }
 
     const chosenVehicle = vehicles.find((v: any) => v.id === finalVehicleId);
+
+    if (chosenVehicle && chosenVehicle.status === 'BLOQUEADO_CHECKLIST') {
+        toast({ variant: 'destructive', title: 'Veículo Bloqueado', description: 'Este caminhão está bloqueado devido a não conformidades graves no checklist. Contate o gestor para liberação.' });
+        return;
+    }
+
     const currentMileage = noMileage ? (chosenVehicle?.lastMileage || 0) : Number(mileage);
 
     if (!noMileage) {
@@ -543,8 +549,10 @@ export default function TruckRunPage() {
                 </SelectTrigger>
                 <SelectContent>
                   {vehicles.map((v: any) => (
-                    <SelectItem key={v.id} value={v.id} disabled={v.status === 'EM_MANUTENCAO'}>
-                      {`${v.id} - ${v.model}`} {v.status === 'EM_MANUTENCAO' ? '(EM MANUTENÇÃO)' : ''}
+                    <SelectItem key={v.id} value={v.id} disabled={v.status === 'EM_MANUTENCAO' || v.status === 'BLOQUEADO_CHECKLIST'}>
+                      {`${v.id} - ${v.model}`} 
+                      {v.status === 'EM_MANUTENCAO' && ' (EM MANUTENÇÃO)'}
+                      {v.status === 'BLOQUEADO_CHECKLIST' && ' (BLOQUEADO)'}
                     </SelectItem>
                   ))}
                   <SelectItem value="OUTRO" className="font-bold text-primary">Outro Caminhão (Digitar Placa)</SelectItem>

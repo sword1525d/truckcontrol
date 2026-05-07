@@ -23,6 +23,7 @@ export type CarUsuario = {
   setor: string;
   role?: string;
   adm?: boolean;
+  op?: boolean;
   truck?: boolean;
   em_corrida?: boolean;
   permitidos?: string[];
@@ -121,6 +122,56 @@ export async function fetchSetores(empresa: string): Promise<Record<string, unkn
   return rtdbGet<Record<string, unknown>>(`${empresa}/SETORES`);
 }
 
+export async function fetchAllSetoresUsuarios(empresa: string): Promise<Record<string, Record<string, CarUsuario & { pass?: string }>> | null> {
+  const setores = await fetchSetores(empresa);
+  if (!setores) return null;
+  const result: Record<string, Record<string, CarUsuario & { pass?: string }>> = {};
+  for (const setorKey of Object.keys(setores)) {
+    const users = await rtdbGet<Record<string, CarUsuario & { pass?: string }>>(`${empresa}/${setorKey}/users`);
+    if (users) result[setorKey] = users;
+  }
+  return result;
+}
+
+// ---------- Empresas / Setores CRUD (OP) --------------------------------
+
+export async function criarEmpresa(empresaKey: string): Promise<void> {
+  const empresas = await fetchEmpresas();
+  const merged = { ...(empresas || {}), [empresaKey]: true };
+  await rtdbPut('empresas', merged);
+}
+
+export async function removerEmpresa(empresaKey: string): Promise<void> {
+  const empresas = await fetchEmpresas();
+  if (!empresas || !empresas[empresaKey]) return;
+  // verifica se tem setores
+  const setores = await fetchSetores(empresaKey);
+  if (setores && Object.keys(setores).length > 0) {
+    throw new Error('Empresa possui setores. Remova-os primeiro.');
+  }
+  delete empresas[empresaKey];
+  await rtdbPut('empresas', empresas);
+}
+
+export async function criarSetor(empresa: string, setorKey: string): Promise<void> {
+  const setores = await fetchSetores(empresa);
+  const merged = { ...(setores || {}), [setorKey]: true };
+  await rtdbPut(`${empresa}/SETORES`, merged);
+}
+
+export async function removerSetor(empresa: string, setorKey: string): Promise<void> {
+  // verifica se setor tem dados
+  const hasUsers = await rtdbGet(`${empresa}/${setorKey}/users`);
+  const hasVeiculos = await rtdbGet(`${empresa}/${setorKey}/veiculos`);
+  if ((hasUsers && Object.keys(hasUsers).length > 0) || (hasVeiculos && Object.keys(hasVeiculos).length > 0)) {
+    throw new Error('Setor possui dados. Remova usuários e veículos primeiro.');
+  }
+  const setores = await fetchSetores(empresa);
+  if (!setores || !setores[setorKey]) return;
+  delete setores[setorKey];
+  await rtdbPut(`${empresa}/SETORES`, setores);
+}
+
 // ---------- Autenticação ----------------------------------------------
 
 export async function carLogin(
@@ -142,6 +193,7 @@ export async function carLogin(
     setor,
     role: userData.role,
     adm: userData.adm,
+    op: userData.op,
     truck: userData.truck,
     em_corrida: userData.em_corrida,
     permitidos: userData.permitidos,

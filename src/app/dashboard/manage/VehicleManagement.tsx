@@ -36,7 +36,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useFirebase } from '@/firebase';
-import { doc, updateDoc, collection, addDoc, getDocs, orderBy, query, serverTimestamp, Timestamp, setDoc } from 'firebase/firestore';
+import { doc, updateDoc, collection, addDoc, getDocs, orderBy, query, serverTimestamp, Timestamp, setDoc, where } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Edit, Trash2, Wrench, History } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -184,12 +184,12 @@ export const VehicleManagement = ({ vehicles, activeRuns, onDelete, onUpdate, se
         // Finalizar Manutenção
         else if (selectedVehicle.status === 'EM_MANUTENCAO') {
             const maintenanceCol = collection(vehicleRef, 'maintenance');
-            const q = query(maintenanceCol, where('endTime', '==', null), orderBy('startTime', 'desc'));
+            const q = query(maintenanceCol, orderBy('startTime', 'desc'));
             const openMaintenanceSnapshot = await getDocs(q);
+            const openDoc = openMaintenanceSnapshot.docs.find(doc => doc.data().endTime === null);
             
-            if (!openMaintenanceSnapshot.empty) {
-                const maintenanceDoc = openMaintenanceSnapshot.docs[0];
-                await updateDoc(maintenanceDoc.ref, { endTime: serverTimestamp() });
+            if (openDoc) {
+                await updateDoc(openDoc.ref, { endTime: serverTimestamp() });
             }
             await updateDoc(vehicleRef, { status: 'PARADO' });
             toast({ title: 'Sucesso', description: `Manutenção finalizada para o veículo ${selectedVehicle.id}.` });

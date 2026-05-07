@@ -145,9 +145,8 @@ export const UserManagement = ({ users, onDelete, onUpdate, session, currentUser
           password = password.padStart(6, '0');
         }
 
-        const isPrivileged = data.role !== ROLES.MOTORISTA || data.isOP;
-        const email = (isPrivileged && data.email) ? data.email : `${data.userMatricula}@frotacontrol.com`;
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const emailAuth = `${data.userMatricula}@frotacontrol.com`;
+        const userCredential = await createUserWithEmailAndPassword(auth, emailAuth, password);
         const user = userCredential.user;
 
         const userRef = doc(firestore, `companies/${session.companyId}/sectors/${session.sectorId}/users`, user.uid);
@@ -310,10 +309,10 @@ export const UserManagement = ({ users, onDelete, onUpdate, session, currentUser
                  {editForm.formState.errors.shift && <p className="text-sm text-destructive mt-1">{editForm.formState.errors.shift.message}</p>}
             </div>
 
-            {currentUser?.isOP && (
+            {(editForm.watch('isAdmin') || editForm.watch('isOP')) && (
               <div className="space-y-2">
-                <Label htmlFor="emailEdit" className="text-sm font-bold text-primary">E-mail (Acesso OP)</Label>
-                <Input id="emailEdit" placeholder="ex: usuario@empresa.com" {...editForm.register('email')} />
+                <Label htmlFor="emailEdit" className="text-sm font-bold">E-mail para Notificações</Label>
+                <Input id="emailEdit" placeholder="ex: admin@empresa.com" {...editForm.register('email')} />
               </div>
             )}
 
@@ -393,9 +392,9 @@ export const UserManagement = ({ users, onDelete, onUpdate, session, currentUser
                     {createForm.formState.errors.photoURL && <p className="text-sm text-destructive mt-1">{createForm.formState.errors.photoURL.message}</p>}
                  </div>
 
-                {currentUser?.isOP && (
+                {(createForm.watch('role') === ROLES.ADMINISTRADOR || createForm.watch('role') === ROLES.AMBOS || createForm.watch('isOP')) && (
                   <div>
-                      <Label htmlFor="userEmail" className="font-bold text-primary">E-mail (Acesso OP)</Label>
+                      <Label htmlFor="userEmail" className="font-bold">E-mail para Notificações</Label>
                       <Input id="userEmail" placeholder="ex: adm@empresa.com" {...createForm.register('email')} />
                       {createForm.formState.errors.email && <p className="text-sm text-destructive mt-1">{createForm.formState.errors.email.message}</p>}
                   </div>

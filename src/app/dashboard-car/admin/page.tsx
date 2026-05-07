@@ -2,14 +2,14 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, LayoutDashboard, Users, Car, Play, ClipboardCheck, LogOut, Search, Plus, Pencil, Trash2, X, ChevronLeft, ChevronRight, Calendar, Clock } from 'lucide-react';
+import { Loader2, LayoutDashboard, Users, Car, Play, ClipboardCheck, LogOut, Search, Plus, Pencil, Trash2, X, ChevronLeft, ChevronRight, Calendar, Clock, Building2, Grid } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { getCarUsuario, clearCarUsuario, type CarUsuario, CAR_RTDB_URL } from '@/lib/car-rtdb';
+import { getCarUsuario, clearCarUsuario, type CarUsuario, CAR_RTDB_URL, fetchEmpresas, fetchSetores, criarEmpresa, removerEmpresa, criarSetor, removerSetor } from '@/lib/car-rtdb';
 import { cn } from '@/lib/utils';
 
 import {
@@ -30,15 +30,20 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-type Section = 'dashboard' | 'users' | 'vehicles' | 'races' | 'checklists' | 'schedules';
+type Section = 'dashboard' | 'users' | 'vehicles' | 'races' | 'checklists' | 'schedules' | 'empresas' | 'setores';
 
-const SECTIONS: { id: Section; label: string; icon: React.ElementType }[] = [
+const BASE_SECTIONS: { id: Section; label: string; icon: React.ElementType }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'users', label: 'Usuários', icon: Users },
   { id: 'vehicles', label: 'Veículos', icon: Car },
   { id: 'races', label: 'Corridas', icon: Play },
   { id: 'checklists', label: 'Checklists', icon: ClipboardCheck },
   { id: 'schedules', label: 'Agendamentos', icon: Calendar },
+];
+
+const OP_SECTIONS: { id: Section; label: string; icon: React.ElementType }[] = [
+  { id: 'empresas', label: 'Empresas', icon: Building2 },
+  { id: 'setores', label: 'Setores', icon: Grid },
 ];
 
 const PAGE_SIZE = 30;
@@ -55,7 +60,14 @@ export default function AdminPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
-  
+
+  // OP state
+  const [selectedEmpresa, setSelectedEmpresa] = useState('');
+  const [selectedSetor, setSelectedSetor] = useState('');
+  const [allEmpresas, setAllEmpresas] = useState<string[]>([]);
+  const [allSetores, setAllSetores] = useState<string[]>([]);
+  const [isOpLoading, setIsOpLoading] = useState(false);
+
   // Specific filters
   const [filterRole, setFilterRole] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -65,6 +77,8 @@ export default function AdminPage() {
   const [filterDriver, setFilterDriver] = useState('all');
 
   const [modal, setModal] = useState<{ open: boolean; id: string | null }>({ open: false, id: null });
+  const [newItemModal, setNewItemModal] = useState<{ open: boolean; type: 'empresa' | 'setor' | null }>({ open: false, type: null });
+  const [newItemName, setNewItemName] = useState('');
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [gallery, setGallery] = useState<{ open: boolean; images: string[]; idx: number }>({ open: false, images: [], idx: 0 });
   const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
@@ -72,17 +86,66 @@ export default function AdminPage() {
 
   useEffect(() => {
     const u = getCarUsuario();
-    if (!u || (!u.adm && u.role !== 'adm')) { router.replace('/dashboard-car'); return; }
+    if (!u || (!u.adm && u.role !== 'adm' && !u.op)) { router.replace('/dashboard-car'); return; }
     setUsuario(u);
+    setSelectedEmpresa(u.empresa);
+    setSelectedSetor(u.setor);
   }, [router]);
 
-  const fbUrl = usuario ? `${CAR_RTDB_URL}/${usuario.empresa}/${usuario.setor}` : '';
+  const isOP = usuario?.op === true;
+  const SECTIONS = isOP ? [...BASE_SECTIONS, ...OP_SECTIONS] : BASE_SECTIONS;
+
+  const fbUrl = (() => {
+    if (!usuario) return '';
+    const emp = isOP ? selectedEmpresa : usuario.empresa;
+    const set = isOP ? selectedSetor : usuario.setor;
+    if (!emp || !set) return '';
+    return `${CAR_RTDB_URL}/${emp}/${set}`;
+  })();
+
+  // Load empresas list for OP
+  useEffect(() => {
+    if (!isOP) return;
+    const load = async () => {
+      try {
+        const data = await fetchEmpresas();
+        if (data) setAllEmpresas(Object.keys(data));
+      } catch { /* silent */ }
+    };
+    load();
+  }, [isOP]);
+
+  // Load setores list for OP when empresa changes
+  useEffect(() => {
+    if (!isOP || !selectedEmpresa) return;
+    const load = async () => {
+      try {
+        const data = await fetchSetores(selectedEmpresa);
+        if (data) {
+          const keys = Object.keys(data);
+          setAllSetores(keys);
+          if (!keys.includes(selectedSetor)) {
+            setSelectedSetor(keys[0] || '');
+          }
+        } else {
+          setAllSetores([]);
+          setSelectedSetor('');
+        }
+      } catch { /* silent */ }
+    };
+    load();
+  }, [isOP, selectedEmpresa]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadData = useCallback(async () => {
     if (!fbUrl) return;
     setIsLoading(true);
     try {
-      const [resUsers, resVehicles, resRaces, resChecks] = await Promise.all([
+      if (section === 'empresas' || section === 'setores') {
+        setIsLoading(false);
+        return;
+      }
+
+      const [resUsers, resVehicles, resRaces, resChecks, resSchedules] = await Promise.all([
         fetch(`${fbUrl}/users.json`).then(r => r.json()),
         fetch(`${fbUrl}/veiculos.json`).then(r => r.json()),
         fetch(`${fbUrl}/corridas.json`).then(r => r.json()),
@@ -117,9 +180,9 @@ export default function AdminPage() {
     finally { setIsLoading(false); }
   }, [fbUrl, section, toast]);
 
-  useEffect(() => { if (usuario) loadData(); }, [usuario, section, loadData]);
+  useEffect(() => { if (usuario) loadData(); }, [usuario, section, selectedEmpresa, selectedSetor, loadData]);
 
-  const pathMap: Record<Section, string> = { dashboard: '', users: 'users', vehicles: 'veiculos', races: 'corridas', checklists: 'relatorio', schedules: 'agendamentos' };
+  const pathMap: Record<Section, string> = { dashboard: '', users: 'users', vehicles: 'veiculos', races: 'corridas', checklists: 'relatorio', schedules: 'agendamentos', empresas: '', setores: '' };
 
   const openModal = (id: string | null = null) => {
     setModal({ open: true, id });
@@ -127,7 +190,7 @@ export default function AdminPage() {
   };
 
   const saveItem = async () => {
-    if (!fbUrl || section === 'dashboard') return;
+    if (!fbUrl || section === 'dashboard' || section === 'empresas' || section === 'setores') return;
     const { _id, ...payload } = formData;
     let id = modal.id;
     if (section === 'users') { id = payload.mat || id; delete payload.mat; }
@@ -146,6 +209,65 @@ export default function AdminPage() {
     await fetch(`${fbUrl}/${pathMap[section]}/${id}.json`, { method: 'DELETE' });
     toast({ title: 'Removido!' });
     loadData();
+  };
+
+  // OP: empresa/setor CRUD
+  const handleCreateEmpresa = async () => {
+    if (!newItemName.trim()) return;
+    setIsOpLoading(true);
+    try {
+      await criarEmpresa(newItemName.trim().toUpperCase());
+      toast({ title: 'Empresa criada com sucesso!' });
+      setNewItemModal({ open: false, type: null });
+      setNewItemName('');
+      const data = await fetchEmpresas();
+      if (data) setAllEmpresas(Object.keys(data));
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Erro', description: err.message || 'Não foi possível criar a empresa.' });
+    } finally { setIsOpLoading(false); }
+  };
+
+  const handleDeleteEmpresa = async (key: string) => {
+    if (!confirm(`Remover a empresa "${key}"? Esta ação não pode ser desfeita.`)) return;
+    setIsOpLoading(true);
+    try {
+      await removerEmpresa(key);
+      toast({ title: 'Empresa removida.' });
+      const data = await fetchEmpresas();
+      if (data) setAllEmpresas(Object.keys(data));
+      else setAllEmpresas([]);
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Erro', description: err.message || 'Não foi possível remover a empresa.' });
+    } finally { setIsOpLoading(false); }
+  };
+
+  const handleCreateSetor = async () => {
+    if (!newItemName.trim() || !selectedEmpresa) return;
+    setIsOpLoading(true);
+    try {
+      await criarSetor(selectedEmpresa, newItemName.trim().toUpperCase());
+      toast({ title: 'Setor criado com sucesso!' });
+      setNewItemModal({ open: false, type: null });
+      setNewItemName('');
+      const data = await fetchSetores(selectedEmpresa);
+      if (data) setAllSetores(Object.keys(data));
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Erro', description: err.message || 'Não foi possível criar o setor.' });
+    } finally { setIsOpLoading(false); }
+  };
+
+  const handleDeleteSetor = async (key: string) => {
+    if (!confirm(`Remover o setor "${key}" da empresa ${selectedEmpresa}?`)) return;
+    setIsOpLoading(true);
+    try {
+      await removerSetor(selectedEmpresa, key);
+      toast({ title: 'Setor removido.' });
+      const data = await fetchSetores(selectedEmpresa);
+      if (data) setAllSetores(Object.keys(data));
+      else setAllSetores([]);
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Erro', description: err.message || 'Não foi possível remover o setor.' });
+    } finally { setIsOpLoading(false); }
   };
 
   const confirmCancel = async () => {
@@ -175,24 +297,37 @@ export default function AdminPage() {
     setIsCancelDialogOpen(true);
   };
 
+  const resetFilters = () => {
+    setFilterRole('all');
+    setFilterStatus('all');
+    setFilterRace('all');
+    setFilterDateStart('');
+    setFilterDateEnd('');
+    setFilterDriver('all');
+    setSearch('');
+    setPage(1);
+  };
+
+  const changeSection = (s: Section) => {
+    setSection(s);
+    resetFilters();
+  };
+
+  // Filter & sort logic
   const filtered = Object.entries(data).filter(([k, v]) => {
     if (v === null) return false;
-    
-    // General Search
     const searchMatch = JSON.stringify({ k, ...v }).toLowerCase().includes(search.toLowerCase());
     if (!searchMatch) return false;
 
-    // Specific Filters
     if (section === 'users' && filterRole !== 'all' && v.role !== filterRole) return false;
     if (section === 'vehicles' && filterStatus !== 'all' && v.status !== filterStatus) return false;
-    
+
     if (section === 'races') {
       const isFinished = !!v.horario_fim;
       if (filterRace === 'active' && isFinished) return false;
       if (filterRace === 'finished' && !isFinished) return false;
       if (filterDriver !== 'all' && v.responsavel !== filterDriver) return false;
-      
-      const recordDateStr = v.data; // dd/mm/yyyy
+      const recordDateStr = v.data;
       if (filterDateStart || filterDateEnd) {
         const [d, m, y] = recordDateStr.split('/').map(Number);
         const recordDate = new Date(y, m - 1, d);
@@ -209,8 +344,7 @@ export default function AdminPage() {
 
     if (section === 'checklists') {
       if (filterDriver !== 'all' && v.RESPONSAVEL !== filterDriver) return false;
-      
-      const recordDateStr = v.DATA; // dd/mm/yyyy
+      const recordDateStr = v.DATA;
       if (filterDateStart || filterDateEnd) {
         const [d, m, y] = recordDateStr.split('/').map(Number);
         const recordDate = new Date(y, m - 1, d);
@@ -245,22 +379,17 @@ export default function AdminPage() {
               <p className="font-bold text-lg leading-tight">Painel Admin</p>
             </div>
           </div>
+          {isOP && (
+            <Badge variant="outline" className="mt-2 border-amber-400/50 text-amber-400 bg-amber-400/10 text-[10px]">
+              Modo OP
+            </Badge>
+          )}
         </div>
         <nav className="flex-1 py-4">
           {SECTIONS.map(s => {
             const Icon = s.icon;
             return (
-              <button key={s.id} onClick={() => {
-                setSection(s.id);
-                setFilterRole('all');
-                setFilterStatus('all');
-                setFilterRace('all');
-                setFilterDateStart('');
-                setFilterDateEnd('');
-                setFilterDriver('all');
-                setSearch('');
-                setPage(1);
-              }}
+              <button key={s.id} onClick={() => changeSection(s.id)}
                 className={cn('w-full flex items-center gap-3 px-6 py-3 text-sm transition-all border-l-4',
                   section === s.id ? 'border-blue-500 bg-slate-800 text-white' : 'border-transparent text-slate-400 hover:text-white hover:bg-slate-800/50'
                 )}>
@@ -281,13 +410,37 @@ export default function AdminPage() {
 
       {/* Main */}
       <main className="flex-1 flex flex-col overflow-hidden">
-        <header className="px-8 py-5 bg-background border-b flex items-center justify-between shrink-0">
+        <header className="px-8 py-5 bg-background border-b flex items-center justify-between shrink-0 gap-4">
           <h1 className="text-xl font-bold">{SECTIONS.find(s => s.id === section)?.label ?? 'Dashboard'}</h1>
-          <div className="text-sm text-muted-foreground">{new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
+          <div className="flex items-center gap-3">
+            {/* OP: empresa/setor selector */}
+            {isOP && (
+              <div className="flex items-center gap-2">
+                <Select value={selectedEmpresa} onValueChange={v => { setSelectedEmpresa(v); setSelectedSetor(''); }}>
+                  <SelectTrigger className="w-[130px] h-8 text-xs">
+                    <SelectValue placeholder="Empresa" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {allEmpresas.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Select value={selectedSetor} onValueChange={setSelectedSetor} disabled={allSetores.length === 0}>
+                  <SelectTrigger className="w-[130px] h-8 text-xs">
+                    <SelectValue placeholder="Setor" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {allSetores.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <div className="text-sm text-muted-foreground">{new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
+          </div>
         </header>
 
         <div className="flex-1 overflow-y-auto p-8">
-          {isLoading && <div className="flex justify-center py-20"><Loader2 className="animate-spin w-8 h-8 text-muted-foreground" /></div>}
+          {isLoading && (section !== 'empresas' && section !== 'setores') && <div className="flex justify-center py-20"><Loader2 className="animate-spin w-8 h-8 text-muted-foreground" /></div>}
+          {isOpLoading && <div className="flex justify-center py-20"><Loader2 className="animate-spin w-8 h-8 text-muted-foreground" /></div>}
 
           {/* Dashboard */}
           {!isLoading && section === 'dashboard' && (
@@ -344,23 +497,96 @@ export default function AdminPage() {
             </div>
           )}
 
+          {/* OP Empresas Section */}
+          {isOP && section === 'empresas' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="text-muted-foreground text-sm">Total: {allEmpresas.length} empresa(s)</p>
+                <Button onClick={() => { setNewItemModal({ open: true, type: 'empresa' }); setNewItemName(''); }} className="gap-2"><Plus className="w-4 h-4" /> Nova Empresa</Button>
+              </div>
+              <div className="bg-background rounded-xl border overflow-hidden shadow-sm">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50 border-b">
+                    <tr>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Empresa</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide w-24">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {allEmpresas.length === 0 && <tr><td colSpan={2} className="text-center py-10 text-muted-foreground text-sm">Nenhuma empresa cadastrada</td></tr>}
+                    {allEmpresas.map(e => (
+                      <tr key={e} className="hover:bg-muted/30 transition-colors">
+                        <td className="px-4 py-3 font-bold">{e}</td>
+                        <td className="px-4 py-3">
+                          <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => handleDeleteEmpresa(e)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* OP Setores Section */}
+          {isOP && section === 'setores' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-muted-foreground">Empresa:</span>
+                  <Select value={selectedEmpresa} onValueChange={setSelectedEmpresa}>
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue placeholder="Selecione" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {allEmpresas.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <span className="text-sm text-muted-foreground">({allSetores.length} setores)</span>
+                </div>
+                <Button onClick={() => { setNewItemModal({ open: true, type: 'setor' }); setNewItemName(''); }} className="gap-2"><Plus className="w-4 h-4" /> Novo Setor</Button>
+              </div>
+              <div className="bg-background rounded-xl border overflow-hidden shadow-sm">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50 border-b">
+                    <tr>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Setor</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide w-24">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {allSetores.length === 0 && <tr><td colSpan={2} className="text-center py-10 text-muted-foreground text-sm">Nenhum setor cadastrado</td></tr>}
+                    {allSetores.map(s => (
+                      <tr key={s} className="hover:bg-muted/30 transition-colors">
+                        <td className="px-4 py-3 font-bold">{s}</td>
+                        <td className="px-4 py-3">
+                          <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => handleDeleteSetor(s)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           {/* Table Sections */}
-          {!isLoading && section !== 'dashboard' && (() => {
+          {!isLoading && section !== 'dashboard' && section !== 'empresas' && section !== 'setores' && (() => {
             const allFiltered = Object.entries(data).filter(([k, v]) => {
               if (v === null) return false;
-              
+
               const searchMatch = JSON.stringify({ k, ...v }).toLowerCase().includes(search.toLowerCase());
               if (!searchMatch) return false;
 
               if (section === 'users' && filterRole !== 'all' && v.role !== filterRole) return false;
               if (section === 'vehicles' && filterStatus !== 'all' && v.status !== filterStatus) return false;
-              
+
               if (section === 'races') {
                 const isFinished = !!v.horario_fim;
                 if (filterRace === 'active' && isFinished) return false;
                 if (filterRace === 'finished' && !isFinished) return false;
                 if (filterDriver !== 'all' && v.responsavel !== filterDriver) return false;
-                
+
                 const recordDateStr = v.data || '';
                 if ((filterDateStart || filterDateEnd) && recordDateStr.includes('/')) {
                   const [d, m, y] = recordDateStr.split('/').map(Number);
@@ -374,14 +600,14 @@ export default function AdminPage() {
                     if (recordDate > end) return false;
                   }
                 } else if (filterDateStart || filterDateEnd) {
-                  return false; // Se tem filtro de data mas o registro não tem data, oculta
+                  return false;
                 }
               }
 
               if (section === 'checklists' || section === 'schedules') {
                 const driverKey = section === 'checklists' ? 'RESPONSAVEL' : 'responsavel';
                 if (filterDriver !== 'all' && v[driverKey] !== filterDriver) return false;
-                
+
                 const dateKey = section === 'checklists' ? 'DATA' : 'data';
                 const recordDateStr = v[dateKey] || '';
                 if ((filterDateStart || filterDateEnd) && recordDateStr.includes('/')) {
@@ -404,32 +630,32 @@ export default function AdminPage() {
             }).sort((a, b) => {
               const valA = a[1];
               const valB = b[1];
-              
+
               if (section === 'races' || section === 'checklists' || section === 'schedules') {
                 const dateKey = section === 'checklists' ? 'DATA' : 'data';
                 const timeKey = section === 'races' ? 'horario_inicio' : (section === 'checklists' ? 'HORA' : 'hora_inicio');
-                
+
                 const strA = valA[dateKey] || '';
                 const strB = valB[dateKey] || '';
 
                 if (!strA.includes('/') || !strB.includes('/')) {
                   return strB.localeCompare(strA);
                 }
-                
+
                 const [dA, mA, yA] = strA.split('/').map(Number);
                 const [dB, mB, yB] = strB.split('/').map(Number);
                 const dateA = new Date(yA, mA - 1, dA);
                 const dateB = new Date(yB, mB - 1, dB);
-                
+
                 if (dateA.getTime() !== dateB.getTime()) {
                   return dateB.getTime() - dateA.getTime();
                 }
-                
+
                 const timeA = valA[timeKey] || '00:00';
                 const timeB = valB[timeKey] || '00:00';
                 return timeB.localeCompare(timeA);
               }
-              
+
               return b[0].localeCompare(a[0]);
             });
 
@@ -443,8 +669,7 @@ export default function AdminPage() {
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input placeholder="Pesquisar..." className="pl-9" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
                   </div>
-                  
-                  {/* Users Section Filters */}
+
                   {section === 'users' && (
                     <Select value={filterRole} onValueChange={v => { setFilterRole(v); setPage(1); }}>
                       <SelectTrigger className="w-[150px]">
@@ -458,7 +683,6 @@ export default function AdminPage() {
                     </Select>
                   )}
 
-                  {/* Vehicles Section Filters */}
                   {section === 'vehicles' && (
                     <Select value={filterStatus} onValueChange={v => { setFilterStatus(v); setPage(1); }}>
                       <SelectTrigger className="w-[180px]">
@@ -473,7 +697,6 @@ export default function AdminPage() {
                     </Select>
                   )}
 
-                  {/* Shared Filters for Races, Checklists and Schedules */}
                   {(section === 'races' || section === 'checklists' || section === 'schedules') && (
                     <>
                       <Select value={filterDriver} onValueChange={v => { setFilterDriver(v); setPage(1); }}>
@@ -490,24 +713,23 @@ export default function AdminPage() {
 
                       <div className="flex items-center gap-2">
                         <Label className="text-xs text-muted-foreground whitespace-nowrap">Período:</Label>
-                        <Input 
-                          type="date" 
-                          className="w-[150px] h-9 text-xs" 
-                          value={filterDateStart} 
-                          onChange={e => { setFilterDateStart(e.target.value); setPage(1); }} 
+                        <Input
+                          type="date"
+                          className="w-[150px] h-9 text-xs"
+                          value={filterDateStart}
+                          onChange={e => { setFilterDateStart(e.target.value); setPage(1); }}
                         />
                         <span className="text-muted-foreground">à</span>
-                        <Input 
-                          type="date" 
-                          className="w-[150px] h-9 text-xs" 
-                          value={filterDateEnd} 
-                          onChange={e => { setFilterDateEnd(e.target.value); setPage(1); }} 
+                        <Input
+                          type="date"
+                          className="w-[150px] h-9 text-xs"
+                          value={filterDateEnd}
+                          onChange={e => { setFilterDateEnd(e.target.value); setPage(1); }}
                         />
                       </div>
                     </>
                   )}
 
-                  {/* Specific Status for Races */}
                   {section === 'races' && (
                     <Select value={filterRace} onValueChange={v => { setFilterRace(v); setPage(1); }}>
                       <SelectTrigger className="w-[150px]">
@@ -548,7 +770,7 @@ export default function AdminPage() {
                           {section === 'users' && <>
                             <td className="px-4 py-3 font-mono text-xs">{item.mat || id}</td>
                             <td className="px-4 py-3 font-medium">{item.nome}</td>
-                            <td className="px-4 py-3"><Badge variant="outline" className={item.role === 'adm' ? 'border-blue-300 text-blue-700' : ''}>{item.role || 'user'}</Badge></td>
+                            <td className="px-4 py-3"><Badge variant="outline" className={item.role === 'adm' ? 'border-blue-300 text-blue-700' : (item.op ? 'border-amber-300 text-amber-700' : '')}>{item.role || (item.op ? 'op' : 'user')}</Badge></td>
                             <td className="px-4 py-3 flex gap-1">
                               <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openModal(id)}><Pencil className="w-3.5 h-3.5" /></Button>
                               <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => deleteItem(id)}><Trash2 className="w-3.5 h-3.5" /></Button>
@@ -610,16 +832,15 @@ export default function AdminPage() {
                     </tbody>
                   </table>
 
-                  {/* Pagination Controls */}
                   {totalPages > 1 && (
                     <div className="px-4 py-3 bg-muted/20 border-t flex flex-wrap items-center justify-between gap-3">
                       <p className="text-xs text-muted-foreground">Mostrando {paginated.length} de {allFiltered.length} registros</p>
                       <div className="flex items-center gap-1.5">
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          onClick={() => setPage(p => Math.max(1, p - 1))} 
-                          disabled={page === 1} 
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setPage(p => Math.max(1, p - 1))}
+                          disabled={page === 1}
                           className="h-8 px-2"
                         >
                           <ChevronLeft className="w-4 h-4" />
@@ -634,7 +855,7 @@ export default function AdminPage() {
                               return (
                                 <div key={p} className="flex items-center gap-1">
                                   {showEllipsis && <span className="text-muted-foreground px-1 text-xs">...</span>}
-                                  <Button 
+                                  <Button
                                     variant={p === page ? "default" : "outline"}
                                     size="sm"
                                     className={cn("h-8 w-8 p-0 text-xs", p === page ? "pointer-events-none" : "")}
@@ -648,11 +869,11 @@ export default function AdminPage() {
                           }
                         </div>
 
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          onClick={() => setPage(p => Math.min(totalPages, p + 1))} 
-                          disabled={page === totalPages} 
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                          disabled={page === totalPages}
                           className="h-8 px-2"
                         >
                           <span className="hidden sm:inline mr-1">Próximo</span>
@@ -705,6 +926,18 @@ export default function AdminPage() {
                       </SelectContent>
                     </Select>
                   </div>
+                  {isOP && (
+                    <div className="flex items-center gap-3 p-3 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                      <input
+                        type="checkbox"
+                        id="user-op"
+                        checked={!!formData.op}
+                        onChange={e => setFormData(p => ({ ...p, op: e.target.checked }))}
+                        className="h-4 w-4 rounded border-amber-300"
+                      />
+                      <Label htmlFor="user-op" className="text-sm font-medium">OP (Operador de Sistema)</Label>
+                    </div>
+                  )}
                 </>
               )}
 
@@ -780,6 +1013,44 @@ export default function AdminPage() {
         </div>
       )}
 
+      {/* New Item Modal (empresa/setor) */}
+      {newItemModal.open && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-background rounded-2xl w-full max-w-sm p-6 shadow-2xl">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="font-bold text-lg">{newItemModal.type === 'empresa' ? 'Nova Empresa' : 'Novo Setor'}</h2>
+              <Button size="icon" variant="ghost" onClick={() => setNewItemModal({ open: false, type: null })}><X className="w-4 h-4" /></Button>
+            </div>
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <Label htmlFor="new-item-name">{newItemModal.type === 'empresa' ? 'Nome da Empresa' : 'Nome do Setor'}</Label>
+                <Input
+                  id="new-item-name"
+                  value={newItemName}
+                  onChange={e => setNewItemName(e.target.value.toUpperCase())}
+                  placeholder={newItemModal.type === 'empresa' ? 'Ex: EMPRESA-X' : 'Ex: SETOR-A'}
+                  autoFocus
+                />
+                <p className="text-[10px] text-muted-foreground">
+                  {newItemModal.type === 'empresa'
+                    ? 'Identificador único da empresa. Use letras maiúsculas.'
+                    : newItemModal.type === 'setor' && selectedEmpresa
+                      ? `Será criado dentro de "${selectedEmpresa}".`
+                      : ''}
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-5">
+              <Button className="flex-1" disabled={isOpLoading || !newItemName.trim()} onClick={newItemModal.type === 'empresa' ? handleCreateEmpresa : handleCreateSetor}>
+                {isOpLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Criar
+              </Button>
+              <Button variant="outline" onClick={() => setNewItemModal({ open: false, type: null })}>Cancelar</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Gallery Modal */}
       {gallery.open && (
         <div className="fixed inset-0 bg-black/90 z-50 flex flex-col items-center justify-center">
@@ -792,6 +1063,7 @@ export default function AdminPage() {
           </div>
         </div>
       )}
+
       <AlertDialog open={isCancelDialogOpen} onOpenChange={setIsCancelDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
