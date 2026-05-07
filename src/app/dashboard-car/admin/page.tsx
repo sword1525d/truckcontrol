@@ -926,6 +926,39 @@ export default function AdminPage() {
                       </SelectContent>
                     </Select>
                   </div>
+                  <div className="space-y-2">
+                    <Label>Veículos Permitidos</Label>
+                    <div className="max-h-40 overflow-y-auto border rounded-lg p-3 space-y-1.5 bg-muted/20">
+                      {Object.entries(vehicles).length === 0 && (
+                        <p className="text-xs text-muted-foreground">Nenhum veículo cadastrado no setor.</p>
+                      )}
+                      {Object.entries(vehicles).map(([id, v]: [string, any]) => {
+                        const placa = v.placa || id;
+                        const checked = Array.isArray(formData.permitidos) && formData.permitidos.includes(placa);
+                        return (
+                          <label key={id} className="flex items-center gap-2 cursor-pointer hover:bg-accent/50 rounded px-1.5 py-1 transition-colors">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => {
+                                setFormData(p => {
+                                  const current = Array.isArray(p.permitidos) ? [...p.permitidos] : [];
+                                  if (current.includes(placa)) {
+                                    return { ...p, permitidos: current.filter(x => x !== placa) };
+                                  }
+                                  return { ...p, permitidos: [...current, placa] };
+                                });
+                              }}
+                              className="h-3.5 w-3.5 rounded"
+                            />
+                            <span className="text-xs">{id}</span>
+                            <span className="text-[10px] text-muted-foreground font-mono">{placa}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">Selecione os veículos que este usuário pode dirigir. Se nenhum for selecionado, todos são permitidos (padrão).</p>
+                  </div>
                   {isOP && (
                     <div className="flex items-center gap-3 p-3 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
                       <input
