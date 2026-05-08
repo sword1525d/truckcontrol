@@ -10,11 +10,15 @@ namespace Frotacontrol.Api.Controllers;
 [Route("api/companies/{companyId}/sectors/{sectorId}/vehicles/{vehicleId}/checklists")]
 public class ChecklistsController : ControllerBase
 {
-    private readonly IChecklistService _service;
+    private readonly IChecklistService _checklistService;
+    private readonly IManagerService _managerService;
+    private readonly IEmailService _emailService;
 
-    public ChecklistsController(IChecklistService service)
+    public ChecklistsController(IChecklistService checklistService, IManagerService managerService, IEmailService emailService)
     {
-        _service = service;
+        _checklistService = checklistService;
+        _managerService = managerService;
+        _emailService = emailService;
     }
 
     [HttpGet]
@@ -23,13 +27,13 @@ public class ChecklistsController : ControllerBase
         [FromQuery] DateTimeOffset? dateFrom = null,
         [FromQuery] DateTimeOffset? dateTo = null)
     {
-        return Ok(await _service.GetHistoryAsync(companyId, sectorId, vehicleId, dateFrom, dateTo));
+        return Ok(await _checklistService.GetHistoryAsync(companyId, sectorId, vehicleId, dateFrom, dateTo));
     }
 
     [HttpGet("today")]
     public async Task<ActionResult<ChecklistDto>> GetToday(string companyId, string sectorId, string vehicleId)
     {
-        var checklist = await _service.GetTodayAsync(companyId, sectorId, vehicleId);
+        var checklist = await _checklistService.GetTodayAsync(companyId, sectorId, vehicleId);
         if (checklist == null) return NotFound();
         return Ok(checklist);
     }
@@ -37,12 +41,42 @@ public class ChecklistsController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<ChecklistDto>> Submit(string companyId, string sectorId, string vehicleId, [FromBody] SubmitChecklistRequest request)
     {
-        var checklist = await _service.SubmitAsync(companyId, sectorId, vehicleId, request, async () =>
+        ChecklistDto checklist;
+
+        try
         {
-            // Email notification placeholder — will be wired in Phase 7 (Managers + Email)
-            Console.WriteLine($"[Checklist] Non-conformance blocked vehicle {vehicleId} in {companyId}/{sectorId}");
-            await Task.CompletedTask;
-        });
+            // Load managers once for potential notification
+            var managers = await _managerService.GetManagersAsync(companyId, sectorId);
+            var managerEmails = managers.Select(m => m.Email).ToList();
+
+            checklist = await _checklistService.SubmitAsync(companyId, sectorId, vehicleId, request, async () =>
+            {
+                if (managerEmails.Count > 0)
+                {
+                    var ncItems = request.Items
+                        .Where(i => i.Status == "nao_conforme")
+                        .Select(i => $"{i.Title} (Grau {i.Location})")
+                        .ToList();
+
+                    var isBlocked = request.Items.Any(i =>
+                        (i.Location == "A" || i.Location == "B") && i.Status == "nao_conforme");
+
+                    await _emailService.SendChecklistNonConformanceAsync(
+                        request.DriverName,
+                        vehicleId,
+                        ncItems,
+                        managerEmails,
+                        DateTimeOffset.UtcNow,
+                        isBlocked
+                    );
+                }
+            });
+        }
+        catch (Exception)
+        {
+            // Email failure should not break the checklist submission
+            checklist = await _checklistService.SubmitAsync(companyId, sectorId, vehicleId, request);
+        }
 
         return Ok(checklist);
     }

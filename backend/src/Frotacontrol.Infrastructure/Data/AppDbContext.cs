@@ -27,6 +27,8 @@ public class AppDbContext : IdentityDbContext<IdentityUser>
     public DbSet<MaintenanceRecord> MaintenanceRecords => Set<MaintenanceRecord>();
     public DbSet<Manager> Managers => Set<Manager>();
     public DbSet<StopPoint> StopPoints => Set<StopPoint>();
+    public DbSet<FuelCard> FuelCards => Set<FuelCard>();
+    public DbSet<FuelCardRecharge> FuelCardRecharges => Set<FuelCardRecharge>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -248,6 +250,29 @@ public class AppDbContext : IdentityDbContext<IdentityUser>
                 .HasForeignKey(sp => sp.CompanyId).OnDelete(DeleteBehavior.NoAction);
             e.HasOne(sp => sp.Sector).WithMany()
                 .HasForeignKey(sp => sp.SectorId).OnDelete(DeleteBehavior.NoAction);
+        });
+
+        // ---- FuelCard ----
+        builder.Entity<FuelCard>(e =>
+        {
+            e.HasKey(fc => fc.VehicleId);
+            e.Property(fc => fc.VehicleId).HasMaxLength(20);
+            e.Property(fc => fc.CompanyId).HasMaxLength(50).IsRequired();
+            e.Property(fc => fc.SectorId).HasMaxLength(50).IsRequired();
+            e.Property(fc => fc.Balance).HasColumnType("decimal(10,2)");
+            e.HasOne(fc => fc.Vehicle).WithOne()
+                .HasForeignKey<FuelCard>(fc => fc.VehicleId).OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(fc => fc.Recharges).WithOne(r => r.FuelCard)
+                .HasForeignKey(r => r.FuelCardVehicleId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ---- FuelCardRecharge ----
+        builder.Entity<FuelCardRecharge>(e =>
+        {
+            e.HasKey(r => r.Id);
+            e.Property(r => r.FuelCardVehicleId).HasMaxLength(20).IsRequired();
+            e.Property(r => r.Responsible).HasMaxLength(200).IsRequired();
+            e.Property(r => r.Amount).HasColumnType("decimal(10,2)");
         });
     }
 }

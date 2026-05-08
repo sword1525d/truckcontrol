@@ -98,6 +98,13 @@ builder.Services.AddScoped<IMaintenanceService, MaintenanceService>();
 builder.Services.AddScoped<IRouteService, RouteService>();
 builder.Services.AddScoped<IChecklistService, ChecklistService>();
 builder.Services.AddScoped<IRunService, RunService>();
+builder.Services.AddScoped<IRefuelService, RefuelService>();
+builder.Services.AddScoped<IManagerService, ManagerService>();
+builder.Services.AddScoped<IEmailService, EmailService>();
+builder.Services.AddScoped<IFuelCardService, FuelCardService>();
+
+// ---- HttpClient ----
+builder.Services.AddHttpClient<EmailService>();
 
 // ---- SignalR ----
 builder.Services.AddSignalR();
