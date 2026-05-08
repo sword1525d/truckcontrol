@@ -32,7 +32,6 @@ public class AuthService : IAuthService
 
         if (!string.IsNullOrWhiteSpace(request.Email))
         {
-            // Email login (admin/manager flow)
             identityUser = await _userManager.FindByEmailAsync(request.Email)
                 ?? throw new UnauthorizedAccessException("Invalid credentials");
 
@@ -41,7 +40,6 @@ public class AuthService : IAuthService
         }
         else if (!string.IsNullOrWhiteSpace(request.Matricula))
         {
-            // Matricula login (driver/operator flow)
             if (string.IsNullOrWhiteSpace(request.CompanyId) || string.IsNullOrWhiteSpace(request.SectorId))
                 throw new UnauthorizedAccessException("CompanyId and SectorId are required for matricula login");
 

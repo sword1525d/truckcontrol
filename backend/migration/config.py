@@ -17,7 +17,7 @@ RTDB_URL = os.getenv("RTDB_URL", "https://lslcda-default-rtdb.firebaseio.com")
 SQL_CONNECTION_STRING = os.getenv("SQL_CONNECTION_STRING", (
     "Driver={ODBC Driver 18 for SQL Server};"
     "Server=localhost;"
-    "Database=FrotacontrolDb;"
+    "Database=Frotacontrol;"
     "TrustServerCertificate=Yes;"
     "Trusted_Connection=Yes;"
 ))

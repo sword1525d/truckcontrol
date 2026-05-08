@@ -197,12 +197,13 @@ def migrate_firestore(sql: SqlWriter):
                 # Maintenance records
                 maint_records = read_maintenance(cid, sid, vid)
                 for m in maint_records:
-                    mid = m["_doc_id"]
+                    raw_id = m["_doc_id"]
+                    mid = generate_uuid(f"maintenance.{cid}.{sid}.{vid}.{raw_id}")
                     start_time = parse_timestamp(m.get("startTime"))
                     end_time = parse_timestamp(m.get("endTime"))
                     notes = m.get("notes")
                     sql.insert_maintenance(mid, vid, start_time, end_time, notes)
-                    print(f"      Maintenance: {mid}")
+                    print(f"      Maintenance: {raw_id} -> {mid}")
 
     sql.commit()
 
@@ -296,9 +297,15 @@ def migrate_firestore(sql: SqlWriter):
                 driver_id = run.get("driverId", "")
                 driver_name = run.get("driverName", "")
                 vehicle_id = run.get("vehicleId", "")
-                route_id = run.get("routeId")
+                route_id_raw = run.get("routeId")
+                route_id = generate_uuid(f"route.{cid}.{sid}.{route_id_raw}") if route_id_raw else None
                 trip_id = run.get("tripId")
                 trip_name = run.get("tripName")
+
+                # Garante que o veículo existe (pode ter sido digitado manualmente)
+                if vehicle_id and not sql._exists("Vehicles", "Id", vehicle_id):
+                    sql.insert_vehicle(vehicle_id, cid, sid, vehicle_id, True, 0)
+                    print(f"    [auto-criado] Vehicle: {vehicle_id}")
                 shift = parse_shift(run.get("shift"))
                 start_mileage = float(run.get("startMileage") or 0)
                 start_time = parse_timestamp(run.get("startTime"))

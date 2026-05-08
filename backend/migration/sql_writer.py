@@ -5,8 +5,23 @@ Usa pyodbc com queries parametrizadas. Idempotente: verifica existência antes d
 
 import pyodbc
 import json
+import hashlib
+import hmac
+import base64
+import os
 from config import SQL_CONNECTION_STRING, DRY_RUN, DEFAULT_PASSWORD
 from datetime import datetime, timezone
+
+
+def hash_password_v3(password: str) -> str:
+    """Gera hash compatível com ASP.NET Core Identity v3 (.NET 10)."""
+    salt = os.urandom(16)
+    iterations = 100_000
+    subkey = hashlib.pbkdf2_hmac("sha512", password.encode("utf-8"), salt, iterations, dklen=32)
+    # .NET 10 format: [0x01][PRF BE4][iter BE4][saltLen BE4][salt 16B][subkey 32B]
+    prf = 2  # KeyDerivationPrf.HMACSHA512
+    header = b"\x01" + prf.to_bytes(4, "big") + iterations.to_bytes(4, "big") + (16).to_bytes(4, "big")
+    return base64.b64encode(header + salt + subkey).decode("ascii")
 
 
 class SqlWriter:
@@ -78,7 +93,11 @@ class SqlWriter:
         self._inc("groups")
 
     def insert_sector_group(self, sector_id: str, group_id: str):
-        if self._exists("SectorGroups", "SectorId", sector_id):
+        self.cursor.execute(
+            "SELECT COUNT(1) FROM SectorGroups WHERE SectorId = ? AND GroupId = ?",
+            (sector_id, group_id)
+        )
+        if self.cursor.fetchone()[0] > 0:
             return
         self._execute(
             "INSERT INTO SectorGroups (SectorId, GroupId) VALUES (?, ?)",
@@ -94,12 +113,11 @@ class SqlWriter:
             return
 
         email = f"{matricula}@frotacontrol.com"
-        # Senha temporária — hash seria gerado pelo Identity, aqui usamos placeholder
-        # O usuário deverá usar reset de senha no primeiro login
         normalized_email = email.upper()
         normalized_name = matricula.upper()
         security_stamp = _new_guid()
         concurrency_stamp = _new_guid()
+        password_hash = hash_password_v3(DEFAULT_PASSWORD)
 
         self._execute(
             """INSERT INTO AspNetUsers
@@ -108,7 +126,7 @@ class SqlWriter:
                 TwoFactorEnabled, LockoutEnabled, AccessFailedCount)
                VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, 0, 0, 1, 0)""",
             (user_id, matricula, normalized_name, email, normalized_email,
-             "MIGRATED_PLACEHOLDER", security_stamp, concurrency_stamp)
+             password_hash, security_stamp, concurrency_stamp)
         )
         self._inc("identity_users")
 
@@ -177,6 +195,12 @@ class SqlWriter:
     def insert_checklist_item(self, checklist_id: str, item_id: str, location: str,
                               title: str, description: str, status: int,
                               observation: str | None, images_json: str | None):
+        self.cursor.execute(
+            "SELECT COUNT(1) FROM ChecklistItems WHERE ChecklistId = ? AND ItemId = ?",
+            (checklist_id, item_id)
+        )
+        if self.cursor.fetchone()[0] > 0:
+            return
         self._execute(
             """INSERT INTO ChecklistItems (ChecklistId, ItemId, Location, Title,
                Description, Status, Observation, Images)
@@ -200,6 +224,8 @@ class SqlWriter:
         self._inc("routes")
 
     def insert_route_trip(self, trip_id: str, route_id: str, name: str, sort_order: int):
+        if self._exists("RouteTrips", "Id", trip_id):
+            return
         self._execute(
             "INSERT INTO RouteTrips (Id, RouteId, Name, SortOrder) VALUES (?, ?, ?, ?)",
             (trip_id, route_id, name, sort_order)
@@ -208,6 +234,13 @@ class SqlWriter:
 
     def insert_route_trip_stop(self, trip_id: str, sort_order: int, name: str,
                                planned_arrival: str, planned_departure: str):
+        if self._exists("RouteTripStops", "TripId", trip_id):
+            self.cursor.execute(
+                "SELECT COUNT(1) FROM RouteTripStops WHERE TripId = ? AND SortOrder = ?",
+                (trip_id, sort_order)
+            )
+            if self.cursor.fetchone()[0] > 0:
+                return
         self._execute(
             """INSERT INTO RouteTripStops (TripId, SortOrder, Name, PlannedArrival, PlannedDeparture)
                VALUES (?, ?, ?, ?, ?)""",
@@ -246,6 +279,12 @@ class SqlWriter:
                         mileage_at_stop: float | None,
                         occupancy: int | None,
                         observation: str | None):
+        self.cursor.execute(
+            "SELECT COUNT(1) FROM RunStops WHERE RunId = ? AND SortOrder = ?",
+            (run_id, sort_order)
+        )
+        if self.cursor.fetchone()[0] > 0:
+            return
         self._execute(
             """INSERT INTO RunStops (RunId, SortOrder, Name, Status, PlannedArrival,
                PlannedDeparture, ArrivalTime, DepartureTime, CollectedOccupiedCars,
@@ -261,10 +300,17 @@ class SqlWriter:
 
     def insert_location_point(self, run_id: str, latitude: float, longitude: float,
                               timestamp: datetime):
+        ts_str = timestamp.isoformat() if timestamp else None
+        self.cursor.execute(
+            "SELECT COUNT(1) FROM LocationPoints WHERE RunId = ? AND Latitude = ? AND Longitude = ? AND Timestamp = ?",
+            (run_id, latitude, longitude, ts_str)
+        )
+        if self.cursor.fetchone()[0] > 0:
+            return
         self._execute(
             """INSERT INTO LocationPoints (RunId, Latitude, Longitude, Timestamp)
                VALUES (?, ?, ?, ?)""",
-            (run_id, latitude, longitude, timestamp.isoformat() if timestamp else None)
+            (run_id, latitude, longitude, ts_str)
         )
         self._inc("location_points")
 
