@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Frotacontrol.Infrastructure")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+4c0950f4c1ef706d22e48ef197b3e272092c71c4")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+f8bd7676676949062bdb2fea8615e2bd0797e3dc")]
 [assembly: System.Reflection.AssemblyProductAttribute("Frotacontrol.Infrastructure")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Frotacontrol.Infrastructure")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

@@ -4,7 +4,8 @@
       "Bash(npx tsc *)",
       "Bash(Get-ChildItem -Path \"C:\\\\workspace\\\\backups\\\\truckcontrol\\\\src\" -Name)",
       "Bash(Select-String -Pattern \"firebase\")",
-      "Bash(dotnet *)"
+      "Bash(dotnet *)",
+      "PowerShell(New-Item *)"
     ]
   }
 }

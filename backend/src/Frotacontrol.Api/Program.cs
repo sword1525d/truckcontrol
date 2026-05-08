@@ -8,6 +8,7 @@ using Frotacontrol.Core.Interfaces;
 using Frotacontrol.Infrastructure.Data;
 using Frotacontrol.Infrastructure.Services;
 using Frotacontrol.Api;
+using Frotacontrol.Api.Hubs;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -62,7 +63,8 @@ builder.Services.AddCors(options =>
     {
         policy.WithOrigins(builder.Configuration["Cors:Origins"] ?? "http://localhost:3000")
               .AllowAnyHeader()
-              .AllowAnyMethod();
+              .AllowAnyMethod()
+              .AllowCredentials();
     });
 });
 
@@ -95,6 +97,10 @@ builder.Services.AddScoped<IVehicleService, VehicleService>();
 builder.Services.AddScoped<IMaintenanceService, MaintenanceService>();
 builder.Services.AddScoped<IRouteService, RouteService>();
 builder.Services.AddScoped<IChecklistService, ChecklistService>();
+builder.Services.AddScoped<IRunService, RunService>();
+
+// ---- SignalR ----
+builder.Services.AddSignalR();
 
 // ---- Controllers ----
 builder.Services.AddControllers();
@@ -120,5 +126,6 @@ app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapHub<RunsHub>("/hubs/runs");
 
 app.Run();
