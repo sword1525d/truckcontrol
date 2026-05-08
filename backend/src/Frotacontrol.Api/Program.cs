@@ -94,6 +94,7 @@ builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IVehicleService, VehicleService>();
 builder.Services.AddScoped<IMaintenanceService, MaintenanceService>();
 builder.Services.AddScoped<IRouteService, RouteService>();
+builder.Services.AddScoped<IChecklistService, ChecklistService>();
 
 // ---- Controllers ----
 builder.Services.AddControllers();
