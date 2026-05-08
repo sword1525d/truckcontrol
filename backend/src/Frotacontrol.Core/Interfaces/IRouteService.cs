@@ -11,8 +11,9 @@ public interface IRouteService
     Task<RouteDto> UpdateRouteAsync(string companyId, string sectorId, Guid routeId, UpdateRouteRequest request);
     Task DeleteRouteAsync(string companyId, string sectorId, Guid routeId);
 
-    // Stop points
-    Task<List<StopPointDto>> GetStopPointsAsync();
-    Task<StopPointDto> CreateStopPointAsync(CreateStopPointRequest request);
-    Task DeleteStopPointAsync(int id);
+    // Stop points — scoped by company + sector
+    Task<List<StopPointDto>> GetStopPointsAsync(string companyId, string sectorId);
+    Task<StopPointDto> CreateStopPointAsync(string companyId, string sectorId, CreateStopPointRequest request);
+    Task<StopPointDto> UpdateStopPointAsync(string companyId, string sectorId, int id, UpdateStopPointRequest request);
+    Task DeleteStopPointAsync(string companyId, string sectorId, int id);
 }

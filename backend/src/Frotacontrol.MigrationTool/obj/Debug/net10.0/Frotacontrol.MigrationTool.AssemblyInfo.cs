@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Frotacontrol.MigrationTool")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+8008309ed7ed4842b52a6639991786ad31b25396")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+46dbd478a2981cb1f0dcc83d94e264d25c714063")]
 [assembly: System.Reflection.AssemblyProductAttribute("Frotacontrol.MigrationTool")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Frotacontrol.MigrationTool")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

@@ -240,8 +240,14 @@ public class AppDbContext : IdentityDbContext<IdentityUser>
         builder.Entity<StopPoint>(e =>
         {
             e.HasKey(sp => sp.Id);
+            e.Property(sp => sp.CompanyId).HasMaxLength(50).IsRequired();
+            e.Property(sp => sp.SectorId).HasMaxLength(50).IsRequired();
             e.Property(sp => sp.Name).HasMaxLength(100).IsRequired();
-            e.HasIndex(sp => sp.Name).IsUnique();
+            e.HasIndex(sp => new { sp.CompanyId, sp.SectorId, sp.Name }).IsUnique();
+            e.HasOne(sp => sp.Company).WithMany()
+                .HasForeignKey(sp => sp.CompanyId).OnDelete(DeleteBehavior.NoAction);
+            e.HasOne(sp => sp.Sector).WithMany()
+                .HasForeignKey(sp => sp.SectorId).OnDelete(DeleteBehavior.NoAction);
         });
     }
 }
