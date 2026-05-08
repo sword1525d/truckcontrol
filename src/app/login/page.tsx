@@ -5,9 +5,8 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useRouter } from 'next/navigation';
-import { useFirebase } from '@/firebase';
-import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
-import { signInWithEmailAndPassword } from "firebase/auth";
+import { useAuth } from '@/lib/auth-context';
+import { api } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -28,8 +27,8 @@ import {
 const loginSchema = z.object({
   companyId: z.string().min(1, "Selecione uma empresa"),
   sectorId: z.string().min(1, "Selecione um setor"),
-  email: z.string().min(1, 'Matrícula é obrigatória'),
-  password: z.string().min(1, 'Senha é obrigatória'),
+  email: z.string().min(1, 'Matricula e obrigatoria'),
+  password: z.string().min(1, 'Senha e obrigatoria'),
 });
 
 type LoginFormValues = z.infer<typeof loginSchema>;
@@ -40,7 +39,7 @@ type Sector = { id: string; name: string };
 export default function LoginPage() {
   const { toast } = useToast();
   const router = useRouter();
-  const { firestore, auth, user, isUserLoading } = useFirebase();
+  const { profile, isAuthenticated, isLoading: isAuthLoading, login } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [sectors, setSectors] = useState<Sector[]>([]);
@@ -49,51 +48,44 @@ export default function LoginPage() {
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
-    defaultValues: { 
-      companyId: typeof window !== 'undefined' ? localStorage.getItem('lastCompanyId') || '' : '', 
-      sectorId: typeof window !== 'undefined' ? localStorage.getItem('lastSectorId') || '' : '', 
-      email: typeof window !== 'undefined' ? localStorage.getItem('lastMatricula') || '' : '', 
-      password: '' 
+    defaultValues: {
+      companyId: typeof window !== 'undefined' ? localStorage.getItem('lastCompanyId') || '' : '',
+      sectorId: typeof window !== 'undefined' ? localStorage.getItem('lastSectorId') || '' : '',
+      email: typeof window !== 'undefined' ? localStorage.getItem('lastMatricula') || '' : '',
+      password: ''
     },
   });
 
   const selectedCompanyId = form.watch("companyId");
 
   useEffect(() => {
-    if (user && !isUserLoading) {
-        const storedUserData = localStorage.getItem('user');
-        if (storedUserData) {
-            const userData = JSON.parse(storedUserData);
-            router.push(userData.isAdmin ? '/dashboard' : '/dashboard-truck');
-        }
+    if (!isAuthLoading && isAuthenticated && profile) {
+      router.push(profile.isAdmin ? '/dashboard' : '/dashboard-truck');
     }
-  }, [user, isUserLoading, router]);
-  
+  }, [profile, isAuthenticated, isAuthLoading, router]);
+
   useEffect(() => {
     const fetchCompanies = async () => {
-      if (!firestore) return;
       setIsFetchingCompanies(true);
       try {
-        const companiesCol = collection(firestore, 'companies');
-        const companySnapshot = await getDocs(companiesCol);
-        const companyList = companySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Company));
-        setCompanies(companyList);
-      } catch (error) {
+        const data = await api.get<Company[]>('/api/companies');
+        setCompanies(data);
+      } catch {
         toast({
           variant: "destructive",
           title: "Erro",
-          description: "Não foi possível carregar as empresas.",
+          description: "Nao foi possivel carregar as empresas.",
         });
       } finally {
         setIsFetchingCompanies(false);
       }
     };
     fetchCompanies();
-  }, [firestore, toast]);
+  }, [toast]);
 
   useEffect(() => {
     const fetchSectors = async () => {
-      if (!firestore || !selectedCompanyId) {
+      if (!selectedCompanyId) {
         setSectors([]);
         form.setValue("sectorId", "");
         return;
@@ -101,94 +93,50 @@ export default function LoginPage() {
       setIsFetchingSectors(true);
       form.setValue("sectorId", "");
       try {
-        const sectorsCol = collection(firestore, `companies/${selectedCompanyId}/sectors`);
-        const sectorSnapshot = await getDocs(sectorsCol);
-        const sectorList = sectorSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Sector));
-        setSectors(sectorList);
-      } catch (error) {
+        const data = await api.get<Sector[]>(`/api/companies/${selectedCompanyId}/sectors`);
+        setSectors(data);
+      } catch {
         toast({
           variant: "destructive",
           title: "Erro",
-          description: "Não foi possível carregar os setores.",
+          description: "Nao foi possivel carregar os setores.",
         });
       } finally {
         setIsFetchingSectors(false);
       }
     };
     fetchSectors();
-  }, [selectedCompanyId, firestore, form, toast]);
+  }, [selectedCompanyId, form, toast]);
 
 
   async function onSubmit(data: LoginFormValues) {
-    if (!firestore || !auth) return;
     setIsLoading(true);
     try {
-      let email = data.email;
-      if (!email.includes('@')) {
-          email = `${email}@frotacontrol.com`;
-      }
-      let password = data.password;
-      if (password.length < 6) {
-        password = password.padStart(6, '0');
-      }
+      const userProfile = await login(data.email, data.password, data.companyId, data.sectorId);
 
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const authUser = userCredential.user;
-      
-      const selectedSector = sectors.find(s => s.id === data.sectorId);
-      const selectedSectorName = selectedSector?.name || '';
-      
-      const userDocRef = doc(firestore, `companies/${data.companyId}/sectors/${data.sectorId}/users`, authUser.uid);
-      const userDoc = await getDoc(userDocRef);
+      localStorage.setItem('companyId', data.companyId);
+      localStorage.setItem('sectorId', data.sectorId);
 
-      let userData = userDoc.exists() ? userDoc.data() : null;
+      // Save for pre-filling next time
+      localStorage.setItem('lastCompanyId', data.companyId);
+      localStorage.setItem('lastSectorId', data.sectorId);
+      localStorage.setItem('lastMatricula', data.email);
+      localStorage.setItem('matricula', data.email);
 
-      // Se não encontrou no setor selecionado, verifica em outros setores se é admin
-      if (!userData) {
-          const sectorsSnapshot = await getDocs(collection(firestore, `companies/${data.companyId}/sectors`));
-          for (const sectorDoc of sectorsSnapshot.docs) {
-              const otherUserDocRef = doc(firestore, `companies/${data.companyId}/sectors/${sectorDoc.id}/users`, authUser.uid);
-              const otherUserDoc = await getDoc(otherUserDocRef);
-              if (otherUserDoc.exists()) {
-                  const otherUserData = otherUserDoc.data();
-                  if (otherUserData.isAdmin) {
-                      userData = otherUserData;
-                      break;
-                  }
-              }
-          }
-      }
-
-      if (userData) {
-        localStorage.setItem('user', JSON.stringify({ ...userData, id: authUser.uid }));
-        localStorage.setItem('companyId', data.companyId);
-        localStorage.setItem('sectorId', data.sectorId);
-        localStorage.setItem('sectorName', selectedSectorName);
-        localStorage.setItem('matricula', data.email);
-        
-        // Save for pre-filling next time
-        localStorage.setItem('lastCompanyId', data.companyId);
-        localStorage.setItem('lastSectorId', data.sectorId);
-        localStorage.setItem('lastMatricula', data.email);
-        
-        toast({ title: 'Login bem-sucedido!' });
-        router.push(userData.isAdmin ? '/dashboard' : '/dashboard-truck');
-      } else {
-        throw new Error("Usuário não pertence ao setor selecionado ou não é administrador.");
-      }
+      toast({ title: 'Login bem-sucedido!' });
+      router.push(userProfile.isAdmin ? '/dashboard' : '/dashboard-truck');
     } catch (error: any) {
       toast({
         variant: "destructive",
         title: "Erro no Login",
-        description: error.message || "Matrícula, senha ou setor incorretos. Tente novamente.",
+        description: error.message || "Matricula, senha ou setor incorretos. Tente novamente.",
       });
     } finally {
       setIsLoading(false);
     }
   }
-  
-  // Only block the whole screen if we are still determining auth state AND have a user to redirect
-  if (isUserLoading || (user && typeof window !== 'undefined' && localStorage.getItem('user'))) {
+
+  if (isAuthLoading || (isAuthenticated && profile)) {
     return (
         <div className="flex flex-col items-center justify-center h-screen bg-background gap-4">
             <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -278,9 +226,9 @@ export default function LoginPage() {
                   name="email"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Matrícula ou E-mail</FormLabel>
+                      <FormLabel>Matricula ou E-mail</FormLabel>
                       <FormControl>
-                        <Input placeholder="Sua matrícula ou e-mail" autoComplete="off" {...field} />
+                        <Input placeholder="Sua matricula ou e-mail" autoComplete="off" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

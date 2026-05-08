@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Truck, LogOut, Shield, User as UserIcon, Settings, LayoutDashboard, RefreshCcw, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
-import { useFirebase } from '@/firebase';
+import { useAuth } from '@/lib/auth-context';
 import { useRouter, usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -26,90 +26,52 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
   } from "@/components/ui/alert-dialog"
-import { collection, getDocs, doc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Skeleton } from './ui/skeleton';
+import { api } from '@/lib/api-client';
 
 export function Header() {
-  const { user, auth, isUserLoading } = useFirebase();
+  const { profile, isLoading, isAuthenticated, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const isLoginPage = pathname === '/login';
-  const [dashboardPath, setDashboardPath] = useState('#');
-  const [userIsAdmin, setUserIsAdmin] = useState(false);
-  const [matricula, setMatricula] = useState<string | null>(null);
   const [isResetting, setIsResetting] = useState(false);
   const [showResetDialog, setShowResetDialog] = useState(false);
-  useEffect(() => {
-    const storedUser = localStorage.getItem('user');
-    const storedMatricula = localStorage.getItem('matricula');
-    setMatricula(storedMatricula);
 
-    if (storedUser) {
-        try {
-            const userData = JSON.parse(storedUser);
-            if (userData.isAdmin) {
-                setUserIsAdmin(true);
-                setDashboardPath('/dashboard');
-            } else {
-                setUserIsAdmin(false);
-                setDashboardPath('/dashboard-truck');
-            }
-        } catch (e) {
-            setUserIsAdmin(false);
-            setDashboardPath('/dashboard-truck');
-        }
-    } else {
-        setUserIsAdmin(false);
-        setDashboardPath('/dashboard-truck');
-    }
-  }, []);
-
-  const { firestore } = useFirebase();
+  const isAdmin = profile?.isAdmin ?? false;
+  const dashboardPath = isAdmin ? '/dashboard' : '/dashboard-truck';
 
   const handleResetApp = async () => {
     const companyId = localStorage.getItem('companyId');
-    if (!companyId || !firestore) return;
+    const sectorId = localStorage.getItem('sectorId');
+    if (!companyId || !sectorId) return;
 
     setIsResetting(true);
     try {
-        const sectorsSnapshot = await getDocs(collection(firestore, `companies/${companyId}/sectors`));
-        let totalDeleted = 0;
+      const runs = await api.get(`/api/companies/${companyId}/sectors/${sectorId}/runs`);
+      let totalDeleted = 0;
 
-        for (const sectorDoc of sectorsSnapshot.docs) {
-            const runsSnapshot = await getDocs(collection(firestore, `companies/${companyId}/sectors/${sectorDoc.id}/runs`));
-            
-            // Delete in VERY small batches of 5 to avoid 'Transaction too big' error
-            // Each run can have thousands of location points (up to 1MB per doc)
-            const docs = runsSnapshot.docs;
-            for (let i = 0; i < docs.length; i += 5) {
-                const batch = writeBatch(firestore);
-                const chunk = docs.slice(i, i + 5);
-                chunk.forEach(runDoc => {
-                    batch.delete(runDoc.ref);
-                    totalDeleted++;
-                });
-                await batch.commit();
-            }
+      if (Array.isArray(runs)) {
+        for (const run of runs as { id: string }[]) {
+          await api.delete(`/api/companies/${companyId}/sectors/${sectorId}/runs/${run.id}`);
+          totalDeleted++;
         }
+      }
 
-        alert(`Sucesso! ${totalDeleted} corridas foram apagadas de todos os setores.`);
-        setShowResetDialog(false);
-        window.location.reload();
+      alert(`Sucesso! ${totalDeleted} corridas foram apagadas.`);
+      setShowResetDialog(false);
+      window.location.reload();
     } catch (error) {
-        console.error("Erro ao resetar app:", error);
-        alert("Erro ao resetar: " + (error as any).message);
+      console.error("Erro ao resetar app:", error);
+      alert("Erro ao resetar: " + (error as Error).message);
     } finally {
-        setIsResetting(false);
+      setIsResetting(false);
     }
   };
 
-  const handleLogout = () => {
-    localStorage.clear();
+  const handleLogout = async () => {
+    await logout();
     router.push('/');
-    if (auth) {
-        auth.signOut();
-    }
   };
 
   const getInitials = (name?: string | null) => {
@@ -117,13 +79,15 @@ export function Header() {
     return name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase();
   }
 
+  const matricula = profile?.matricula ?? localStorage.getItem('matricula');
+
   return (
     <header className="bg-background sticky top-0 z-40">
       <div className="px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           <Link href={dashboardPath} className="flex items-center gap-3">
             <Truck className="h-7 w-7 text-primary" />
-            
+
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-bold text-foreground">Frotacontrol</h1>
               <div className="flex items-center gap-1.5 pt-1">
@@ -134,32 +98,32 @@ export function Header() {
           </Link>
 
           <div className="flex items-center gap-4">
-            {!isLoginPage && isUserLoading && (
+            {!isLoginPage && isLoading && (
               <Skeleton className="h-9 w-9 rounded-full" />
             )}
 
-            {!isLoginPage && !isUserLoading && user && (
+            {!isLoginPage && !isLoading && isAuthenticated && profile && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" className="relative h-8 w-8 rounded-full">
                       <Avatar className="h-9 w-9">
-                         <AvatarImage src={user.photoURL || undefined} alt={user.displayName || ''} />
-                        <AvatarFallback>{getInitials(user.displayName)}</AvatarFallback>
+                         <AvatarImage src={profile.photoURL || undefined} alt={profile.name || ''} />
+                        <AvatarFallback>{getInitials(profile.name)}</AvatarFallback>
                       </Avatar>
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent className="w-56" align="end" forceMount>
                     <DropdownMenuLabel className="font-normal">
                       <div className="flex flex-col space-y-1">
-                        <p className="text-sm font-medium leading-none">{user.displayName}</p>
+                        <p className="text-sm font-medium leading-none">{profile.name}</p>
                         <p className="text-xs leading-none text-muted-foreground">
-                          {user.email}
+                          {profile.email}
                         </p>
                       </div>
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    
-                    {userIsAdmin ? (
+
+                    {isAdmin ? (
                        <>
                           <DropdownMenuItem onClick={() => router.push('/dashboard/profile')}>
                              <UserIcon className="mr-2 h-4 w-4" />
@@ -177,7 +141,7 @@ export function Header() {
                       </DropdownMenuItem>
                     )}
 
-                    {userIsAdmin && (
+                    {isAdmin && (
                         <>
                           <DropdownMenuItem onClick={() => router.push('/dashboard/manage')}>
                               <UserIcon className="mr-2 h-4 w-4" />
@@ -185,7 +149,7 @@ export function Header() {
                           </DropdownMenuItem>
                            <DropdownMenuItem onClick={() => router.push('/dashboard/settings')}>
                               <Settings className="mr-2 h-4 w-4" />
-                              <span>Configurações</span>
+                              <span>Configuracoes</span>
                           </DropdownMenuItem>
                         </>
                     )}
@@ -198,7 +162,7 @@ export function Header() {
                     {matricula === '801231' && (
                         <>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem 
+                            <DropdownMenuItem
                                 className="text-destructive focus:text-destructive focus:bg-destructive/10 cursor-pointer"
                                 onSelect={(e) => {
                                     e.preventDefault();
@@ -219,17 +183,17 @@ export function Header() {
                     <AlertDialogHeader>
                         <AlertDialogTitle className="flex items-center gap-2 text-destructive">
                             <AlertTriangle className="h-5 w-5" />
-                            Ação Crítica e Irreversível
+                            Acao Critica e Irreversivel
                         </AlertDialogTitle>
                         <AlertDialogDescription>
-                            Isso irá apagar <strong>TODAS as corridas</strong> de todos os setores e motoristas da empresa. 
+                            Isso ira apagar <strong>TODAS as corridas</strong> de todos os setores e motoristas da empresa.
                             Tem certeza que deseja reiniciar o banco de dados de corridas?
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel disabled={isResetting}>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction 
-                            onClick={handleResetApp} 
+                        <AlertDialogAction
+                            onClick={handleResetApp}
                             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                             disabled={isResetting}
                         >

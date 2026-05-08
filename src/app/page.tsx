@@ -3,25 +3,19 @@
 import { useRouter } from 'next/navigation';
 import { Car, Truck, ArrowRight } from 'lucide-react';
 import { useEffect } from 'react';
-import { useFirebase } from '@/firebase';
+import { useAuth } from '@/lib/auth-context';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { Footer } from '@/components/footer';
 
 export default function ModeSelectPage() {
   const router = useRouter();
-  const { user, isUserLoading } = useFirebase();
+  const { profile, isAuthenticated, isLoading } = useAuth();
 
   useEffect(() => {
-    if (!isUserLoading && user) {
-      const storedUser = localStorage.getItem('user');
-      if (storedUser) {
-        try {
-          const userData = JSON.parse(storedUser);
-          router.replace(userData.isAdmin ? '/dashboard' : '/dashboard-truck');
-          return;
-        } catch { /* ignore */ }
-      }
+    if (!isLoading && isAuthenticated && profile) {
+      router.replace(profile.isAdmin ? '/dashboard' : '/dashboard-truck');
+      return;
     }
     const carUser = localStorage.getItem('car_usuario');
     if (carUser) {
@@ -34,7 +28,7 @@ export default function ModeSelectPage() {
         router.replace('/dashboard-car');
       }
     }
-  }, [user, isUserLoading, router]);
+  }, [profile, isAuthenticated, isLoading, router]);
 
   return (
     <div className="min-h-screen bg-background flex flex-col">

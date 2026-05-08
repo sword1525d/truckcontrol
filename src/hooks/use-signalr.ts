@@ -4,7 +4,7 @@ import * as signalR from '@microsoft/signalr';
 
 interface UseSignalROptions {
   hubUrl: string;
-  accessTokenFactory?: () => string | null;
+  accessTokenFactory?: () => string | Promise<string>;
   onRunUpdate?: (run: unknown) => void;
   onGpsUpdate?: (data: { runId: string; locations: unknown[] }) => void;
   enabled?: boolean;

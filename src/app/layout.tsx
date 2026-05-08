@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
-import { FirebaseClientProvider } from '@/firebase/client-provider';
+import { AppProvider } from '@/components/app-provider';
 import { Footer } from '@/components/footer';
 import { GeistSans } from 'geist/font/sans';
 import { GeistMono } from 'geist/font/mono';
@@ -41,12 +41,12 @@ export default function RootLayout({
             }
           }, false);
         ` }} />
-        <FirebaseClientProvider>
+        <AppProvider>
           <main className="flex-grow flex flex-col">
             {children}
           </main>
           <Toaster />
-        </FirebaseClientProvider>
+        </AppProvider>
       </body>
     </html>
   );
