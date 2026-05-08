@@ -1,0 +1,12 @@
+C:\workspace\backups\truckcontrol\backend\src\Frotacontrol.Core\bin\Debug\net10.0\Frotacontrol.Core.deps.json
+C:\workspace\backups\truckcontrol\backend\src\Frotacontrol.Core\bin\Debug\net10.0\Frotacontrol.Core.dll
+C:\workspace\backups\truckcontrol\backend\src\Frotacontrol.Core\bin\Debug\net10.0\Frotacontrol.Core.pdb
+C:\workspace\backups\truckcontrol\backend\src\Frotacontrol.Core\obj\Debug\net10.0\Frotacontrol.Core.GeneratedMSBuildEditorConfig.editorconfig
+C:\workspace\backups\truckcontrol\backend\src\Frotacontrol.Core\obj\Debug\net10.0\Frotacontrol.Core.AssemblyInfoInputs.cache
+C:\workspace\backups\truckcontrol\backend\src\Frotacontrol.Core\obj\Debug\net10.0\Frotacontrol.Core.AssemblyInfo.cs
+C:\workspace\backups\truckcontrol\backend\src\Frotacontrol.Core\obj\Debug\net10.0\Frotacontrol.Core.csproj.CoreCompileInputs.cache
+C:\workspace\backups\truckcontrol\backend\src\Frotacontrol.Core\obj\Debug\net10.0\Frotacontrol.Core.sourcelink.json
+C:\workspace\backups\truckcontrol\backend\src\Frotacontrol.Core\obj\Debug\net10.0\Frotacontrol.Core.dll
+C:\workspace\backups\truckcontrol\backend\src\Frotacontrol.Core\obj\Debug\net10.0\refint\Frotacontrol.Core.dll
+C:\workspace\backups\truckcontrol\backend\src\Frotacontrol.Core\obj\Debug\net10.0\Frotacontrol.Core.pdb
+C:\workspace\backups\truckcontrol\backend\src\Frotacontrol.Core\obj\Debug\net10.0\ref\Frotacontrol.Core.dll
