@@ -17,6 +17,7 @@ import { useToast } from '@/hooks/use-toast';
 import { ArrowLeft, Car, Loader2, MapPin, Milestone, AlertCircle } from 'lucide-react';
 import {
   getCarUsuario,
+  fetchVeiculos,
   fetchVeiculosPermitidos,
   fetchVeiculosMultiSetor,
   fetchVeiculosPermitidosMultiSetor,
@@ -64,26 +65,28 @@ export default function CarRunPage() {
         const isGrupo = usuario.setoresGrupo && usuario.setoresGrupo.length > 0;
         const setores = isGrupo ? usuario.setoresGrupo! : [usuario.setor];
 
-        const all = isGrupo
-          ? await fetchVeiculosMultiSetor(usuario.empresa, setores)
-          : await fetchVeiculosPermitidos(usuario.empresa, usuario.setor, []);
+        // Fetch user permitidos first
+        let permitidos: string[] = [];
+        try {
+          const userData = await fetch(
+            `${CAR_RTDB_URL}/${usuario.empresa}/${usuario.setor}/users/${usuario.mat}.json`,
+            { cache: 'no-store' }
+          ).then((r) => r.json());
+          permitidos = userData?.permitidos ?? [];
+        } catch { /* ignore */ }
+
+        // Fetch vehicles: if permitidos is empty, fetch all; otherwise filter
+        let all: Record<string, CarVeiculo> | null;
+        if (isGrupo) {
+          all = await fetchVeiculosMultiSetor(usuario.empresa, setores);
+        } else if (permitidos.length > 0) {
+          all = await fetchVeiculosPermitidos(usuario.empresa, usuario.setor, permitidos);
+        } else {
+          all = await fetchVeiculos(usuario.empresa, usuario.setor);
+        }
 
         if (all) {
-          // Filter by permitidos if user has restrictions (fetch user data from their own setor)
-          let permitidos: string[] = [];
-          try {
-            const userData = await fetch(
-              `${CAR_RTDB_URL}/${usuario.empresa}/${usuario.setor}/users/${usuario.mat}.json`,
-              { cache: 'no-store' }
-            ).then((r) => r.json());
-            permitidos = userData?.permitidos ?? [];
-          } catch { /* ignore */ }
-
-          const filtered = permitidos.length > 0
-            ? Object.fromEntries(Object.entries(all).filter(([, v]) => v && permitidos.includes(v.placa ?? '')))
-            : all;
-
-          const opts: VeiculoOpt[] = Object.entries(filtered)
+          const opts: VeiculoOpt[] = Object.entries(all)
             .filter(([, v]) => v)
             .map(([id, v]) => ({
               id,
