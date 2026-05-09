@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useIsMobile } from '@/hooks/use-mobile';
 import AcompanhamentoTab from './AcompanhamentoTab';
+import AnaliseTab from './AnaliseTab';
 
 export default function DashboardPage() {
     const isMobile = useIsMobile();
@@ -44,7 +45,7 @@ export default function DashboardPage() {
                     <div className="text-center py-12 text-muted-foreground">Roteirização — em migração.</div>
                 </TabsContent>
                 <TabsContent value="analise" className="mt-6">
-                    <div className="text-center py-12 text-muted-foreground">Análise — em migração.</div>
+                    <AnaliseTab activeTab={activeTab} />
                 </TabsContent>
                 <TabsContent value="historico" className="mt-6">
                     <div className="text-center py-12 text-muted-foreground">Histórico — em migração.</div>
