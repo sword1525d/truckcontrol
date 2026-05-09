@@ -3,11 +3,10 @@ import { useState, useEffect, useRef } from 'react';
 import Map, { Marker, Source, Layer, MapRef, Popup } from 'react-map-gl';
 import { LngLatBounds } from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { type Segment } from './page';
+import { type Segment } from './types';
 import { Truck, Timer, Route, Milestone } from 'lucide-react';
 import type { LineLayer } from 'react-map-gl';
-import { useFirebase } from '@/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { useAuth } from '@/lib/auth-context';
 
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 const DEFAULT_ZOOM = 12;
@@ -23,25 +22,14 @@ interface RealTimeMapProps {
 const RealTimeMap = ({ segments, fullLocationHistory = [], vehicleId, fleetData = [] }: RealTimeMapProps) => {
   const mapRef = useRef<MapRef>(null);
   const [showPopup, setShowPopup] = useState<Segment | null>(null);
-  const { firestore } = useFirebase();
+  const auth = useAuth();
   const [initialZoom, setInitialZoom] = useState<number>(DEFAULT_ZOOM);
 
   useEffect(() => {
-    const fetchSettings = async () => {
-      if (!firestore) return;
-      const companyId = localStorage.getItem('companyId');
-      const sectorId = localStorage.getItem('sectorId');
-      if (companyId && sectorId) {
-        const settingsRef = doc(firestore, `companies/${companyId}/sectors/${sectorId}/settings`, 'app');
-        const settingsSnap = await getDoc(settingsRef);
-        if (settingsSnap.exists()) {
-          const data = settingsSnap.data();
-          setInitialZoom(data.map?.defaultZoom ?? DEFAULT_ZOOM);
-        }
-      }
-    };
-    fetchSettings();
-  }, [firestore]);
+    // Use default zoom; settings are stored in localStorage
+    const stored = typeof window !== 'undefined' ? localStorage.getItem('mapDefaultZoom') : null;
+    if (stored) setInitialZoom(Number(stored) || DEFAULT_ZOOM);
+  }, []);
 
 
   useEffect(() => {
