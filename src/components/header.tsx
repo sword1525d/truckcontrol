@@ -79,7 +79,7 @@ export function Header() {
     return name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase();
   }
 
-  const matricula = profile?.matricula ?? localStorage.getItem('matricula');
+  const matricula = profile?.matricula;
 
   return (
     <header className="bg-background sticky top-0 z-40">

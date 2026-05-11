@@ -30,8 +30,7 @@ import { ArrowLeft, Loader2, Truck, Wrench, Camera, X } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import { CameraCapture } from '@/components/CameraCapture';
-import { supabase } from '@/lib/supabase';
-import type { VehicleDto, ManagerDto, SubmitChecklistRequest, SubmitChecklistItemRequest } from '@/types/api';
+import type { VehicleDto } from '@/types/api';
 
 type ChecklistItem = {
   id: string;
@@ -81,8 +80,8 @@ export default function ChecklistPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const companyId = localStorage.getItem('companyId') || profile?.companyId || '';
-  const sectorId = localStorage.getItem('sectorId') || profile?.sectorId || '';
+  const companyId = profile?.companyId || '';
+  const sectorId = profile?.sectorId || '';
 
   useEffect(() => {
     if (!isAuthLoading && !profile) {
@@ -125,21 +124,10 @@ export default function ChecklistPage() {
     setActiveCameraItem(null);
     setIsSubmitting(true);
     try {
-      const filename = `${Date.now()}_${itemId}.jpg`;
-      const { data, error } = await supabase.storage
-        .from('frotacontrol')
-        .upload(`fcde/${filename}`, blob, {
-          contentType: 'image/jpeg',
-          upsert: false
-        });
+      const formData = new FormData();
+      formData.append('file', blob, 'photo.jpg');
 
-      if (error) throw error;
-
-      const { data: publicData } = supabase.storage
-        .from('frotacontrol')
-        .getPublicUrl(`fcde/${filename}`);
-
-      const imageUrl = publicData.publicUrl;
+      const { url: imageUrl } = await api.upload<{ url: string }>('/api/checklists/photos', formData);
 
       setChecklist(prev => prev.map(item => {
         if (item.id === itemId) {
@@ -211,52 +199,21 @@ export default function ChecklistPage() {
     setIsSubmitting(true);
 
     try {
-      const items: SubmitChecklistItemRequest[] = checklist.map(item => ({
+      const items = checklist.map(item => ({
         itemId: item.id,
         location: item.location,
         title: item.title,
         description: item.description,
         status: item.status,
         observation: item.observation,
-        images: item.images,
+        images: item.images.length > 0 ? JSON.stringify(item.images) : undefined,
       }));
 
-      const body: SubmitChecklistRequest = {
+      await api.post(`/api/companies/${companyId}/sectors/${sectorId}/vehicles/${finalVehicleId}/checklists`, {
         driverId: profile.id,
         driverName: profile.name,
         items,
-      };
-
-      await api.post(`/api/companies/${companyId}/sectors/${sectorId}/vehicles/${finalVehicleId}/checklists`, body);
-
-      const nonConformingItems = checklist.filter(item => item.status === 'nao_conforme');
-      const blocksTruck = nonConformingItems.some(i => i.location === 'A' || i.location === 'B');
-
-      // Enviar email de notificacao via API existente (mantida conforme instrucao do usuario)
-      if (nonConformingItems.length > 0) {
-        try {
-          const managers = await api.get<ManagerDto[]>(`/api/companies/${companyId}/sectors/${sectorId}/managers`);
-          const managersEmails = managers.map(m => m.email).filter(email => !!email);
-
-          if (managersEmails.length > 0) {
-            await fetch('/api/send-email', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                driverName: profile.name,
-                vehicleId: finalVehicleId,
-                items: nonConformingItems,
-                managersEmails: managersEmails,
-                date: new Date().toLocaleString('pt-BR'),
-                isBlocked: blocksTruck
-              })
-            });
-          }
-        } catch (emailError) {
-          console.error("Erro ao enviar e-mail de notificacao:", emailError);
-          toast({ variant: 'destructive', title: 'Aviso', description: 'Checklist salvo, mas houve erro ao notificar a gestao.' });
-        }
-      }
+      });
 
       toast({ title: 'Sucesso!', description: 'Checklist salvo com sucesso.' });
       router.push('/dashboard-truck');

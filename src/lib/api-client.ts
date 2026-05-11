@@ -57,9 +57,12 @@ export async function apiFetch<T = unknown>(
   loadTokens();
 
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
     ...(options.headers as Record<string, string> || {}),
   };
+  // Only set Content-Type for non-FormData requests (browser sets it for FormData)
+  if (!headers['Content-Type'] && !(options.body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json';
+  }
   if (accessToken) {
     headers['Authorization'] = `Bearer ${accessToken}`;
   }
@@ -82,8 +85,11 @@ export async function apiFetch<T = unknown>(
     throw new Error(errorBody || `API error ${res.status}`);
   }
 
-  if (res.status === 204) return undefined as T;
-  return res.json();
+  const contentLength = res.headers.get('Content-Length');
+  if (res.status === 204 || contentLength === '0') return undefined as T;
+  const text = await res.text();
+  if (!text) return undefined as T;
+  return JSON.parse(text);
 }
 
 export const api = {
@@ -95,4 +101,6 @@ export const api = {
   patch: <T>(path: string, body?: unknown) =>
     apiFetch<T>(path, { method: 'PATCH', body: body ? JSON.stringify(body) : undefined }),
   delete: <T>(path: string) => apiFetch<T>(path, { method: 'DELETE' }),
+  upload: <T>(path: string, formData: FormData) =>
+    apiFetch<T>(path, { method: 'POST', body: formData }),
 };

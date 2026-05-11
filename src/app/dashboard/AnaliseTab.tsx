@@ -70,10 +70,17 @@ export default function AnaliseTab({ activeTab }: { activeTab: string }) {
   const [selectedShift, setSelectedShift] = useState<string>('1° NORMAL');
   const [selectedVehicle, setSelectedVehicle] = useState<string>('all');
   const [selectedDriver, setSelectedDriver] = useState<string>('all');
-  const [selectedSector, setSelectedSector] = useState<string>('all');
+  const [selectedSector, setSelectedSector] = useState<string>(sectorId);
 
   useEffect(() => {
-    if (!profile || !companyId || !sectorId || !date?.from || activeTab !== 'analise') return;
+    if (!sectorId) return;
+    setSelectedSector(sectorId);
+  }, [sectorId]);
+
+  useEffect(() => {
+    if (!profile || !companyId || !selectedSector || !date?.from || activeTab !== 'analise') return;
+
+    const effectiveSector = selectedSector !== 'all' ? selectedSector : sectorId;
 
     const fetchData = async () => {
       setIsLoading(true);
@@ -85,30 +92,25 @@ export default function AnaliseTab({ activeTab }: { activeTab: string }) {
           const sectors = await api.get<any[]>(`/api/companies/${companyId}/sectors`);
           sectors.forEach((s: any) => sectorRefs.push({ id: s.id, name: s.name }));
         } else {
-          const sector = await api.get<any>(`/api/companies/${companyId}/sectors/${sectorId}`);
-          sectorRefs.push({ id: sector.id, name: sector.name });
+          sectorRefs.push({ id: effectiveSector, name: '' });
         }
         setAllSectors(sectorRefs);
 
         const from = startOfDay(date.from!).toISOString();
         const to = endOfDay(date.to || date.from!).toISOString();
 
-        const runsBySector = await Promise.all(sectorRefs.map(async (sector) => {
-          const sectorUsers = await api.get<UserDto[]>(`/api/companies/${companyId}/sectors/${sector.id}/users`);
-          sectorUsers.forEach(u => { if (!usersMap.has(u.id)) usersMap.set(u.id, u); });
+        const sectorUsers = await api.get<UserDto[]>(`/api/companies/${companyId}/sectors/${effectiveSector}/users`);
+        sectorUsers.forEach(u => { if (!usersMap.has(u.id)) usersMap.set(u.id, u); });
 
-          const summaries = await api.get<RunSummaryDto[]>(`/api/companies/${companyId}/sectors/${sector.id}/runs?dateFrom=${from}&dateTo=${to}`);
-          const completedSummaries = summaries.filter(s => s.status === 'COMPLETED');
+        const summaries = await api.get<RunSummaryDto[]>(`/api/companies/${companyId}/sectors/${effectiveSector}/runs?dateFrom=${from}&dateTo=${to}`);
+        const completedSummaries = summaries.filter(s => s.status === 'COMPLETED');
 
-          const details = await Promise.all(completedSummaries.map(s =>
-            api.get<RunDto>(`/api/companies/${companyId}/sectors/${sector.id}/runs/${s.id}`).catch(() => null)
-          ));
-
-          return details.filter(Boolean) as RunDto[];
-        }));
+        const details = await Promise.all(completedSummaries.map(s =>
+          api.get<RunDto>(`/api/companies/${companyId}/sectors/${effectiveSector}/runs/${s.id}`).catch(() => null)
+        ));
 
         setUsers(usersMap);
-        setAllRuns(runsBySector.flat());
+        setAllRuns((details.filter(Boolean) as RunDto[]));
       } catch (error) {
         console.error("Error fetching analysis data:", error);
       } finally {
@@ -117,7 +119,7 @@ export default function AnaliseTab({ activeTab }: { activeTab: string }) {
     };
 
     fetchData();
-  }, [profile, companyId, sectorId, isSuperAdmin, date, activeTab]);
+  }, [profile, companyId, sectorId, selectedSector, isSuperAdmin, date, activeTab]);
 
   const { filteredRuns, vehicleList, driverList } = useMemo(() => {
     const vehicles = new Set<string>();

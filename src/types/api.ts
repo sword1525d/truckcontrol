@@ -295,6 +295,18 @@ export interface CreateStopPointRequest {
   name: string;
 }
 
+export interface UpdateRouteRequest {
+  vehicleId: string;
+  date: string;
+  shift: number;
+  isFixed: boolean;
+  trips: CreateTripRequest[];
+}
+
+export interface UpdateStopPointRequest {
+  name: string;
+}
+
 // ====== Checklists ======
 
 export interface ChecklistDto {
@@ -334,7 +346,7 @@ export interface SubmitChecklistItemRequest {
   description: string;
   status: ChecklistItemStatus;
   observation?: string;
-  images?: string[];
+  images?: string;  // JSON-serialized array
 }
 
 // ====== Refuels ======

@@ -33,8 +33,8 @@ export default function DashboardTruckPage() {
     const checkForActiveRun = async () => {
       setIsCheckingRun(true);
       try {
-        const companyId = localStorage.getItem('companyId') || profile.companyId;
-        const sectorId = localStorage.getItem('sectorId') || profile.sectorId;
+        const companyId = profile.companyId;
+        const sectorId = profile.sectorId;
         if (!companyId || !sectorId) return;
 
         const runs = await api.get<{ id: string }[]>(

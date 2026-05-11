@@ -1,44 +1,25 @@
 'use client';
 import { useState } from 'react';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-  DialogClose,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose,
 } from '@/components/ui/dialog';
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { useFirebase } from '@/firebase';
-import { doc, updateDoc, collection, addDoc } from 'firebase/firestore';
+import { api } from '@/lib/api-client';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Edit, Trash2 } from 'lucide-react';
-import type { FirestoreManager } from './page';
+import type { ManagerDto } from '@/types/api';
 
 const managerSchema = z.object({
   name: z.string().min(1, 'Nome é obrigatório'),
@@ -48,20 +29,19 @@ const managerSchema = z.object({
 type ManagerForm = z.infer<typeof managerSchema>;
 
 interface EmailManagementProps {
-  managers: FirestoreManager[];
-  onDelete: (type: 'manager' | 'user' | 'vehicle', id: string) => void;
+  managers: ManagerDto[];
+  onDelete: (type: 'manager', id: string) => void;
   onUpdate: () => void;
-  session: { companyId: string; sectorId: string };
+  companyId: string;
+  sectorId: string;
 }
 
-export const EmailManagement = ({ managers, onDelete, onUpdate, session }: EmailManagementProps) => {
-  const { firestore } = useFirebase();
+export const EmailManagement = ({ managers, onDelete, onUpdate, companyId, sectorId }: EmailManagementProps) => {
   const { toast } = useToast();
-  
+
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-
-  const [selectedManager, setSelectedManager] = useState<FirestoreManager | null>(null);
+  const [selectedManager, setSelectedManager] = useState<ManagerDto | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const editForm = useForm<ManagerForm>({ resolver: zodResolver(managerSchema) });
@@ -70,38 +50,32 @@ export const EmailManagement = ({ managers, onDelete, onUpdate, session }: Email
     defaultValues: { name: '', email: '' }
   });
 
-  const handleEditClick = (manager: FirestoreManager) => {
+  const handleEditClick = (manager: ManagerDto) => {
     setSelectedManager(manager);
     editForm.reset({ name: manager.name, email: manager.email });
     setIsEditDialogOpen(true);
   };
-  
+
   const handleCreateSubmit = async (data: ManagerForm) => {
-    if (!firestore) return;
     setIsSubmitting(true);
     try {
-        const managersCol = collection(firestore, `companies/${session.companyId}/sectors/${session.sectorId}/managers`);
-        await addDoc(managersCol, { 
-            name: data.name, 
-            email: data.email
-        });
-        toast({ title: 'Sucesso', description: 'Gestor cadastrado com sucesso!' });
-        onUpdate();
-        setIsCreateDialogOpen(false);
+      await api.post(`/api/companies/${companyId}/sectors/${sectorId}/managers`, { name: data.name, email: data.email });
+      toast({ title: 'Sucesso', description: 'Gestor cadastrado com sucesso!' });
+      onUpdate();
+      setIsCreateDialogOpen(false);
     } catch (error: any) {
-        console.error("Error creating manager:", error);
-        toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível cadastrar o gestor.' });
+      console.error("Error creating manager:", error);
+      toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível cadastrar o gestor.' });
     } finally {
-        setIsSubmitting(false);
+      setIsSubmitting(false);
     }
-  }
+  };
 
   const handleEditSubmit = async (data: ManagerForm) => {
-    if (!firestore || !selectedManager) return;
+    if (!selectedManager) return;
     setIsSubmitting(true);
     try {
-      const managerRef = doc(firestore, `companies/${session.companyId}/sectors/${session.sectorId}/managers`, selectedManager.id);
-      await updateDoc(managerRef, { name: data.name, email: data.email });
+      await api.put(`/api/companies/${companyId}/sectors/${sectorId}/managers/${selectedManager.id}`, { name: data.name, email: data.email });
       toast({ title: 'Sucesso', description: 'Gestor atualizado.' });
       onUpdate();
       setIsEditDialogOpen(false);
@@ -137,25 +111,21 @@ export const EmailManagement = ({ managers, onDelete, onUpdate, session }: Email
                     <Edit className="h-4 w-4 mr-1" /> Editar
                   </Button>
                   <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                          <Button variant="destructive" size="sm">
-                              <Trash2 className="h-4 w-4 mr-1" /> Deletar
-                          </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                          <AlertDialogHeader>
-                              <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                  Essa ação não pode ser desfeita. Isso irá deletar permanentemente o gestor "{manager.name}".
-                              </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => onDelete('manager', manager.id)}>
-                                  Confirmar
-                              </AlertDialogAction>
-                          </AlertDialogFooter>
-                      </AlertDialogContent>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="destructive" size="sm"><Trash2 className="h-4 w-4 mr-1" /> Deletar</Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Essa ação não pode ser desfeita. Isso irá deletar permanentemente o gestor "{manager.name}".
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => onDelete('manager', manager.id)}>Confirmar</AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
                   </AlertDialog>
                 </TableCell>
               </TableRow>
@@ -171,7 +141,6 @@ export const EmailManagement = ({ managers, onDelete, onUpdate, session }: Email
         </Table>
       </div>
 
-      {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -190,47 +159,40 @@ export const EmailManagement = ({ managers, onDelete, onUpdate, session }: Email
               {editForm.formState.errors.email && <p className="text-sm text-destructive mt-1">{editForm.formState.errors.email.message}</p>}
             </div>
             <DialogFooter>
-              <DialogClose asChild>
-                <Button type="button" variant="outline">Cancelar</Button>
-              </DialogClose>
+              <DialogClose asChild><Button type="button" variant="outline">Cancelar</Button></DialogClose>
               <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Salvar Alterações
+                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Salvar Alterações
               </Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
-      
-      {/* Create Dialog */}
+
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-          <DialogContent>
-              <DialogHeader>
-                  <DialogTitle>Adicionar Gestor do Setor</DialogTitle>
-                  <DialogDescription>Cadastre um gestor para receber cópias dos e-mails gerados.</DialogDescription>
-              </DialogHeader>
-              <form onSubmit={createForm.handleSubmit(handleCreateSubmit)} className="space-y-4">
-                  <div>
-                      <Label htmlFor="nameCreate">Nome do Gestor</Label>
-                      <Input id="nameCreate" {...createForm.register('name')} placeholder="Ex: João Silva"/>
-                      {createForm.formState.errors.name && <p className="text-sm text-destructive mt-1">{createForm.formState.errors.name.message}</p>}
-                  </div>
-                  <div>
-                      <Label htmlFor="emailCreate">E-mail</Label>
-                      <Input id="emailCreate" {...createForm.register('email')} placeholder="Ex: joao@frotacontrol.com"/>
-                      {createForm.formState.errors.email && <p className="text-sm text-destructive mt-1">{createForm.formState.errors.email.message}</p>}
-                  </div>
-                   <DialogFooter>
-                      <DialogClose asChild>
-                          <Button type="button" variant="outline">Cancelar</Button>
-                      </DialogClose>
-                      <Button type="submit" disabled={isSubmitting}>
-                          {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                          Salvar
-                      </Button>
-                  </DialogFooter>
-              </form>
-          </DialogContent>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Adicionar Gestor do Setor</DialogTitle>
+            <DialogDescription>Cadastre um gestor para receber cópias dos e-mails gerados.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={createForm.handleSubmit(handleCreateSubmit)} className="space-y-4">
+            <div>
+              <Label htmlFor="nameCreate">Nome do Gestor</Label>
+              <Input id="nameCreate" {...createForm.register('name')} placeholder="Ex: João Silva" />
+              {createForm.formState.errors.name && <p className="text-sm text-destructive mt-1">{createForm.formState.errors.name.message}</p>}
+            </div>
+            <div>
+              <Label htmlFor="emailCreate">E-mail</Label>
+              <Input id="emailCreate" {...createForm.register('email')} placeholder="Ex: joao@frotacontrol.com" />
+              {createForm.formState.errors.email && <p className="text-sm text-destructive mt-1">{createForm.formState.errors.email.message}</p>}
+            </div>
+            <DialogFooter>
+              <DialogClose asChild><Button type="button" variant="outline">Cancelar</Button></DialogClose>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Salvar
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
       </Dialog>
     </>
   );

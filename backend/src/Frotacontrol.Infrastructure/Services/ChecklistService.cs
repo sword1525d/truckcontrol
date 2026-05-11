@@ -104,6 +104,21 @@ public class ChecklistService : IChecklistService
         return ToDto(checklist);
     }
 
+    public async Task DeleteAsync(string companyId, string sectorId, string vehicleId, Guid checklistId)
+    {
+        var checklist = await _db.Checklists
+            .Include(c => c.Items)
+            .FirstOrDefaultAsync(c =>
+                c.Id == checklistId
+                && c.VehicleId == vehicleId
+                && c.CompanyId == companyId
+                && c.SectorId == sectorId)
+            ?? throw new KeyNotFoundException($"Checklist '{checklistId}' not found");
+
+        _db.Checklists.Remove(checklist);
+        await _db.SaveChangesAsync();
+    }
+
     private static ChecklistDto ToDto(Checklist c) => new()
     {
         Id = c.Id,

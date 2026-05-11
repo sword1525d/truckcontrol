@@ -32,4 +32,12 @@ public class RefuelsController : ControllerBase
     {
         return Ok(await _service.CreateRefuelAsync(companyId, sectorId, request));
     }
+
+    [HttpDelete("{refuelId:guid}")]
+    [Authorize(Roles = "Admin,OP")]
+    public async Task<IActionResult> Delete(string companyId, string sectorId, Guid refuelId)
+    {
+        await _service.DeleteAsync(companyId, sectorId, refuelId);
+        return Ok();
+    }
 }

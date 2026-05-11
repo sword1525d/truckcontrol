@@ -6,6 +6,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useIsMobile } from '@/hooks/use-mobile';
 import AcompanhamentoTab from './AcompanhamentoTab';
 import AnaliseTab from './AnaliseTab';
+import HistoricoTab from './HistoricoTab';
+import AbastecimentosTab from './AbastecimentosTab';
+import ChecklistsTab from './ChecklistsTab';
+import RoteirizacaoTab from './RoteirizacaoTab';
 
 export default function DashboardPage() {
     const isMobile = useIsMobile();
@@ -27,7 +31,7 @@ export default function DashboardPage() {
             </div>
 
             <Tabs defaultValue="acompanhamento" className="w-full" onValueChange={setActiveTab}>
-                <TabsList className={cn("grid w-full", isMobile ? "grid-cols-2" : (isMilkrunAstec ? "grid-cols-4" : "grid-cols-6"))}>
+                <TabsList className={cn("grid w-full", isMobile ? "grid-cols-2" : "grid-cols-3 md:grid-cols-4 lg:grid-cols-6", isMilkrunAstec && "md:grid-cols-5 lg:grid-cols-5")}>
                     <TabsTrigger value="acompanhamento">Acompanhamento</TabsTrigger>
                     {!isMilkrunAstec && <TabsTrigger value="roteirizacao">Roteirização</TabsTrigger>}
                     <TabsTrigger value="analise">Análise</TabsTrigger>
@@ -42,19 +46,19 @@ export default function DashboardPage() {
 
                 {/* Demais abas serão migradas incrementalmente */}
                 <TabsContent value="roteirizacao" className="mt-6">
-                    <div className="text-center py-12 text-muted-foreground">Roteirização — em migração.</div>
+                    <RoteirizacaoTab activeTab={activeTab} />
                 </TabsContent>
                 <TabsContent value="analise" className="mt-6">
                     <AnaliseTab activeTab={activeTab} />
                 </TabsContent>
                 <TabsContent value="historico" className="mt-6">
-                    <div className="text-center py-12 text-muted-foreground">Histórico — em migração.</div>
+                    <HistoricoTab activeTab={activeTab} />
                 </TabsContent>
                 <TabsContent value="abastecimentos" className="mt-6">
-                    <div className="text-center py-12 text-muted-foreground">Abastecimentos — em migração.</div>
+                    <AbastecimentosTab activeTab={activeTab} />
                 </TabsContent>
                 <TabsContent value="checklists" className="mt-6">
-                    <div className="text-center py-12 text-muted-foreground">Checklists — em migração.</div>
+                    <ChecklistsTab activeTab={activeTab} />
                 </TabsContent>
             </Tabs>
         </div>

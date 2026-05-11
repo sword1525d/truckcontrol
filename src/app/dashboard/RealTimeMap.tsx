@@ -9,7 +9,7 @@ import type { LineLayer } from 'react-map-gl';
 import { useAuth } from '@/lib/auth-context';
 
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
-const DEFAULT_ZOOM = 12;
+const DEFAULT_ZOOM = 14;
 
 interface RealTimeMapProps {
   segments?: (Segment & { opacity?: number })[];

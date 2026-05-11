@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Frotacontrol.Core.DTOs.Maintenance;
@@ -13,11 +14,15 @@ public class VehiclesController : ControllerBase
 {
     private readonly IVehicleService _vehicleService;
     private readonly IMaintenanceService _maintenanceService;
+    private readonly IManagerService _managerService;
+    private readonly IEmailService _emailService;
 
-    public VehiclesController(IVehicleService vehicleService, IMaintenanceService maintenanceService)
+    public VehiclesController(IVehicleService vehicleService, IMaintenanceService maintenanceService, IManagerService managerService, IEmailService emailService)
     {
         _vehicleService = vehicleService;
         _maintenanceService = maintenanceService;
+        _managerService = managerService;
+        _emailService = emailService;
     }
 
     [HttpGet]
@@ -60,7 +65,30 @@ public class VehiclesController : ControllerBase
     [Authorize(Roles = "Admin,OP")]
     public async Task<ActionResult<VehicleDto>> UpdateStatus(string companyId, string sectorId, string vehicleId, [FromBody] UpdateVehicleStatusRequest request)
     {
-        return Ok(await _vehicleService.UpdateStatusAsync(companyId, sectorId, vehicleId, request));
+        var oldVehicle = await _vehicleService.GetVehicleAsync(companyId, sectorId, vehicleId);
+        var oldStatus = oldVehicle?.Status;
+
+        var result = await _vehicleService.UpdateStatusAsync(companyId, sectorId, vehicleId, request);
+
+        if (oldStatus == "BLOQUEADO_CHECKLIST" && request.Status == "PARADO")
+        {
+            try
+            {
+                var managers = await _managerService.GetManagersAsync(companyId, sectorId);
+                var managerEmails = managers.Select(m => m.Email).ToList();
+                if (managerEmails.Count > 0)
+                {
+                    var adminName = User.FindFirstValue(ClaimTypes.Name) ?? "Admin";
+                    await _emailService.SendVehicleUnblockedAsync(vehicleId, adminName, managerEmails, DateTimeOffset.UtcNow);
+                }
+            }
+            catch
+            {
+                // Email failure should not break the status update
+            }
+        }
+
+        return Ok(result);
     }
 
     [HttpPatch("{vehicleId}/last-mileage")]

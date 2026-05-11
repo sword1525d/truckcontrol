@@ -141,6 +141,15 @@ public class RunsController : ControllerBase
         return Ok();
     }
 
+    [HttpDelete("{runId:guid}")]
+    [Authorize(Roles = "Admin,OP")]
+    public async Task<IActionResult> Delete(string companyId, string sectorId, Guid runId)
+    {
+        await _service.DeleteRunAsync(companyId, sectorId, runId);
+        await _hub.Clients.Group($"{companyId}/{sectorId}").SendAsync("RunDeleted", new { RunId = runId });
+        return Ok();
+    }
+
     [HttpPut("{runId:guid}/takeover")]
     [Authorize(Roles = "Admin,OP")]
     public async Task<ActionResult<RunDto>> Takeover(string companyId, string sectorId, Guid runId, [FromBody] TakeoverRequest request)

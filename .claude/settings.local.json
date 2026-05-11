@@ -5,7 +5,30 @@
       "Bash(Get-ChildItem -Path \"C:\\\\workspace\\\\backups\\\\truckcontrol\\\\src\" -Name)",
       "Bash(Select-String -Pattern \"firebase\")",
       "Bash(dotnet *)",
-      "PowerShell(New-Item *)"
+      "PowerShell(New-Item *)",
+      "Bash(Get-ChildItem *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(python -m py_compile migration/migrate.py)",
+      "Bash(python -m py_compile migration/firestore_reader.py)",
+      "Bash(python -m py_compile migration/rtdb_reader.py)",
+      "Bash(python -m py_compile migration/sql_writer.py)",
+      "Bash(python -m py_compile migration/config.py)",
+      "Bash(npm install *)",
+      "Bash(git -C C:\\\\workspace\\\\backups\\\\truckcontrol add src/components/app-provider.tsx src/hooks/use-signalr.ts src/lib/api-client.ts src/lib/auth-context.tsx src/types/ package.json package-lock.json .env.local backend/iniciar.bat)",
+      "Bash(git -C C:workspacebackupstruckcontrol commit -m '@ *)",
+      "PowerShell(npm run *)",
+      "PowerShell(python C:\\\\workspace\\\\backups\\\\truckcontrol\\\\backend\\\\migration\\\\verify_hash.py)",
+      "PowerShell($body = '{\"matricula\":\"801231\",\"companyId\":\"LSL\",\"sectorId\":\"MILKRUN ASTEC\",\"password\":\"Frota@123\"}'; $response = Invoke-WebRequest -Uri \"http://localhost:5089/api/auth/login\" -Method POST -ContentType \"application/json\" -Body $body; $response.StatusCode; $response.Content)",
+      "Bash(curl *)",
+      "WebSearch",
+      "WebFetch(domain:source.dot.net)",
+      "WebFetch(domain:github.com)",
+      "PowerShell(python C:\\\\workspace\\\\backups\\\\truckcontrol\\\\backend\\\\migration\\\\fix_passwords.py)",
+      "PowerShell(Get-Process *)",
+      "Bash(Get-Content \"C:\\\\workspace\\\\backups\\\\truckcontrol\\\\src\\\\app\\\\dashboard\\\\page.tsx.firebase-backup\")",
+      "Bash(Select-Object -First 10)",
+      "Bash(Select-Object -ExpandProperty Name)"
     ]
   }
 }

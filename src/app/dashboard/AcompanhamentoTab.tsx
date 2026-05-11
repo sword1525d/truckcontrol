@@ -1,7 +1,8 @@
 'use client';
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAuth } from '@/lib/auth-context';
-import { api } from '@/lib/api-client';
+import { api, getAccessToken } from '@/lib/api-client';
+import { useSignalR } from '@/hooks/use-signalr';
 import type { VehicleDto, RunSummaryDto, RunDto, UserDto, RouteDto } from '@/types/api';
 import type { AggregatedRun, PlannedRoute, Stop, LocationPoint, Segment, SectorInfo } from './types';
 import { SHIFT_NUM_TO_NAME, SEGMENT_COLORS } from './types';
@@ -465,81 +466,150 @@ export default function AcompanhamentoTab({ activeTab, isMilkrunAstec }: { activ
 
     useEffect(() => setIsClient(true), []);
 
-    // Data fetching - poll every 15s
+    // SignalR real-time connection (replaces polling)
+    const signalRUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5089'}/hubs/runs`;
+
+    // Debounce refetch to avoid flooding on rapid events
+    const refetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const refetchRef = useRef<() => Promise<void>>(async () => {});
+
+    const loadData = useCallback(async () => {
+        if (!companyId || !sectorId) return;
+        try {
+            const todayStr = format(new Date(), 'yyyy-MM-dd');
+            const todayStart = startOfDay(new Date()).toISOString();
+            const todayEnd = endOfDay(new Date()).toISOString();
+
+            const [vehResp, usersResp] = await Promise.all([
+                api.get<VehicleDto[]>(`/api/companies/${companyId}/sectors/${sectorId}/vehicles?isTruck=true`),
+                api.get<UserDto[]>(`/api/companies/${companyId}/sectors/${sectorId}/users`),
+            ]);
+
+            setVehicles(vehResp);
+            const usersMap = new Map<string, { name: string; photoURL?: string; shift?: string }>();
+            usersResp.forEach(u => usersMap.set(u.id, { name: u.name, photoURL: u.photoURL, shift: SHIFT_NUM_TO_NAME[u.shift] || '1° NORMAL' }));
+            setUsers(usersMap);
+
+            if (!isMilkrunAstec) {
+                try {
+                    const routes = await api.get<RouteDto[]>(`/api/companies/${companyId}/sectors/${sectorId}/routes?date=${todayStr}`);
+                    const planned: PlannedRoute[] = routes.map(r => ({
+                        id: r.id,
+                        vehicleId: r.vehicleId,
+                        date: r.date,
+                        shift: SHIFT_NUM_TO_NAME[r.shift] || '1° NORMAL',
+                        isFixed: r.isFixed,
+                        trips: r.trips.map(t => ({
+                            id: t.id,
+                            name: t.name,
+                            stops: t.stops.map(s => ({
+                                name: s.name,
+                                plannedArrival: s.plannedArrival,
+                                plannedDeparture: s.plannedDeparture,
+                            }))
+                        }))
+                    }));
+                    setDailyProgrammedRoutes(planned);
+                } catch { /* routes may not exist yet */ }
+            }
+
+            const runSummaries = await api.get<RunSummaryDto[]>(`/api/companies/${companyId}/sectors/${sectorId}/runs?dateFrom=${todayStart}&dateTo=${todayEnd}`);
+
+            const fullRuns: RunDto[] = [];
+            for (const rs of runSummaries) {
+                try {
+                    const detail = await api.get<RunDto>(`/api/companies/${companyId}/sectors/${sectorId}/runs/${rs.id}`);
+                    fullRuns.push(detail);
+                } catch { /* skip */ }
+            }
+            setAllRuns(fullRuns.filter(r => r.status !== 'CANCELED'));
+        } catch (e: any) {
+            if (!e.message?.includes('404')) {
+                console.error('Erro ao carregar dados:', e);
+            }
+        } finally {
+            setIsLoading(false);
+        }
+    }, [companyId, sectorId, isMilkrunAstec]);
+
+    // Keep ref up to date
+    refetchRef.current = loadData;
+
+    const debouncedRefetch = useCallback(() => {
+        if (refetchTimeoutRef.current) clearTimeout(refetchTimeoutRef.current);
+        refetchTimeoutRef.current = setTimeout(() => refetchRef.current(), 1000);
+    }, []);
+
+    // SignalR handlers
+    const signalRHandlers = useMemo(() => ({
+        RunStarted: () => debouncedRefetch(),
+        RunUpdated: () => debouncedRefetch(),
+        RunEnded: () => debouncedRefetch(),
+        RunCanceled: (data: any) => {
+            const runId = (data as any).RunId || (data as any).Id || (data as any).runId;
+            if (runId) {
+                setAllRuns(prev => (prev || []).filter(r => r.id !== runId));
+            }
+            debouncedRefetch();
+        },
+        VehicleLocation: (data: any) => {
+            const runId = data.RunId as string;
+            const lat = data.Latitude as number;
+            const lng = data.Longitude as number;
+            // Update location history in run data
+            setAllRuns(prev => (prev || []).map(run => {
+                if (run.id !== runId) return run;
+                const newPoint = { latitude: lat, longitude: lng, timestamp: new Date().toISOString() };
+                return {
+                    ...run,
+                    locationHistory: run.locationHistory
+                        ? [...run.locationHistory, newPoint]
+                        : [newPoint],
+                };
+            }));
+            // Look up vehicleId to update fleet map markers
+            setAllRuns(prev => {
+                const run = prev.find(r => r.id === runId);
+                if (run) {
+                    setActiveTrucks(prevTrucks => {
+                        const idx = prevTrucks.findIndex(t => t.id === run.vehicleId);
+                        const entry = { id: run.vehicleId, latitude: lat, longitude: lng };
+                        if (idx >= 0) {
+                            const next = [...prevTrucks];
+                            next[idx] = entry;
+                            return next;
+                        }
+                        return [...prevTrucks, entry];
+                    });
+                }
+                return prev;
+            });
+        },
+    }), [debouncedRefetch]);
+
+    const { isConnected, subscribeToSector } = useSignalR({
+        hubUrl: signalRUrl,
+        accessTokenFactory: () => getAccessToken() || '',
+        handlers: signalRHandlers as Record<string, (...args: unknown[]) => void>,
+        enabled: !!profile,
+    });
+
+    // Subscribe to sector when connected
+    useEffect(() => {
+        if (isConnected && companyId && sectorId) {
+            subscribeToSector(companyId, sectorId);
+        }
+    }, [isConnected, companyId, sectorId, subscribeToSector]);
+
+    // Initial load
     useEffect(() => {
         if (!profile || activeTab !== 'acompanhamento') return;
-
-        const loadData = async () => {
-            if (!companyId || !sectorId) return;
-            setIsLoading(true);
-            try {
-                const todayStr = format(new Date(), 'yyyy-MM-dd');
-                const todayStart = startOfDay(new Date()).toISOString();
-                const todayEnd = endOfDay(new Date()).toISOString();
-
-                // Fetch vehicles, users, routes
-                const [vehResp, usersResp] = await Promise.all([
-                    api.get<VehicleDto[]>(`/api/companies/${companyId}/sectors/${sectorId}/vehicles?isTruck=true`),
-                    api.get<UserDto[]>(`/api/companies/${companyId}/sectors/${sectorId}/users`),
-                ]);
-
-                setVehicles(vehResp);
-                const usersMap = new Map<string, { name: string; photoURL?: string; shift?: string }>();
-                usersResp.forEach(u => usersMap.set(u.id, { name: u.name, photoURL: u.photoURL, shift: SHIFT_NUM_TO_NAME[u.shift] || '1° NORMAL' }));
-                setUsers(usersMap);
-
-                // Fetch planned routes (unless Milkrun Astec)
-                if (!isMilkrunAstec) {
-                    try {
-                        const routes = await api.get<RouteDto[]>(`/api/companies/${companyId}/sectors/${sectorId}/routes?date=${todayStr}&date=fixed`);
-                        const planned: PlannedRoute[] = routes.map(r => ({
-                            id: r.id,
-                            vehicleId: r.vehicleId,
-                            date: r.date,
-                            shift: SHIFT_NUM_TO_NAME[r.shift] || '1° NORMAL',
-                            isFixed: r.isFixed,
-                            trips: r.trips.map(t => ({
-                                id: t.id,
-                                name: t.name,
-                                stops: t.stops.map(s => ({
-                                    name: s.name,
-                                    plannedArrival: s.plannedArrival,
-                                    plannedDeparture: s.plannedDeparture,
-                                }))
-                            }))
-                        }));
-                        setDailyProgrammedRoutes(planned);
-                    } catch { /* routes may not exist yet */ }
-                }
-
-                // Fetch today's runs (summaries first)
-                const runSummaries = await api.get<RunSummaryDto[]>(`/api/companies/${companyId}/sectors/${sectorId}/runs?dateFrom=${todayStart}&dateTo=${todayEnd}`);
-
-                // Fetch full details for each run
-                const fullRuns: RunDto[] = [];
-                for (const rs of runSummaries) {
-                    try {
-                        const detail = await api.get<RunDto>(`/api/companies/${companyId}/sectors/${sectorId}/runs/${rs.id}`);
-                        fullRuns.push(detail);
-                    } catch { /* skip runs that fail to load */ }
-                }
-                setAllRuns(fullRuns);
-            } catch (e: any) {
-                if (!e.message?.includes('404')) {
-                    console.error('Erro ao carregar dados:', e);
-                }
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
+        setIsLoading(true);
         loadData();
-        const interval = setInterval(loadData, 15000);
-        return () => clearInterval(interval);
-    }, [profile, companyId, sectorId, activeTab, isMilkrunAstec]);
+    }, [profile, companyId, sectorId, activeTab, loadData]);
 
     // Convert API RunDto to internal Run type
-    const runsInternal: import('./types').Run[] = useMemo(() => allRuns.map(r => ({
+    const runsInternal: import('./types').Run[] = useMemo(() => (allRuns || []).map(r => ({
         id: r.id,
         driverId: r.driverId,
         driverName: r.driverName,

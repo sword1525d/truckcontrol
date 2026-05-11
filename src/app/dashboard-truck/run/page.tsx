@@ -77,9 +77,9 @@ export default function TruckRunPage() {
   const [todayRuns, setTodayRuns] = useState<RunDto[]>([]);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
 
-  const companyId = localStorage.getItem('companyId') || profile?.companyId || '';
-  const sectorId = localStorage.getItem('sectorId') || profile?.sectorId || '';
-  const sectorName = localStorage.getItem('sectorName') || '';
+  const companyId = profile?.companyId || '';
+  const sectorId = profile?.sectorId || '';
+  const sectorName = profile?.sectorId || '';
 
   useEffect(() => {
     if (profile) {
@@ -160,7 +160,7 @@ export default function TruckRunPage() {
     if (selectedVehicle) {
       if (selectedVehicle !== 'OUTRO') {
         const v = vehicles.find(v => v.id === selectedVehicle);
-        if (v && v.lastMileage !== undefined) {
+        if (v && v.lastMileage != null) {
           setMileage(v.lastMileage.toString());
         } else {
           setMileage('');
@@ -286,11 +286,11 @@ export default function TruckRunPage() {
         return;
       }
 
-      if (chosenVehicle && chosenVehicle.lastMileage !== undefined && currentMileage <= chosenVehicle.lastMileage) {
+      if (chosenVehicle && chosenVehicle.lastMileage !== undefined && currentMileage < chosenVehicle.lastMileage) {
         toast({
           variant: 'destructive',
           title: 'KM Invalido',
-          description: `A quilometragem deve ser maior que a ultima registrada (${chosenVehicle.lastMileage} km).`
+          description: `A quilometragem não pode ser menor que a ultima registrada (${chosenVehicle.lastMileage} km).`
         });
         return;
       }
@@ -300,11 +300,17 @@ export default function TruckRunPage() {
     try {
       // Check for daily checklist
       if (selectedVehicle !== 'OUTRO') {
-        const todayChecklists = await api.get<unknown[]>(
-          `/api/companies/${companyId}/sectors/${sectorId}/vehicles/${finalVehicleId}/checklists/today`
-        );
+        let hasChecklist = false;
+        try {
+          await api.get(
+            `/api/companies/${companyId}/sectors/${sectorId}/vehicles/${finalVehicleId}/checklists/today`
+          );
+          hasChecklist = true;
+        } catch {
+          // 404 means no checklist today
+        }
 
-        if (!Array.isArray(todayChecklists) || todayChecklists.length === 0) {
+        if (!hasChecklist) {
           toast({
             variant: 'destructive',
             title: 'Checklist Requerido',

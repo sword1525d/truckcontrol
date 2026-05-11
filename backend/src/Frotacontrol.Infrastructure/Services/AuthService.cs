@@ -56,7 +56,7 @@ public class AuthService : IAuthService
         }
 
         var user = await ResolveUserProfile(identityUser.Id, request.CompanyId, request.SectorId);
-        var profile = await BuildProfile(user);
+        var profile = await BuildProfile(user, request.CompanyId, request.SectorId);
         var (token, refreshToken) = GenerateTokens(identityUser, profile);
 
         user.RefreshTokenHash = HashToken(refreshToken);
@@ -79,7 +79,7 @@ public class AuthService : IAuthService
         if (identityUser == null)
             throw new UnauthorizedAccessException("User not found");
 
-        var profile = await BuildProfile(user);
+        var profile = await BuildProfile(user, null, null);
         var (token, newRefreshToken) = GenerateTokens(identityUser, profile);
 
         user.RefreshTokenHash = HashToken(newRefreshToken);
@@ -127,12 +127,20 @@ public class AuthService : IAuthService
         return user;
     }
 
-    private async Task<UserProfile> BuildProfile(User user)
+    private async Task<UserProfile> BuildProfile(User user, string? loginCompanyId, string? loginSectorId)
     {
-        var sectorGroup = await _db.SectorGroups
-            .FirstOrDefaultAsync(sg => sg.SectorId == user.SectorId);
+        // For cross-sector login (Admin/OP), use the requested sector
+        var isCrossLogin = !string.IsNullOrWhiteSpace(loginCompanyId)
+            && !string.IsNullOrWhiteSpace(loginSectorId)
+            && (user.CompanyId != loginCompanyId || user.SectorId != loginSectorId);
 
-        var sectorIds = new List<string> { user.SectorId };
+        var effectiveCompanyId = isCrossLogin ? loginCompanyId! : user.CompanyId;
+        var effectiveSectorId = isCrossLogin ? loginSectorId! : user.SectorId;
+
+        var sectorGroup = await _db.SectorGroups
+            .FirstOrDefaultAsync(sg => sg.SectorId == effectiveSectorId);
+
+        var sectorIds = new List<string> { effectiveSectorId };
         if (sectorGroup != null)
         {
             sectorIds = await _db.SectorGroups
@@ -146,8 +154,8 @@ public class AuthService : IAuthService
             Id = user.Id,
             Name = user.Name,
             Matricula = user.Matricula,
-            CompanyId = user.CompanyId,
-            SectorId = user.SectorId,
+            CompanyId = effectiveCompanyId,
+            SectorId = effectiveSectorId,
             IsAdmin = user.IsAdmin,
             IsTruck = user.IsTruck,
             IsOP = user.IsOP,
@@ -168,6 +176,7 @@ public class AuthService : IAuthService
         var claims = new List<Claim>
         {
             new(ClaimTypes.NameIdentifier, identityUser.Id),
+            new(ClaimTypes.Name, profile.Name),
             new("matricula", profile.Matricula),
             new("companyId", profile.CompanyId),
             new("sectorId", profile.SectorId),

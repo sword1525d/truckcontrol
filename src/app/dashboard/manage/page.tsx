@@ -1,13 +1,10 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import { useFirebase } from '@/firebase';
-import { collection, getDocs, doc, deleteDoc, onSnapshot, query, where, Timestamp } from 'firebase/firestore';
+import { useAuth } from '@/lib/auth-context';
+import { api } from '@/lib/api-client';
+import type { UserDto, VehicleDto, RunSummaryDto, ManagerDto } from '@/types/api';
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
+  Card, CardContent, CardDescription, CardHeader, CardTitle,
 } from '@/components/ui/card';
 import { Loader2, User, Truck, Mail } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -17,180 +14,100 @@ import { UserManagement } from './UserManagement';
 import { VehicleManagement } from './VehicleManagement';
 import { EmailManagement } from './EmailManagement';
 
-export type FirestoreUser = {
-  id: string;
-  name: string;
-  truck: boolean;
-  isAdmin: boolean;
-  matricula: string;
-  shift?: string;
-  photoURL?: string;
-  isOP?: boolean;
-  email?: string;
-};
-
-export type VehicleStatusEnum = 'PARADO' | 'EM_CORRIDA' | 'EM_MANUTENCAO';
-
-export type FirestoreVehicle = {
-  id: string;
-  model: string;
-  isTruck: boolean;
-  status: VehicleStatusEnum;
-};
-
-export type MaintenanceRecord = {
-    id: string;
-    startTime: Timestamp;
-    endTime: Timestamp | null;
-    notes?: string;
-}
-
-export type FirestoreManager = {
-  id: string;
-  name: string;
-  email: string;
-};
-
-type SessionData = {
-  companyId: string;
-  sectorId: string;
-};
-
 const AdminManagementPage = () => {
-  const { firestore } = useFirebase();
+  const auth = useAuth();
   const { toast } = useToast();
   const router = useRouter();
-  
-  const [session, setSession] = useState<SessionData | null>(null);
-  const [users, setUsers] = useState<FirestoreUser[]>([]);
-  const [vehicles, setVehicles] = useState<FirestoreVehicle[]>([]);
-  const [managers, setManagers] = useState<FirestoreManager[]>([]);
+
+  const profile = auth.profile;
+  const companyId = profile?.companyId || '';
+  const sectorId = profile?.sectorId || '';
+
+  const [users, setUsers] = useState<UserDto[]>([]);
+  const [vehicles, setVehicles] = useState<VehicleDto[]>([]);
+  const [managers, setManagers] = useState<ManagerDto[]>([]);
   const [activeRuns, setActiveRuns] = useState<{ [key: string]: boolean }>({});
   const [isLoading, setIsLoading] = useState(true);
-  const [currentUser, setCurrentUser] = useState<FirestoreUser | null>(null);
 
   useEffect(() => {
-    const companyId = localStorage.getItem('companyId');
-    const sectorId = localStorage.getItem('sectorId');
-
-    if (companyId && sectorId) {
-      setSession({ companyId, sectorId });
-      const storedUserData = localStorage.getItem('user');
-      if (storedUserData) {
-          setCurrentUser(JSON.parse(storedUserData));
-      }
-    } else {
-      toast({ variant: 'destructive', title: 'Sessão inválida', description: 'Faça login novamente.' });
+    if (!profile) {
       router.push('/login');
+      return;
     }
-  }, [router, toast]);
-  
-  const fetchData = useCallback(async () => {
-    if (!firestore || !session) return;
+  }, [profile, router]);
 
-    setIsLoading(true);
+  const fetchUsers = useCallback(async () => {
+    if (!companyId || !sectorId) return;
     try {
-        const usersCol = collection(firestore, `companies/${session.companyId}/sectors/${session.sectorId}/users`);
-        const usersSnapshot = await getDocs(usersCol);
-        const userList = usersSnapshot.docs.map(doc => {
-            const data = doc.data();
-             return {
-                id: doc.id,
-                name: data.name,
-                truck: data.truck,
-                isAdmin: data.isAdmin,
-                matricula: 'N/A', // Placeholder - Ideally this is stored in the doc
-                shift: data.shift,
-                photoURL: data.photoURL,
-                isOP: data.isOP || false,
-            } as FirestoreUser
-        });
-        setUsers(userList.sort((a,b) => a.name.localeCompare(b.name)));
-
+      const data = await api.get<UserDto[]>(`/api/companies/${companyId}/sectors/${sectorId}/users`);
+      setUsers(data.sort((a, b) => a.name.localeCompare(b.name)));
     } catch (error) {
-        console.error("Error fetching data: ", error);
-        toast({ variant: 'destructive', title: 'Erro ao carregar dados', description: 'Não foi possível buscar as informações.' });
-    } finally {
-        setIsLoading(false);
+      console.error("Error fetching users:", error);
+      toast({ variant: 'destructive', title: 'Erro ao carregar usuários' });
     }
-  }, [firestore, session, toast]);
-  
+  }, [companyId, sectorId, toast]);
+
   const fetchVehicles = useCallback(async () => {
-       if (!firestore || !session) return;
-       try {
-           const vehiclesCol = collection(firestore, `companies/${session.companyId}/sectors/${session.sectorId}/vehicles`);
-           const vehicleSnapshot = await getDocs(vehiclesCol);
-            const vehicleList = vehicleSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FirestoreVehicle)).filter(v => v.isTruck);
-            setVehicles(vehicleList.sort((a, b) => a.id.localeCompare(b.id)));
-       } catch (error) {
-            console.error("Error fetching vehicles:", error);
-            toast({ variant: "destructive", title: "Erro ao buscar veículos" });
-       }
-  }, [firestore, session, toast]);
+    if (!companyId || !sectorId) return;
+    try {
+      const data = await api.get<VehicleDto[]>(`/api/companies/${companyId}/sectors/${sectorId}/vehicles?isTruck=true`);
+      setVehicles(data.sort((a, b) => a.id.localeCompare(b.id)));
+    } catch (error) {
+      console.error("Error fetching vehicles:", error);
+      toast({ variant: "destructive", title: "Erro ao buscar veículos" });
+    }
+  }, [companyId, sectorId, toast]);
 
   const fetchManagers = useCallback(async () => {
-       if (!firestore || !session) return;
-       try {
-           const managersCol = collection(firestore, `companies/${session.companyId}/sectors/${session.sectorId}/managers`);
-           const snapshot = await getDocs(managersCol);
-           const managerList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FirestoreManager));
-           setManagers(managerList.sort((a, b) => a.name.localeCompare(b.name)));
-       } catch (error) {
-            console.error("Error fetching managers:", error);
-            toast({ variant: "destructive", title: "Erro ao buscar gestores" });
-       }
-  }, [firestore, session, toast]);
+    if (!companyId || !sectorId) return;
+    try {
+      const data = await api.get<ManagerDto[]>(`/api/companies/${companyId}/sectors/${sectorId}/managers`);
+      setManagers(data.sort((a, b) => a.name.localeCompare(b.name)));
+    } catch (error) {
+      console.error("Error fetching managers:", error);
+      toast({ variant: "destructive", title: "Erro ao buscar gestores" });
+    }
+  }, [companyId, sectorId, toast]);
 
+  const fetchActiveRuns = useCallback(async () => {
+    if (!companyId || !sectorId) return;
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const summaries = await api.get<RunSummaryDto[]>(`/api/companies/${companyId}/sectors/${sectorId}/runs?dateFrom=${today}T00:00:00&dateTo=${today}T23:59:59`);
+      const runsMap: { [key: string]: boolean } = {};
+      summaries.filter(s => s.status === 'IN_PROGRESS').forEach(s => {
+        runsMap[s.vehicleId] = true;
+      });
+      setActiveRuns(runsMap);
+    } catch { /* non-critical */ }
+  }, [companyId, sectorId]);
 
   useEffect(() => {
-    if(session) {
-      fetchData();
-      fetchVehicles();
-      fetchManagers();
-
-      // Listener for active runs
-      const runsCol = collection(firestore, `companies/${session.companyId}/sectors/${session.sectorId}/runs`);
-      const activeRunsQuery = query(runsCol, where('status', '==', 'IN_PROGRESS'));
-      const unsubscribeRuns = onSnapshot(activeRunsQuery, (snapshot) => {
-          const runsMap: { [key: string]: boolean } = {};
-          snapshot.forEach(doc => {
-              runsMap[doc.data().vehicleId] = true;
-          });
-          setActiveRuns(runsMap);
-      });
-      
-      return () => {
-          unsubscribeRuns();
-      }
+    if (companyId && sectorId) {
+      setIsLoading(true);
+      Promise.all([fetchUsers(), fetchVehicles(), fetchManagers(), fetchActiveRuns()])
+        .finally(() => setIsLoading(false));
     }
-  }, [session, firestore, fetchData, fetchVehicles, fetchManagers]);
+  }, [companyId, sectorId, fetchUsers, fetchVehicles, fetchManagers, fetchActiveRuns]);
 
-
-  const handleDelete = async (type: 'user' | 'vehicle' | 'manager', id: string) => {
-    if (!firestore || !session) return;
-    
-    // TODO: Add logic to prevent deleting a user or vehicle that is in an active run.
+  const handleDelete = useCallback(async (type: 'user' | 'vehicle' | 'manager', id: string) => {
+    if (!companyId || !sectorId) return;
     const collectionName = type === 'user' ? 'users' : type === 'vehicle' ? 'vehicles' : 'managers';
-    const docRef = doc(firestore, `companies/${session.companyId}/sectors/${session.sectorId}/${collectionName}`, id);
-
     try {
-      await deleteDoc(docRef);
-      toast({ title: 'Sucesso', description: `${type === 'user' ? 'Usuário' : type === 'vehicle' ? 'Veículo' : 'Gestor'} deletado com sucesso.` });
-      if (type === 'user') {
-        fetchData();
-      } else if (type === 'vehicle') {
-        fetchVehicles();
-      } else {
-        fetchManagers();
-      }
+      await api.delete(`/api/companies/${companyId}/sectors/${sectorId}/${collectionName}/${id}`);
+      const label = type === 'user' ? 'Usuário' : type === 'vehicle' ? 'Veículo' : 'Gestor';
+      toast({ title: 'Sucesso', description: `${label} deletado com sucesso.` });
+      if (type === 'user') fetchUsers();
+      else if (type === 'vehicle') fetchVehicles();
+      else fetchManagers();
     } catch (error) {
       console.error(`Error deleting ${type}:`, error);
-      toast({ variant: 'destructive', title: 'Erro', description: `Não foi possível deletar o ${type}.` });
+      toast({ variant: 'destructive', title: 'Erro', description: `Não foi possível deletar o ${type === 'user' ? 'usuário' : type === 'vehicle' ? 'veículo' : 'gestor'}.` });
     }
-  };
+  }, [companyId, sectorId, toast, fetchUsers, fetchVehicles, fetchManagers]);
 
-  if (!session) {
-     return <div className="flex justify-center items-center h-screen"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+  if (!profile) {
+    return <div className="flex justify-center items-center h-screen"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   }
 
   return (
@@ -201,18 +118,9 @@ const AdminManagementPage = () => {
 
       <Tabs defaultValue="users" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="users">
-            <User className="mr-2 h-4 w-4" />
-            Gerenciar Usuários
-          </TabsTrigger>
-          <TabsTrigger value="trucks">
-            <Truck className="mr-2 h-4 w-4" />
-            Gerenciar Caminhões
-          </TabsTrigger>
-          <TabsTrigger value="managers">
-            <Mail className="mr-2 h-4 w-4" />
-            Gestores do Setor
-          </TabsTrigger>
+          <TabsTrigger value="users"><User className="mr-2 h-4 w-4" />Gerenciar Usuários</TabsTrigger>
+          <TabsTrigger value="trucks"><Truck className="mr-2 h-4 w-4" />Gerenciar Caminhões</TabsTrigger>
+          <TabsTrigger value="managers"><Mail className="mr-2 h-4 w-4" />Gestores do Setor</TabsTrigger>
         </TabsList>
         <TabsContent value="users" className="space-y-4">
           <Card>
@@ -222,17 +130,9 @@ const AdminManagementPage = () => {
             </CardHeader>
             <CardContent>
               {isLoading ? (
-                <div className="flex justify-center items-center h-40">
-                  <Loader2 className="h-8 w-8 animate-spin" />
-                </div>
+                <div className="flex justify-center items-center h-40"><Loader2 className="h-8 w-8 animate-spin" /></div>
               ) : (
-                <UserManagement
-                  users={users}
-                  onDelete={handleDelete}
-                  onUpdate={fetchData}
-                  session={session}
-                  currentUser={currentUser}
-                />
+                <UserManagement users={users} onDelete={handleDelete} onUpdate={fetchUsers} companyId={companyId} sectorId={sectorId} currentUser={profile} />
               )}
             </CardContent>
           </Card>
@@ -245,17 +145,9 @@ const AdminManagementPage = () => {
             </CardHeader>
             <CardContent>
               {isLoading ? (
-                <div className="flex justify-center items-center h-40">
-                  <Loader2 className="h-8 w-8 animate-spin" />
-                </div>
+                <div className="flex justify-center items-center h-40"><Loader2 className="h-8 w-8 animate-spin" /></div>
               ) : (
-                <VehicleManagement
-                  vehicles={vehicles}
-                  activeRuns={activeRuns}
-                  onDelete={handleDelete}
-                  onUpdate={fetchVehicles}
-                  session={session}
-                />
+                <VehicleManagement vehicles={vehicles} activeRuns={activeRuns} onDelete={handleDelete} onUpdate={fetchVehicles} companyId={companyId} sectorId={sectorId} />
               )}
             </CardContent>
           </Card>
@@ -268,16 +160,9 @@ const AdminManagementPage = () => {
             </CardHeader>
             <CardContent>
               {isLoading ? (
-                <div className="flex justify-center items-center h-40">
-                  <Loader2 className="h-8 w-8 animate-spin" />
-                </div>
+                <div className="flex justify-center items-center h-40"><Loader2 className="h-8 w-8 animate-spin" /></div>
               ) : (
-                <EmailManagement
-                  managers={managers}
-                  onDelete={handleDelete}
-                  onUpdate={fetchManagers}
-                  session={session}
-                />
+                <EmailManagement managers={managers} onDelete={handleDelete} onUpdate={fetchManagers} companyId={companyId} sectorId={sectorId} />
               )}
             </CardContent>
           </Card>

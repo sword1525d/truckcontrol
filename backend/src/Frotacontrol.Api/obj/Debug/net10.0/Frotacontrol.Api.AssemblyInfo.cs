@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Frotacontrol.Api")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+f8bd7676676949062bdb2fea8615e2bd0797e3dc")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+d2802c106c7119fb59f0d101b2b2a3e5e502cee5")]
 [assembly: System.Reflection.AssemblyProductAttribute("Frotacontrol.Api")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Frotacontrol.Api")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

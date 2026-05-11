@@ -14,4 +14,5 @@ public interface IRunService
     Task<RunDto> CancelRunAsync(string companyId, string sectorId, Guid runId);
     Task AddLocationBatchAsync(string companyId, string sectorId, Guid runId, GpsLocationRequest request);
     Task<RunDto> TakeoverRunAsync(string companyId, string sectorId, Guid runId, TakeoverRequest request);
+    Task DeleteRunAsync(string companyId, string sectorId, Guid runId);
 }

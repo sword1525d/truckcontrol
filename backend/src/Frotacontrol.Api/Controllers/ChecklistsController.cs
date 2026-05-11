@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Frotacontrol.Core.DTOs.Checklists;
+using Frotacontrol.Core.DTOs.Email;
 using Frotacontrol.Core.Interfaces;
 
 namespace Frotacontrol.Api.Controllers;
@@ -55,7 +56,15 @@ public class ChecklistsController : ControllerBase
                 {
                     var ncItems = request.Items
                         .Where(i => i.Status == "nao_conforme")
-                        .Select(i => $"{i.Title} (Grau {i.Location})")
+                        .Select(i => new ChecklistNonConformanceItem
+                        {
+                            ItemId = i.ItemId,
+                            Location = i.Location,
+                            Title = i.Title,
+                            Description = i.Description,
+                            Observation = i.Observation,
+                            Images = i.Images
+                        })
                         .ToList();
 
                     var isBlocked = request.Items.Any(i =>
@@ -79,5 +88,13 @@ public class ChecklistsController : ControllerBase
         }
 
         return Ok(checklist);
+    }
+
+    [HttpDelete("{checklistId:guid}")]
+    [Authorize(Roles = "Admin,OP")]
+    public async Task<IActionResult> Delete(string companyId, string sectorId, string vehicleId, Guid checklistId)
+    {
+        await _checklistService.DeleteAsync(companyId, sectorId, vehicleId, checklistId);
+        return Ok();
     }
 }

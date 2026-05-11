@@ -18,7 +18,10 @@ public class RunService : IRunService
 
     public async Task<List<RunSummaryDto>> GetRunsAsync(string companyId, string sectorId, string? status = null, string? driverId = null, string? vehicleId = null, DateTimeOffset? dateFrom = null, DateTimeOffset? dateTo = null)
     {
-        var query = _db.Runs.Include(r => r.Stops).AsQueryable();
+        var query = _db.Runs.Include(r => r.Stops)
+            .Where(r => r.VehicleId != null
+                && _db.Vehicles.Any(v => v.Id == r.VehicleId && v.CompanyId == companyId && v.SectorId == sectorId))
+            .AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(status))
         {
@@ -41,7 +44,9 @@ public class RunService : IRunService
     public async Task<List<RunSummaryDto>> GetActiveRunsAsync(string companyId, string sectorId, string? vehicleId = null)
     {
         var query = _db.Runs.Include(r => r.Stops)
-            .Where(r => r.Status == RunStatus.IN_PROGRESS);
+            .Where(r => r.Status == RunStatus.IN_PROGRESS
+                && r.VehicleId != null
+                && _db.Vehicles.Any(v => v.Id == r.VehicleId && v.CompanyId == companyId && v.SectorId == sectorId));
 
         if (!string.IsNullOrWhiteSpace(vehicleId))
             query = query.Where(r => r.VehicleId == vehicleId);
@@ -54,7 +59,9 @@ public class RunService : IRunService
         var run = await _db.Runs
             .Include(r => r.Stops)
             .Include(r => r.LocationHistory.OrderByDescending(l => l.Timestamp).Take(200))
-            .FirstOrDefaultAsync(r => r.Id == runId);
+            .FirstOrDefaultAsync(r => r.Id == runId
+                && r.VehicleId != null
+                && _db.Vehicles.Any(v => v.Id == r.VehicleId && v.CompanyId == companyId && v.SectorId == sectorId));
 
         return run == null ? null : ToDto(run);
     }
@@ -77,9 +84,9 @@ public class RunService : IRunService
         if (activeRun)
             throw new InvalidOperationException("Vehicle is already in an active run");
 
-        // Validate mileage
-        if (vehicle.LastMileage.HasValue && request.StartMileage <= vehicle.LastMileage.Value)
-            throw new InvalidOperationException($"Start mileage must be greater than last registered mileage ({vehicle.LastMileage})");
+        // Validate mileage (allow same as last if it was the final KM of a completed run)
+        if (vehicle.LastMileage.HasValue && request.StartMileage < vehicle.LastMileage.Value)
+            throw new InvalidOperationException($"Start mileage must be greater than or equal to last registered mileage ({vehicle.LastMileage})");
 
         // Validate checklist done today
         var todayStart = DateTimeOffset.UtcNow.Date;
@@ -213,6 +220,9 @@ public class RunService : IRunService
         run.EndTime = DateTimeOffset.UtcNow;
         run.EndMileage = stops.Last().MileageAtStop ?? run.StartMileage;
 
+        if (run.EndMileage <= run.StartMileage)
+            throw new InvalidOperationException($"End mileage ({run.EndMileage}) must be greater than start mileage ({run.StartMileage})");
+
         // Update vehicle
         var vehicle = await _db.Vehicles.FirstOrDefaultAsync(v => v.Id == run.VehicleId);
         if (vehicle != null)
@@ -237,10 +247,47 @@ public class RunService : IRunService
 
         var vehicle = await _db.Vehicles.FirstOrDefaultAsync(v => v.Id == run.VehicleId);
         if (vehicle != null)
+        {
             vehicle.Status = VehicleStatus.PARADO;
+
+            // Revert LastMileage to the previous completed run's EndMileage
+            var lastCompleted = await _db.Runs
+                .Where(r => r.VehicleId == run.VehicleId && r.Status == RunStatus.COMPLETED && r.Id != run.Id)
+                .OrderByDescending(r => r.EndTime)
+                .FirstOrDefaultAsync();
+            vehicle.LastMileage = lastCompleted?.EndMileage;
+        }
 
         await _db.SaveChangesAsync();
         return ToDto(run);
+    }
+
+    public async Task DeleteRunAsync(string companyId, string sectorId, Guid runId)
+    {
+        var run = await _db.Runs.FirstOrDefaultAsync(r => r.Id == runId);
+
+        if (run == null) return; // Already deleted — idempotent
+
+        if (run.VehicleId == null || !await _db.Vehicles.AnyAsync(v => v.Id == run.VehicleId && v.CompanyId == companyId && v.SectorId == sectorId))
+            throw new UnauthorizedAccessException($"Run '{runId}' does not belong to the specified sector");
+
+        // If the run was IN_PROGRESS, revert vehicle state
+        if (run.Status == RunStatus.IN_PROGRESS)
+        {
+            var vehicle = await _db.Vehicles.FirstOrDefaultAsync(v => v.Id == run.VehicleId);
+            if (vehicle != null)
+            {
+                vehicle.Status = VehicleStatus.PARADO;
+                var lastCompleted = await _db.Runs
+                    .Where(r => r.VehicleId == run.VehicleId && r.Status == RunStatus.COMPLETED && r.Id != run.Id)
+                    .OrderByDescending(r => r.EndTime)
+                    .FirstOrDefaultAsync();
+                vehicle.LastMileage = lastCompleted?.EndMileage;
+            }
+        }
+
+        _db.Runs.Remove(run); // cascade deletes stops + locationHistory
+        await _db.SaveChangesAsync();
     }
 
     public async Task AddLocationBatchAsync(string companyId, string sectorId, Guid runId, GpsLocationRequest request)

@@ -10,6 +10,7 @@ interface AuthState {
   accessToken: string | null;
   login: (matriculaOrEmail: string, password: string, companyId?: string, sectorId?: string) => Promise<UserProfile>;
   logout: () => Promise<void>;
+  updateProfile: (updates: Partial<UserProfile>) => void;
 }
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
@@ -57,6 +58,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return data.profile;
   };
 
+  const updateProfile = (updates: Partial<UserProfile>) => {
+    setProfile(prev => {
+      if (!prev) return prev;
+      const updated = { ...prev, ...updates };
+      localStorage.setItem('userProfile', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
   const logout = async () => {
     try {
       await api.post('/api/auth/logout');
@@ -77,6 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         accessToken: getAccessToken(),
         login,
         logout,
+        updateProfile,
       }}
     >
       {children}

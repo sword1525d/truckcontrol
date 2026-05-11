@@ -17,7 +17,9 @@ public class RefuelService : IRefuelService
 
     public async Task<List<RefuelDto>> GetRefuelsAsync(string companyId, string sectorId, string? vehicleId = null, DateTimeOffset? dateFrom = null, DateTimeOffset? dateTo = null)
     {
-        var query = _db.Refuels.AsQueryable();
+        var query = _db.Refuels
+            .Where(r => r.CompanyId == companyId && r.SectorId == sectorId)
+            .AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(vehicleId))
             query = query.Where(r => r.VehicleId == vehicleId);
@@ -70,5 +72,15 @@ public class RefuelService : IRefuelService
             Amount = refuel.Amount,
             Timestamp = refuel.Timestamp
         };
+    }
+
+    public async Task DeleteAsync(string companyId, string sectorId, Guid refuelId)
+    {
+        var refuel = await _db.Refuels.FirstOrDefaultAsync(r =>
+            r.Id == refuelId && r.CompanyId == companyId && r.SectorId == sectorId)
+            ?? throw new KeyNotFoundException($"Refuel '{refuelId}' not found");
+
+        _db.Refuels.Remove(refuel);
+        await _db.SaveChangesAsync();
     }
 }

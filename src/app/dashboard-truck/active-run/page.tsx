@@ -134,8 +134,8 @@ function ActiveRunContent() {
 
   const runId = searchParams.get('id');
 
-  const companyId = localStorage.getItem('companyId') || profile?.companyId || '';
-  const sectorId = localStorage.getItem('sectorId') || profile?.sectorId || '';
+  const companyId = profile?.companyId || '';
+  const sectorId = profile?.sectorId || '';
 
   useLocationTracking(runId, run?.status === 'IN_PROGRESS', companyId, sectorId);
 

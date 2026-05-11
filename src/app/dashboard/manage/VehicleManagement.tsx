@@ -1,33 +1,15 @@
 'use client';
 import { useState } from 'react';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-  DialogClose,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose,
 } from '@/components/ui/dialog';
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -35,123 +17,109 @@ import { Label } from '@/components/ui/label';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { useFirebase } from '@/firebase';
-import { doc, updateDoc, collection, addDoc, getDocs, orderBy, query, serverTimestamp, Timestamp, setDoc, where } from 'firebase/firestore';
+import { api } from '@/lib/api-client';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Edit, Trash2, Wrench, History } from 'lucide-react';
+import { Loader2, Edit, Trash2, Wrench, History, Gauge } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import type { VehicleDto, MaintenanceRecordDto, CreateVehicleRequest } from '@/types/api';
 
-import type { FirestoreVehicle, MaintenanceRecord } from './page';
-
-const vehicleEditSchema = z.object({
-  model: z.string().min(1, 'Modelo é obrigatório'),
-});
-
-const maintenanceStartSchema = z.object({
-  notes: z.string().optional(),
-});
-
+const vehicleEditSchema = z.object({ model: z.string().min(1, 'Modelo é obrigatório') });
+const mileageEditSchema = z.object({ lastMileage: z.coerce.number().min(0, 'Km deve ser positivo') });
+const maintenanceStartSchema = z.object({ notes: z.string().optional() });
 const vehicleCreateSchema = z.object({
   vehicleId: z.string().min(1, 'ID do Veículo (placa) é obrigatório'),
   model: z.string().min(1, 'Modelo é obrigatório'),
 });
 
 type VehicleEditForm = z.infer<typeof vehicleEditSchema>;
+type MileageEditForm = z.infer<typeof mileageEditSchema>;
 type MaintenanceStartForm = z.infer<typeof maintenanceStartSchema>;
 type VehicleCreateForm = z.infer<typeof vehicleCreateSchema>;
 
 interface VehicleManagementProps {
-  vehicles: FirestoreVehicle[];
+  vehicles: VehicleDto[];
   activeRuns: { [key: string]: boolean };
   onDelete: (type: 'vehicle', id: string) => void;
   onUpdate: () => void;
-  session: { companyId: string; sectorId: string };
+  companyId: string;
+  sectorId: string;
 }
 
-export const VehicleManagement = ({ vehicles, activeRuns, onDelete, onUpdate, session }: VehicleManagementProps) => {
-  const { firestore } = useFirebase();
+export const VehicleManagement = ({ vehicles, activeRuns, onDelete, onUpdate, companyId, sectorId }: VehicleManagementProps) => {
   const { toast } = useToast();
-  
+
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isMileageDialogOpen, setIsMileageDialogOpen] = useState(false);
   const [isMaintenanceDialogOpen, setIsMaintenanceDialogOpen] = useState(false);
   const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
-
-  const [selectedVehicle, setSelectedVehicle] = useState<FirestoreVehicle | null>(null);
+  const [selectedVehicle, setSelectedVehicle] = useState<VehicleDto | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [maintenanceHistory, setMaintenanceHistory] = useState<MaintenanceRecord[]>([]);
+  const [isMileageSubmitting, setIsMileageSubmitting] = useState(false);
+  const [maintenanceHistory, setMaintenanceHistory] = useState<MaintenanceRecordDto[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
-
   const editForm = useForm<VehicleEditForm>({ resolver: zodResolver(vehicleEditSchema) });
+  const mileageForm = useForm<MileageEditForm>({ resolver: zodResolver(mileageEditSchema) });
   const maintenanceForm = useForm<MaintenanceStartForm>({ resolver: zodResolver(maintenanceStartSchema) });
-  const createForm = useForm<VehicleCreateForm>({
-    resolver: zodResolver(vehicleCreateSchema),
-    defaultValues: { vehicleId: '', model: '' }
-  });
+  const createForm = useForm<VehicleCreateForm>({ resolver: zodResolver(vehicleCreateSchema), defaultValues: { vehicleId: '', model: '' } });
 
-
-  const handleEditClick = (vehicle: FirestoreVehicle) => {
+  const handleEditClick = (vehicle: VehicleDto) => {
     setSelectedVehicle(vehicle);
     editForm.reset({ model: vehicle.model });
     setIsEditDialogOpen(true);
   };
-  
-  const handleMaintenanceClick = (vehicle: FirestoreVehicle) => {
-      setSelectedVehicle(vehicle);
-      maintenanceForm.reset({ notes: '' });
-      setIsMaintenanceDialogOpen(true);
-  }
-  
-  const handleHistoryClick = async (vehicle: FirestoreVehicle) => {
+
+  const handleMaintenanceClick = (vehicle: VehicleDto) => {
+    setSelectedVehicle(vehicle);
+    maintenanceForm.reset({ notes: '' });
+    setIsMaintenanceDialogOpen(true);
+  };
+
+  const handleMileageClick = (vehicle: VehicleDto) => {
+    setSelectedVehicle(vehicle);
+    mileageForm.reset({ lastMileage: vehicle.lastMileage ?? 0 });
+    setIsMileageDialogOpen(true);
+  };
+
+  const handleHistoryClick = async (vehicle: VehicleDto) => {
     setSelectedVehicle(vehicle);
     setIsHistoryDialogOpen(true);
     setIsLoadingHistory(true);
-    if (!firestore) return;
     try {
-        const historyCol = collection(firestore, `companies/${session.companyId}/sectors/${session.sectorId}/vehicles/${vehicle.id}/maintenance`);
-        const q = query(historyCol, orderBy('startTime', 'desc'));
-        const snapshot = await getDocs(q);
-        const history = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as MaintenanceRecord));
-        setMaintenanceHistory(history);
-    } catch(error) {
-        console.error("Error fetching maintenance history:", error);
-        toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível carregar o histórico de manutenções.' });
+      const history = await api.get<MaintenanceRecordDto[]>(`/api/companies/${companyId}/sectors/${sectorId}/vehicles/${vehicle.id}/maintenance`);
+      setMaintenanceHistory(history);
+    } catch (error) {
+      console.error("Error fetching maintenance history:", error);
+      toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível carregar o histórico de manutenções.' });
     } finally {
-        setIsLoadingHistory(false);
+      setIsLoadingHistory(false);
     }
-  }
+  };
 
   const handleCreateSubmit = async (data: VehicleCreateForm) => {
-    if (!firestore) return;
     setIsSubmitting(true);
     try {
-        const vehicleRef = doc(firestore, `companies/${session.companyId}/sectors/${session.sectorId}/vehicles`, data.vehicleId);
-        await setDoc(vehicleRef, { 
-            model: data.model, 
-            isTruck: true, // Only trucks are managed here
-            status: 'PARADO',
-            imageUrl: ''
-        });
-        toast({ title: 'Sucesso', description: 'Caminhão cadastrado!' });
-        onUpdate();
-        setIsCreateDialogOpen(false);
+      const body: CreateVehicleRequest = { vehicleId: data.vehicleId, model: data.model, isTruck: true };
+      await api.post(`/api/companies/${companyId}/sectors/${sectorId}/vehicles`, body);
+      toast({ title: 'Sucesso', description: 'Caminhão cadastrado!' });
+      onUpdate();
+      setIsCreateDialogOpen(false);
     } catch (error: any) {
-        console.error("Error creating vehicle:", error);
-        toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível cadastrar o caminhão.' });
+      console.error("Error creating vehicle:", error);
+      toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível cadastrar o caminhão.' });
     } finally {
-        setIsSubmitting(false);
+      setIsSubmitting(false);
     }
-  }
+  };
 
   const handleEditSubmit = async (data: VehicleEditForm) => {
-    if (!firestore || !selectedVehicle) return;
+    if (!selectedVehicle) return;
     setIsSubmitting(true);
     try {
-      const vehicleRef = doc(firestore, `companies/${session.companyId}/sectors/${session.sectorId}/vehicles`, selectedVehicle.id);
-      await updateDoc(vehicleRef, { model: data.model });
+      await api.put(`/api/companies/${companyId}/sectors/${sectorId}/vehicles/${selectedVehicle.id}`, { model: data.model });
       toast({ title: 'Sucesso', description: 'Veículo atualizado.' });
       onUpdate();
       setIsEditDialogOpen(false);
@@ -164,72 +132,62 @@ export const VehicleManagement = ({ vehicles, activeRuns, onDelete, onUpdate, se
   };
 
   const handleMaintenanceSubmit = async (data: MaintenanceStartForm) => {
-    if (!firestore || !selectedVehicle) return;
+    if (!selectedVehicle) return;
     setIsSubmitting(true);
-    
-    const vehicleRef = doc(firestore, `companies/${session.companyId}/sectors/${session.sectorId}/vehicles`, selectedVehicle.id);
-
     try {
-        // Iniciar Manutenção
-        if (selectedVehicle.status === 'PARADO') {
-            const maintenanceCol = collection(vehicleRef, 'maintenance');
-            await addDoc(maintenanceCol, {
-                startTime: serverTimestamp(),
-                endTime: null,
-                notes: data.notes || '',
-            });
-            await updateDoc(vehicleRef, { status: 'EM_MANUTENCAO' });
-            toast({ title: 'Sucesso', description: `Manutenção iniciada para o veículo ${selectedVehicle.id}.` });
-        }
-        // Finalizar Manutenção
-        else if (selectedVehicle.status === 'EM_MANUTENCAO') {
-            const maintenanceCol = collection(vehicleRef, 'maintenance');
-            const q = query(maintenanceCol, orderBy('startTime', 'desc'));
-            const openMaintenanceSnapshot = await getDocs(q);
-            const openDoc = openMaintenanceSnapshot.docs.find(doc => doc.data().endTime === null);
-            
-            if (openDoc) {
-                await updateDoc(openDoc.ref, { endTime: serverTimestamp() });
-            }
-            await updateDoc(vehicleRef, { status: 'PARADO' });
-            toast({ title: 'Sucesso', description: `Manutenção finalizada para o veículo ${selectedVehicle.id}.` });
-        }
-        
-        onUpdate();
-        setIsMaintenanceDialogOpen(false);
+      if (selectedVehicle.status === 'PARADO') {
+        await api.post(`/api/companies/${companyId}/sectors/${sectorId}/vehicles/${selectedVehicle.id}/maintenance/start`, { notes: data.notes || '' });
+        toast({ title: 'Sucesso', description: `Manutenção iniciada para o veículo ${selectedVehicle.id}.` });
+      } else if (selectedVehicle.status === 'EM_MANUTENCAO') {
+        await api.post(`/api/companies/${companyId}/sectors/${sectorId}/vehicles/${selectedVehicle.id}/maintenance/end`);
+        toast({ title: 'Sucesso', description: `Manutenção finalizada para o veículo ${selectedVehicle.id}.` });
+      }
+      onUpdate();
+      setIsMaintenanceDialogOpen(false);
     } catch (error) {
-        console.error("Error handling maintenance:", error);
-        toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível processar a solicitação de manutenção.' });
+      console.error("Error handling maintenance:", error);
+      toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível processar a solicitação de manutenção.' });
     } finally {
-        setIsSubmitting(false);
+      setIsSubmitting(false);
     }
-  }
-  
-  const getStatusBadge = (status: string | undefined, vehicleId: string) => {
-      if (activeRuns[vehicleId]) {
-          return <Badge variant="destructive">Em Corrida</Badge>;
-      }
-      switch (status) {
-          case 'EM_MANUTENCAO':
-              return <Badge className="bg-yellow-500 text-white">Manutenção</Badge>;
-          case 'PARADO':
-              return <Badge className="bg-green-500 text-white">Parado</Badge>;
-          default:
-              return <Badge variant="secondary">Indefinido</Badge>;
-      }
-  }
-  
-  const formatTimestamp = (timestamp: Timestamp | null): string => {
-      if (!timestamp) return 'N/A';
-      return format(timestamp.toDate(), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
-  };
-  
-  const calculateDuration = (start: Timestamp | null, end: Timestamp | null): string => {
-      if (!start) return 'N/A';
-      const endDate = end ? end.toDate() : new Date();
-      return formatDistanceToNow(start.toDate(), { locale: ptBR, addSuffix: false });
   };
 
+  const handleMileageSubmit = async (data: MileageEditForm) => {
+    if (!selectedVehicle) return;
+    setIsMileageSubmitting(true);
+    try {
+      await api.patch(`/api/companies/${companyId}/sectors/${sectorId}/vehicles/${selectedVehicle.id}/last-mileage`, { lastMileage: data.lastMileage });
+      toast({ title: 'Sucesso', description: `Km do veículo ${selectedVehicle.id} atualizado para ${data.lastMileage}.` });
+      onUpdate();
+      setIsMileageDialogOpen(false);
+    } catch (error) {
+      console.error("Error updating mileage:", error);
+      toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível atualizar o km do veículo.' });
+    } finally {
+      setIsMileageSubmitting(false);
+    }
+  };
+
+  const getStatusBadge = (status: string, vehicleId: string) => {
+    if (activeRuns[vehicleId]) return <Badge variant="destructive">Em Corrida</Badge>;
+    if (status === 'BLOQUEADO_CHECKLIST') return <Badge variant="destructive">Bloqueado</Badge>;
+    switch (status) {
+      case 'EM_MANUTENCAO': return <Badge className="bg-yellow-500 text-white">Manutenção</Badge>;
+      case 'PARADO': return <Badge className="bg-green-500 text-white">Parado</Badge>;
+      default: return <Badge variant="secondary">Indefinido</Badge>;
+    }
+  };
+
+  const formatTimestamp = (ts: string | undefined): string => {
+    if (!ts) return 'N/A';
+    return format(new Date(ts), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+  };
+
+  const calculateDuration = (start: string | undefined, end: string | null | undefined): string => {
+    if (!start) return 'N/A';
+    const endDate = end ? new Date(end) : new Date();
+    return formatDistanceToNow(new Date(start), { locale: ptBR, addSuffix: false });
+  };
 
   return (
     <>
@@ -242,6 +200,7 @@ export const VehicleManagement = ({ vehicles, activeRuns, onDelete, onUpdate, se
             <TableRow>
               <TableHead>Placa</TableHead>
               <TableHead>Modelo</TableHead>
+              <TableHead>Km</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
@@ -251,43 +210,37 @@ export const VehicleManagement = ({ vehicles, activeRuns, onDelete, onUpdate, se
               <TableRow key={vehicle.id}>
                 <TableCell className="font-medium">{vehicle.id}</TableCell>
                 <TableCell>{vehicle.model}</TableCell>
+                <TableCell>{vehicle.lastMileage?.toLocaleString() ?? '-'}</TableCell>
                 <TableCell>{getStatusBadge(vehicle.status, vehicle.id)}</TableCell>
                 <TableCell className="text-right space-x-1 sm:space-x-2">
-                    <Button variant="outline" size="sm" onClick={() => handleHistoryClick(vehicle)}>
-                        <History className="h-4 w-4 sm:mr-1" /> <span className="hidden sm:inline">Histórico</span>
-                    </Button>
-                    <Button 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={() => handleMaintenanceClick(vehicle)}
-                        disabled={!!activeRuns[vehicle.id]}
-                        className={vehicle.status === 'EM_MANUTENCAO' ? 'border-yellow-500 text-yellow-500 hover:bg-yellow-50 dark:hover:bg-yellow-900/20' : ''}
-                    >
-                        <Wrench className="h-4 w-4 sm:mr-1" /> <span className="hidden sm:inline">Manutenção</span>
-                    </Button>
+                  <Button variant="outline" size="sm" onClick={() => handleHistoryClick(vehicle)}>
+                    <History className="h-4 w-4 sm:mr-1" /> <span className="hidden sm:inline">Histórico</span>
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => handleMaintenanceClick(vehicle)}
+                    disabled={!!activeRuns[vehicle.id]}
+                    className={vehicle.status === 'EM_MANUTENCAO' ? 'border-yellow-500 text-yellow-500 hover:bg-yellow-50 dark:hover:bg-yellow-900/20' : ''}>
+                    <Wrench className="h-4 w-4 sm:mr-1" /> <span className="hidden sm:inline">Manutenção</span>
+                  </Button>
                   <Button variant="outline" size="sm" onClick={() => handleEditClick(vehicle)}>
                     <Edit className="h-4 w-4 sm:mr-1" /> <span className="hidden sm:inline">Editar</span>
                   </Button>
+                  <Button variant="outline" size="sm" onClick={() => handleMileageClick(vehicle)}>
+                    <Gauge className="h-4 w-4 sm:mr-1" /> <span className="hidden sm:inline">Km</span>
+                  </Button>
                   <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                          <Button variant="destructive" size="sm">
-                              <Trash2 className="h-4 w-4 sm:mr-1" /> <span className="hidden sm:inline">Deletar</span>
-                          </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                          <AlertDialogHeader>
-                              <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                  Essa ação não pode ser desfeita. Isso irá deletar permanentemente o caminhão com a placa "{vehicle.id}".
-                              </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => onDelete('vehicle', vehicle.id)}>
-                                  Confirmar
-                              </AlertDialogAction>
-                          </AlertDialogFooter>
-                      </AlertDialogContent>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="destructive" size="sm"><Trash2 className="h-4 w-4 sm:mr-1" /> <span className="hidden sm:inline">Deletar</span></Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
+                        <AlertDialogDescription>Essa ação não pode ser desfeita. Isso irá deletar permanentemente o caminhão com a placa "{vehicle.id}".</AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => onDelete('vehicle', vehicle.id)}>Confirmar</AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
                   </AlertDialog>
                 </TableCell>
               </TableRow>
@@ -296,7 +249,6 @@ export const VehicleManagement = ({ vehicles, activeRuns, onDelete, onUpdate, se
         </Table>
       </div>
 
-      {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -310,56 +262,68 @@ export const VehicleManagement = ({ vehicles, activeRuns, onDelete, onUpdate, se
               {editForm.formState.errors.model && <p className="text-sm text-destructive mt-1">{editForm.formState.errors.model.message}</p>}
             </div>
             <DialogFooter>
-              <DialogClose asChild>
-                <Button type="button" variant="outline">Cancelar</Button>
-              </DialogClose>
+              <DialogClose asChild><Button type="button" variant="outline">Cancelar</Button></DialogClose>
               <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Salvar Alterações
+                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Salvar Alterações
               </Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
-      
-      {/* Create Dialog */}
-      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-          <DialogContent>
-              <DialogHeader>
-                  <DialogTitle>Adicionar Novo Caminhão</DialogTitle>
-                  <DialogDescription>Preencha os dados para cadastrar um novo caminhão no setor.</DialogDescription>
-              </DialogHeader>
-              <form onSubmit={createForm.handleSubmit(handleCreateSubmit)} className="space-y-4">
-                  <div>
-                      <Label htmlFor="vehicleId">Placa do Caminhão</Label>
-                      <Input id="vehicleId" {...createForm.register('vehicleId')} placeholder="ABC-1234"/>
-                      {createForm.formState.errors.vehicleId && <p className="text-sm text-destructive mt-1">{createForm.formState.errors.vehicleId.message}</p>}
-                  </div>
-                  <div>
-                      <Label htmlFor="modelCreate">Modelo do Caminhão</Label>
-                      <Input id="modelCreate" {...createForm.register('model')} placeholder="Ex: VW Constellation"/>
-                      {createForm.formState.errors.model && <p className="text-sm text-destructive mt-1">{createForm.formState.errors.model.message}</p>}
-                  </div>
-                   <DialogFooter>
-                      <DialogClose asChild>
-                          <Button type="button" variant="outline">Cancelar</Button>
-                      </DialogClose>
-                      <Button type="submit" disabled={isSubmitting}>
-                          {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                          Salvar
-                      </Button>
-                  </DialogFooter>
-              </form>
-          </DialogContent>
-      </Dialog>
 
-      {/* Maintenance Dialog */}
-       <Dialog open={isMaintenanceDialogOpen} onOpenChange={setIsMaintenanceDialogOpen}>
+      <Dialog open={isMileageDialogOpen} onOpenChange={setIsMileageDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>
-              {selectedVehicle?.status === 'EM_MANUTENCAO' ? 'Finalizar Manutenção' : 'Iniciar Manutenção'}
-            </DialogTitle>
+            <DialogTitle>Editar Quilometragem</DialogTitle>
+            <DialogDescription>Altere a quilometragem atual do veículo {selectedVehicle?.id}.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={mileageForm.handleSubmit(handleMileageSubmit)} className="space-y-4">
+            <div>
+              <Label htmlFor="lastMileage">Quilometragem (Km)</Label>
+              <Input id="lastMileage" type="number" step="1" min="0" {...mileageForm.register('lastMileage')} />
+              {mileageForm.formState.errors.lastMileage && <p className="text-sm text-destructive mt-1">{mileageForm.formState.errors.lastMileage.message}</p>}
+            </div>
+            <DialogFooter>
+              <DialogClose asChild><Button type="button" variant="outline">Cancelar</Button></DialogClose>
+              <Button type="submit" disabled={isMileageSubmitting}>
+                {isMileageSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Salvar
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Adicionar Novo Caminhão</DialogTitle>
+            <DialogDescription>Preencha os dados para cadastrar um novo caminhão no setor.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={createForm.handleSubmit(handleCreateSubmit)} className="space-y-4">
+            <div>
+              <Label htmlFor="vehicleId">Placa do Caminhão</Label>
+              <Input id="vehicleId" {...createForm.register('vehicleId')} placeholder="ABC-1234" />
+              {createForm.formState.errors.vehicleId && <p className="text-sm text-destructive mt-1">{createForm.formState.errors.vehicleId.message}</p>}
+            </div>
+            <div>
+              <Label htmlFor="modelCreate">Modelo do Caminhão</Label>
+              <Input id="modelCreate" {...createForm.register('model')} placeholder="Ex: VW Constellation" />
+              {createForm.formState.errors.model && <p className="text-sm text-destructive mt-1">{createForm.formState.errors.model.message}</p>}
+            </div>
+            <DialogFooter>
+              <DialogClose asChild><Button type="button" variant="outline">Cancelar</Button></DialogClose>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Salvar
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isMaintenanceDialogOpen} onOpenChange={setIsMaintenanceDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{selectedVehicle?.status === 'EM_MANUTENCAO' ? 'Finalizar Manutenção' : 'Iniciar Manutenção'}</DialogTitle>
             <DialogDescription>
               {selectedVehicle?.status === 'EM_MANUTENCAO'
                 ? `Confirma a finalização da manutenção do veículo ${selectedVehicle?.id}?`
@@ -367,16 +331,14 @@ export const VehicleManagement = ({ vehicles, activeRuns, onDelete, onUpdate, se
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={maintenanceForm.handleSubmit(handleMaintenanceSubmit)} className="space-y-4">
-             {selectedVehicle?.status !== 'EM_MANUTENCAO' && (
-                  <div>
-                      <Label htmlFor="notes">Observações (Opcional)</Label>
-                      <Textarea id="notes" {...maintenanceForm.register('notes')} placeholder="Descreva o motivo da manutenção..."/>
-                  </div>
-             )}
+            {selectedVehicle?.status !== 'EM_MANUTENCAO' && (
+              <div>
+                <Label htmlFor="notes">Observações (Opcional)</Label>
+                <Textarea id="notes" {...maintenanceForm.register('notes')} placeholder="Descreva o motivo da manutenção..." />
+              </div>
+            )}
             <DialogFooter>
-              <DialogClose asChild>
-                <Button type="button" variant="outline">Cancelar</Button>
-              </DialogClose>
+              <DialogClose asChild><Button type="button" variant="outline">Cancelar</Button></DialogClose>
               <Button type="submit" disabled={isSubmitting}>
                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {selectedVehicle?.status === 'EM_MANUTENCAO' ? 'Finalizar Manutenção' : 'Confirmar Início'}
@@ -385,38 +347,37 @@ export const VehicleManagement = ({ vehicles, activeRuns, onDelete, onUpdate, se
           </form>
         </DialogContent>
       </Dialog>
-      
-      {/* History Dialog */}
+
       <Dialog open={isHistoryDialogOpen} onOpenChange={setIsHistoryDialogOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Histórico de Manutenção - {selectedVehicle?.id}</DialogTitle>
             <DialogDescription>Lista de todas as manutenções realizadas neste veículo.</DialogDescription>
           </DialogHeader>
-           <div className="max-h-[60vh] overflow-y-auto pr-4">
+          <div className="max-h-[60vh] overflow-y-auto pr-4">
             {isLoadingHistory ? (
-                 <div className="flex justify-center items-center h-40"><Loader2 className="h-8 w-8 animate-spin"/></div>
+              <div className="flex justify-center items-center h-40"><Loader2 className="h-8 w-8 animate-spin" /></div>
             ) : maintenanceHistory.length > 0 ? (
-                 <div className="space-y-4">
-                    {maintenanceHistory.map(record => (
-                        <div key={record.id} className="border p-4 rounded-md bg-muted/50">
-                            <div className="flex justify-between items-start">
-                                <div>
-                                    <p className="font-semibold">Início: <span className="font-normal">{formatTimestamp(record.startTime)}</span></p>
-                                    <p className="font-semibold">Fim: <span className="font-normal">{formatTimestamp(record.endTime)}</span></p>
-                                </div>
-                                <Badge variant={record.endTime ? 'secondary' : 'default'} className={!record.endTime ? 'bg-yellow-500' : ''}>
-                                    {record.endTime ? `Duração: ${calculateDuration(record.startTime, record.endTime)}` : 'Em andamento'}
-                                </Badge>
-                            </div>
-                            {record.notes && <p className="text-sm text-muted-foreground mt-2 border-t pt-2"><strong>Observações:</strong> {record.notes}</p>}
-                        </div>
-                    ))}
-                 </div>
+              <div className="space-y-4">
+                {maintenanceHistory.map(record => (
+                  <div key={record.id} className="border p-4 rounded-md bg-muted/50">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="font-semibold">Início: <span className="font-normal">{formatTimestamp(record.startTime)}</span></p>
+                        <p className="font-semibold">Fim: <span className="font-normal">{formatTimestamp(record.endTime)}</span></p>
+                      </div>
+                      <Badge variant={record.endTime ? 'secondary' : 'default'} className={!record.endTime ? 'bg-yellow-500' : ''}>
+                        {record.endTime ? `Duração: ${calculateDuration(record.startTime, record.endTime)}` : 'Em andamento'}
+                      </Badge>
+                    </div>
+                    {record.notes && <p className="text-sm text-muted-foreground mt-2 border-t pt-2"><strong>Observações:</strong> {record.notes}</p>}
+                  </div>
+                ))}
+              </div>
             ) : (
-                <p className="text-center text-muted-foreground py-8">Nenhum registro de manutenção encontrado.</p>
+              <p className="text-center text-muted-foreground py-8">Nenhum registro de manutenção encontrado.</p>
             )}
-           </div>
+          </div>
         </DialogContent>
       </Dialog>
     </>

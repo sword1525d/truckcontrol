@@ -43,8 +43,8 @@ export default function RefuelPage() {
 
     const fetchVehicles = async () => {
       try {
-        const companyId = localStorage.getItem('companyId') || profile.companyId;
-        const sectorId = localStorage.getItem('sectorId') || profile.sectorId;
+        const companyId = profile.companyId;
+        const sectorId = profile.sectorId;
         if (!companyId || !sectorId) return;
 
         const data = await api.get<VehicleDto[]>(`/api/companies/${companyId}/sectors/${sectorId}/vehicles?isTruck=true`);
@@ -71,8 +71,8 @@ export default function RefuelPage() {
 
     setIsSubmitting(true);
     try {
-      const companyId = localStorage.getItem('companyId') || profile.companyId;
-      const sectorId = localStorage.getItem('sectorId') || profile.sectorId;
+      const companyId = profile.companyId;
+      const sectorId = profile.sectorId;
       if (!companyId || !sectorId) return;
 
       const body: CreateRefuelRequest = {
