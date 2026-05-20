@@ -104,7 +104,8 @@ export default function DashboardCarPage() {
         }
 
         const statuses: VehicleStatus[] = Object.entries(veiculosData).map(([id, v]) => {
-          const corridaVeiculo = corridasData ? veiculoEmCorridaAtiva(corridasData, id) : null;
+          const vehicleName = id.includes('/') ? id.split('/').slice(1).join('/') : id;
+          const corridaVeiculo = corridasData ? veiculoEmCorridaAtiva(corridasData, vehicleName) : null;
           let classe: VehicleStatus['classe'] = 'disponivel';
           let status = 'DISPONÍVEL';
           if (v.status === 'EM MANUTENÇÃO') { classe = 'manutencao'; status = 'MANUTENÇÃO'; }

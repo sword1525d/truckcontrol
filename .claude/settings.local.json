@@ -4,7 +4,10 @@
       "Bash(npx tsc *)",
       "Bash(Get-ChildItem -Path \"C:\\\\workspace\\\\backups\\\\truckcontrol\\\\src\" -Name)",
       "Bash(Select-String -Pattern \"firebase\")",
-      "Bash(dotnet *)"
+      "Bash(dotnet *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\workspace\\\\truckonld\\\\old\\\\truckcontrol\" -Depth 2 -Directory)",
+      "Bash(Select-Object FullName)",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\workspace\\\\truckonld\\\\old\\\\truckcontrol\" | Select-Object Name, @{N='Type';E={if\\($_.PSIsContainer\\){'DIR'}else{'FILE'}}})"
     ]
   }
 }

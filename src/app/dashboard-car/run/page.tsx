@@ -190,7 +190,7 @@ export default function CarRunPage() {
         horario_inicio: agora.toLocaleTimeString('pt-BR'),
         km_inicial: quilometragem,
         responsavel: usuario.nome,
-        'veículo': selectedVeiculo,
+        'veículo': targetVeiculo,
       };
 
       await criarCorrida(usuario.empresa, targetSetor, novaCorrida);
