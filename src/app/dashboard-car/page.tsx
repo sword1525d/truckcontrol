@@ -6,7 +6,7 @@ import Link from 'next/link';
 import {
   Car, Play, StopCircle, Eye, Clock, ClipboardCheck,
   Fuel, BarChart2, Download, LogOut, Calendar, Wrench,
-  Loader2, RefreshCw, CreditCard, Shield,
+  Loader2, RefreshCw, CreditCard, Shield, UserCheck,
 } from 'lucide-react';
 import {
   getCarUsuario,
@@ -14,9 +14,13 @@ import {
   fetchVeiculos,
   fetchVeiculosMultiSetor,
   fetchCorridasMultiSetor,
+  fetchTodosAgendamentos,
+  fetchAgendamentosMultiSetor,
+  agendamentoAtivoAgora,
   type CarUsuario,
   type CarVeiculo,
   type CarCorrida,
+  type CarAgendamento,
   veiculoEmCorridaAtiva,
   fetchTodosCartoes,
 } from '@/lib/car-rtdb';
@@ -33,7 +37,8 @@ type VehicleStatus = {
   gasolina?: number | string;
   km?: string | number;
   saldo?: number;
-  classe: 'disponivel' | 'em-corrida' | 'manutencao';
+  classe: 'disponivel' | 'em-corrida' | 'manutencao' | 'agendado';
+  agendamento?: CarAgendamento;
 };
 
 type NavSection = {
@@ -72,7 +77,7 @@ export default function DashboardCarPage() {
       const isGrupo = u.setoresGrupo && u.setoresGrupo.length > 0;
       const setores = isGrupo ? u.setoresGrupo! : [u.setor];
 
-      const [veiculosData, corridasData] = await Promise.all([
+      const [veiculosData, corridasData, agendamentosData] = await Promise.all([
         isGrupo
           ? fetchVeiculosMultiSetor(u.empresa, setores)
           : fetchVeiculos(u.empresa, u.setor),
@@ -82,7 +87,9 @@ export default function DashboardCarPage() {
               `https://lslcda-default-rtdb.firebaseio.com/${u.empresa}/${u.setor}/corridas.json`,
               { cache: 'no-store' }
             ).then((r) => r.json() as Promise<Record<string, CarCorrida> | null>),
-        // Cartões carregados por setor separadamente abaixo
+        isGrupo
+          ? fetchAgendamentosMultiSetor(u.empresa, setores)
+          : fetchTodosAgendamentos(u.empresa, u.setor),
       ]);
 
       // Verifica corrida ativa do usuário
@@ -91,6 +98,18 @@ export default function DashboardCarPage() {
           (c: any) => c && c.responsavel === u.nome && !c.horario_fim
         );
         setTemCorridaAtiva(corridaAtiva);
+      }
+
+      // Conta agendamentos do usuário
+      if (agendamentosData) {
+        let count = 0;
+        for (const agsVeiculo of Object.values(agendamentosData)) {
+          if (!agsVeiculo) continue;
+          for (const ag of Object.values(agsVeiculo)) {
+            if (ag && ag.matricula === u.mat && ag.status === 'confirmado') count++;
+          }
+        }
+        setAgendamentosCount(count);
       }
 
       if (veiculosData) {
@@ -106,21 +125,29 @@ export default function DashboardCarPage() {
         const statuses: VehicleStatus[] = Object.entries(veiculosData).map(([id, v]) => {
           const vehicleName = id.includes('/') ? id.split('/').slice(1).join('/') : id;
           const corridaVeiculo = corridasData ? veiculoEmCorridaAtiva(corridasData, vehicleName) : null;
+
+          // Busca agendamento ativo para este veículo
+          const agendamentosVeiculo = agendamentosData?.[id] ?? null;
+          const agendAtivo = agendamentoAtivoAgora(agendamentosVeiculo);
+
           let classe: VehicleStatus['classe'] = 'disponivel';
           let status = 'DISPONÍVEL';
           if (v.status === 'EM MANUTENÇÃO') { classe = 'manutencao'; status = 'MANUTENÇÃO'; }
           else if (corridaVeiculo) { classe = 'em-corrida'; status = 'EM CORRIDA'; }
+          else if (agendAtivo && agendAtivo.matricula !== u.mat) { classe = 'agendado'; status = 'AGENDADO'; }
+          // Se o agendamento é do próprio usuário, fica como DISPONÍVEL para ele
 
           return {
             id,
             nome: id,
             placa: v.placa ?? id.split('/').pop() ?? id,
             status,
-            motorista: corridaVeiculo?.responsavel,
+            motorista: corridaVeiculo?.responsavel || (agendAtivo?.matricula !== u.mat ? agendAtivo?.responsavel : undefined),
             gasolina: v.gasolina,
             km: v.km_rodados,
-            saldo: cartoesData?.[id]?.saldo ?? 0,
+            saldo: cartoesData?.[vehicleName]?.saldo ?? 0,
             classe,
+            agendamento: agendAtivo ?? undefined,
           };
         });
         setVehicles(statuses);
@@ -333,15 +360,23 @@ function VehicleCard({ vehicle }: { vehicle: VehicleStatus }) {
           vehicle.classe === 'disponivel' && 'bg-green-500',
           vehicle.classe === 'em-corrida' && 'bg-red-500',
           vehicle.classe === 'manutencao' && 'bg-amber-500',
+          vehicle.classe === 'agendado' && 'bg-purple-500',
         )}>
-          {vehicle.status === 'DISPONÍVEL' ? 'DISP.' : vehicle.status === 'EM CORRIDA' ? 'CORRIDA' : 'MANUT.'}
+          {vehicle.status === 'DISPONÍVEL' ? 'DISP.' : vehicle.status === 'EM CORRIDA' ? 'CORRIDA' : vehicle.status === 'MANUTENÇÃO' ? 'MANUT.' : 'AGEND.'}
         </span>
       </div>
       <span className="text-[11px] text-muted-foreground">{vehicle.placa} {vehicle.km ? `· ${vehicle.km} km` : ''}</span>
       {vehicle.motorista && (
         <span className="text-[10px] text-muted-foreground italic truncate">{vehicle.motorista}</span>
       )}
-      
+      {vehicle.agendamento && (
+        <div className="flex items-center gap-1 text-[10px] text-purple-600 dark:text-purple-400 font-medium">
+          <UserCheck className="w-3 h-3" />
+          <span className="truncate">{vehicle.agendamento.responsavel}</span>
+          <span>{vehicle.agendamento.hora_inicio} - {vehicle.agendamento.hora_fim}</span>
+        </div>
+      )}
+
       <div className="flex items-center gap-1 mt-0.5">
         <CreditCard className="w-3 h-3 text-muted-foreground" />
         <span className="text-[10px] text-muted-foreground font-medium">
