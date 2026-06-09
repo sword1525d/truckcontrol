@@ -6,7 +6,7 @@ import Link from 'next/link';
 import {
   Car, Play, StopCircle, Eye, Clock, ClipboardCheck,
   Fuel, BarChart2, Download, LogOut, Calendar, Wrench,
-  Loader2, RefreshCw, CreditCard, Shield, UserCheck,
+  Loader2, RefreshCw, CreditCard, Shield, UserCheck, Key,
 } from 'lucide-react';
 import {
   getCarUsuario,
@@ -217,6 +217,7 @@ export default function DashboardCarPage() {
     {
       title: 'Conta',
       items: [
+        { id: 'trocar-senha', href: '/dashboard-car/profile', label: 'Trocar Senha', icon: Key },
         { id: 'logout', href: '#', label: 'Sair', icon: LogOut },
       ],
     },

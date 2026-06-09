@@ -1,15 +1,15 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, LayoutDashboard, Users, Car, Play, ClipboardCheck, LogOut, Search, Plus, Pencil, Trash2, X, ChevronLeft, ChevronRight, Calendar, Clock, Building2, Grid, Layers } from 'lucide-react';
+import { Loader2, LayoutDashboard, Users, Car, Play, ClipboardCheck, LogOut, Search, Plus, Pencil, Trash2, X, ChevronLeft, ChevronRight, Calendar, Clock, Building2, Grid, Layers, AlertCircle, FileText, MapPin, ChevronDown, ChevronUp, Gauge, GitBranch, Navigation, Fuel, CreditCard, DollarSign, History } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { getCarUsuario, clearCarUsuario, type CarUsuario, CAR_RTDB_URL, fetchEmpresas, fetchSetores, criarEmpresa, removerEmpresa, criarSetor, removerSetor, fetchGrupos, criarGrupo, removerGrupo, assignSetorToGrupo, removeSetorFromGrupo } from '@/lib/car-rtdb';
+import { getCarUsuario, clearCarUsuario, type CarUsuario, CAR_RTDB_URL, fetchEmpresas, fetchSetores, criarEmpresa, removerEmpresa, criarSetor, removerSetor, fetchGrupos, criarGrupo, removerGrupo, assignSetorToGrupo, removeSetorFromGrupo, criarAgendamento, fetchAgendamentosVeiculo, fetchTodosCartoes, registrarRecarga, type CartaoData, type CartaoRecarga } from '@/lib/car-rtdb';
 import { cn } from '@/lib/utils';
 
 import {
@@ -30,7 +30,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-type Section = 'dashboard' | 'users' | 'vehicles' | 'races' | 'checklists' | 'schedules' | 'empresas' | 'setores' | 'grupos';
+type Section = 'dashboard' | 'users' | 'vehicles' | 'races' | 'checklists' | 'schedules' | 'cards' | 'empresas' | 'setores' | 'grupos';
 
 const BASE_SECTIONS: { id: Section; label: string; icon: React.ElementType }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -39,6 +39,7 @@ const BASE_SECTIONS: { id: Section; label: string; icon: React.ElementType }[] =
   { id: 'races', label: 'Corridas', icon: Play },
   { id: 'checklists', label: 'Checklists', icon: ClipboardCheck },
   { id: 'schedules', label: 'Agendamentos', icon: Calendar },
+  { id: 'cards', label: 'Cartoes', icon: CreditCard },
 ];
 
 const OP_SECTIONS: { id: Section; label: string; icon: React.ElementType }[] = [
@@ -88,6 +89,26 @@ export default function AdminPage() {
   const [gallery, setGallery] = useState<{ open: boolean; images: string[]; idx: number }>({ open: false, images: [], idx: 0 });
   const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
   const [agToCancel, setAgToCancel] = useState<{ veiculo: string, id: string } | null>(null);
+
+  // Schedule modal state
+  const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
+  const [scheduleVeiculo, setScheduleVeiculo] = useState('');
+  const [scheduleData, setScheduleData] = useState('');
+  const [scheduleHoraInicio, setScheduleHoraInicio] = useState('');
+  const [scheduleHoraFim, setScheduleHoraFim] = useState('');
+  const [scheduleMotivo, setScheduleMotivo] = useState('');
+  const [scheduleConflictMsg, setScheduleConflictMsg] = useState<string | null>(null);
+  const [scheduleIsSubmitting, setScheduleIsSubmitting] = useState(false);
+  const [expandedRaceKey, setExpandedRaceKey] = useState<string | null>(null);
+  const [cardsData, setCardsData] = useState<Record<string, CartaoData>>({});
+  const [expandedCardKey, setExpandedCardKey] = useState<string | null>(null);
+  const [cardModalOpen, setCardModalOpen] = useState(false);
+  const [cardModalVehicle, setCardModalVehicle] = useState('');
+  const [cardRecargaValor, setCardRecargaValor] = useState('');
+  const [cardEditSaldo, setCardEditSaldo] = useState('');
+  const [cardIsSubmitting, setCardIsSubmitting] = useState(false);
+
+  const hoje = new Date().toISOString().split('T')[0];
 
   useEffect(() => {
     const u = getCarUsuario();
@@ -198,13 +219,20 @@ export default function AdminPage() {
         });
         setData(flat);
       }
+      else if (section === 'cards') {
+        const emp = isOP ? selectedEmpresa : usuario!.empresa;
+        const set = isOP ? selectedSetor : usuario!.setor;
+        if (!emp || !set) return;
+        const cartoes = await fetchTodosCartoes(emp, set);
+        setCardsData(cartoes || {});
+      }
     } catch { toast({ variant: 'destructive', title: 'Erro ao carregar dados' }); }
     finally { setIsLoading(false); }
   }, [fbUrl, section, toast]);
 
   useEffect(() => { if (usuario) loadData(); }, [usuario, section, selectedEmpresa, selectedSetor, loadData]);
 
-  const pathMap: Record<Section, string> = { dashboard: '', users: 'users', vehicles: 'veiculos', races: 'corridas', checklists: 'relatorio', schedules: 'agendamentos', empresas: '', setores: '', grupos: '' };
+  const pathMap: Record<Section, string> = { dashboard: '', users: 'users', vehicles: 'veiculos', races: 'corridas', checklists: 'relatorio', schedules: 'agendamentos', cards: 'cartao', empresas: '', setores: '', grupos: '' };
 
   const openModal = (id: string | null = null) => {
     setModal({ open: true, id });
@@ -368,6 +396,165 @@ export default function AdminPage() {
   const handleCancelClick = (veiculo: string, id: string) => {
     setAgToCancel({ veiculo, id });
     setIsCancelDialogOpen(true);
+  };
+
+  // Schedule conflict check (matches mobile pattern)
+  const checkScheduleConflict = async () => {
+    if (!usuario || !scheduleVeiculo || !scheduleData || !scheduleHoraInicio || !scheduleHoraFim) {
+      setScheduleConflictMsg(null);
+      return;
+    }
+    if (scheduleHoraInicio >= scheduleHoraFim) {
+      setScheduleConflictMsg('A hora de inicio deve ser anterior a hora de fim.');
+      return;
+    }
+    try {
+      const emp = isOP ? selectedEmpresa : usuario.empresa;
+      const set = isOP ? selectedSetor : usuario.setor;
+      if (!emp || !set) return;
+      const agendamentos = await fetchAgendamentosVeiculo(emp, set, scheduleVeiculo);
+      if (!agendamentos) { setScheduleConflictMsg(null); return; }
+
+      const dataBR = (() => {
+        const [ano, mes, dia] = scheduleData.split('-');
+        return `${dia}/${mes}/${ano}`;
+      })();
+
+      const temConflito = Object.values(agendamentos).some((ag) => {
+        if (!ag || ag.status !== 'confirmado' || ag.data !== dataBR) return false;
+        return !(scheduleHoraFim <= ag.hora_inicio || scheduleHoraInicio >= ag.hora_fim);
+      });
+
+      setScheduleConflictMsg(temConflito ? 'Ja existe um agendamento neste horario.' : null);
+    } catch {
+      setScheduleConflictMsg(null);
+    }
+  };
+
+  // Schedule submit handler
+  const handleCreateSchedule = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!usuario || !scheduleVeiculo || !scheduleData || !scheduleHoraInicio || !scheduleHoraFim || !scheduleMotivo) {
+      toast({ variant: 'destructive', title: 'Erro', description: 'Preencha todos os campos.' });
+      return;
+    }
+    if (scheduleConflictMsg) {
+      toast({ variant: 'destructive', title: 'Conflito', description: scheduleConflictMsg });
+      return;
+    }
+
+    const agora = new Date();
+    const dataHoraInicio = new Date(`${scheduleData}T${scheduleHoraInicio}`);
+    if (dataHoraInicio <= agora) {
+      toast({ variant: 'destructive', title: 'Data invalida', description: 'Nao e possivel agendar para datas ou horarios passados.' });
+      return;
+    }
+
+    setScheduleIsSubmitting(true);
+    try {
+      const [ano, mes, dia] = scheduleData.split('-');
+      const dataBR = `${dia}/${mes}/${ano}`;
+
+      const emp = isOP ? selectedEmpresa : usuario.empresa;
+      const set = isOP ? selectedSetor : usuario.setor;
+      if (!emp || !set) throw new Error('Empresa ou setor nao definido.');
+
+      await criarAgendamento(emp, set, scheduleVeiculo, {
+        data: dataBR,
+        hora_inicio: scheduleHoraInicio,
+        hora_fim: scheduleHoraFim,
+        responsavel: usuario.nome,
+        matricula: usuario.mat,
+        status: 'confirmado',
+        veiculo: scheduleVeiculo,
+        motivo: scheduleMotivo.trim().toUpperCase(),
+      });
+
+      toast({ title: 'Agendado!', description: `${scheduleVeiculo} reservado para ${dataBR} das ${scheduleHoraInicio} as ${scheduleHoraFim}.` });
+      setScheduleModalOpen(false);
+      resetScheduleForm();
+      loadData();
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Erro', description: err.message || 'Falha ao criar agendamento.' });
+    } finally {
+      setScheduleIsSubmitting(false);
+    }
+  };
+
+  const resetScheduleForm = () => {
+    setScheduleVeiculo('');
+    setScheduleData('');
+    setScheduleHoraInicio('');
+    setScheduleHoraFim('');
+    setScheduleMotivo('');
+    setScheduleConflictMsg(null);
+  };
+
+  // Cards handlers
+  const handleCardRecarga = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!usuario || !cardModalVehicle || !cardRecargaValor) return;
+    const valor = parseFloat(cardRecargaValor);
+    if (isNaN(valor) || valor <= 0) {
+      toast({ variant: 'destructive', title: 'Erro', description: 'Informe um valor valido.' });
+      return;
+    }
+
+    setCardIsSubmitting(true);
+    try {
+      const emp = isOP ? selectedEmpresa : usuario.empresa;
+      const set = isOP ? selectedSetor : usuario.setor;
+      if (!emp || !set) throw new Error('Empresa ou setor nao definido.');
+
+      const agora = new Date();
+      await registrarRecarga(emp, set, cardModalVehicle, {
+        valor,
+        data: agora.toLocaleDateString('pt-BR'),
+        hora: agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        responsavel: usuario.nome,
+      }, cardsData[cardModalVehicle]?.saldo ?? 0);
+
+      toast({ title: 'Recarga registrada!', description: `R$ ${valor.toFixed(2)} adicionados ao cartao de ${cardModalVehicle}.` });
+      setCardModalOpen(false);
+      setCardModalVehicle('');
+      setCardRecargaValor('');
+      loadData();
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Erro', description: err.message || 'Falha ao registrar recarga.' });
+    } finally {
+      setCardIsSubmitting(false);
+    }
+  };
+
+  const handleEditSaldo = async (veiculo: string) => {
+    if (!usuario || !cardEditSaldo) return;
+    const valor = parseFloat(cardEditSaldo);
+    if (isNaN(valor) || valor < 0) {
+      toast({ variant: 'destructive', title: 'Erro', description: 'Informe um valor valido.' });
+      return;
+    }
+
+    setCardIsSubmitting(true);
+    try {
+      const emp = isOP ? selectedEmpresa : usuario.empresa;
+      const set = isOP ? selectedSetor : usuario.setor;
+      if (!emp || !set) throw new Error('Empresa ou setor nao definido.');
+
+      const path = `${emp}/${set}/cartao/${encodeURIComponent(veiculo)}`;
+      await fetch(`${CAR_RTDB_URL}/${path}.json`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ saldo: valor }),
+      });
+
+      toast({ title: 'Saldo atualizado!', description: `Saldo de ${veiculo} ajustado para R$ ${valor.toFixed(2)}.` });
+      setCardEditSaldo('');
+      loadData();
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Erro', description: err.message || 'Falha ao atualizar saldo.' });
+    } finally {
+      setCardIsSubmitting(false);
+    }
   };
 
   const resetFilters = () => {
@@ -570,7 +757,146 @@ export default function AdminPage() {
             </div>
           )}
 
-          {/* OP Empresas Section */}
+          {section === 'cards' && (
+              <div className="space-y-4">
+                <div className="bg-background rounded-xl border overflow-hidden shadow-sm">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50 border-b">
+                      <tr>
+                        {['Veiculo','Saldo','Recargas','Acoes'].map(h => <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">{h}</th>)}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {Object.keys(cardsData).length === 0 && (
+                        <tr><td colSpan={4} className="text-center py-10 text-muted-foreground text-sm">Nenhum cartao encontrado</td></tr>
+                      )}
+                      {Object.entries(cardsData).map(([veiculo, cartao]) => {
+                        const recargas = cartao.recargas ? Object.entries(cartao.recargas).sort(([,a], [,b]) => {
+                          const parseDate = (r: any) => {
+                            if (!r) return 0;
+                            const [d, m, y] = (r.data || '01/01/2000').split('/');
+                            return new Date(`${y}-${m}-${d}T${r.hora || '00:00'}`).getTime();
+                          };
+                          return parseDate(b) - parseDate(a);
+                        }) : [];
+                        const isExpanded = expandedCardKey === veiculo;
+                        const saldo = cartao.saldo ?? 0;
+
+                        return (
+                          <React.Fragment key={veiculo}>
+                            <tr
+                              className="hover:bg-muted/30 transition-colors cursor-pointer"
+                              onClick={() => setExpandedCardKey(isExpanded ? null : veiculo)}
+                            >
+                              <td className="px-4 py-3 font-bold">{veiculo}</td>
+                              <td className="px-4 py-3">
+                                <span className={cn(
+                                  'font-mono font-bold text-sm',
+                                  saldo > 0 ? 'text-green-600' : saldo < 0 ? 'text-red-600' : 'text-muted-foreground'
+                                )}>
+                                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(saldo)}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3">
+                                {recargas.length > 0 ? (
+                                  <Badge variant="outline" className="gap-1 border-blue-200 text-blue-700 dark:border-blue-800 dark:text-blue-300">
+                                    <History className="w-3 h-3" />
+                                    {recargas.length}
+                                  </Badge>
+                                ) : (
+                                  <span className="text-muted-foreground text-xs">&mdash;</span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="flex gap-1">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 gap-1 text-xs"
+                                    onClick={(e) => { e.stopPropagation(); setCardModalVehicle(veiculo); setCardRecargaValor(''); setCardModalOpen(true); }}
+                                  >
+                                    <Plus className="w-3 h-3" /> Recarga
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-7 gap-1 text-xs"
+                                    onClick={(e) => { e.stopPropagation(); setCardEditSaldo(String(saldo)); }}
+                                  >
+                                    <DollarSign className="w-3 h-3" /> Ajustar
+                                  </Button>
+                                </div>
+                              </td>
+                            </tr>
+
+                            {isExpanded && (
+                              <tr className="bg-muted/20 border-b">
+                                <td colSpan={4} className="px-6 py-4">
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2 duration-200">
+                                    <div className="space-y-2">
+                                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                                        <History className="w-3.5 h-3.5" /> Historico de Recargas
+                                      </p>
+                                      <div className="bg-background rounded-lg border divide-y max-h-48 overflow-y-auto">
+                                        {recargas.length === 0 ? (
+                                          <p className="text-xs text-muted-foreground p-3 text-center">Nenhuma recarga registrada</p>
+                                        ) : (
+                                          recargas.map(([recId, rec]) => (
+                                            <div key={recId} className="p-3 flex justify-between items-center">
+                                              <div>
+                                                <p className="text-xs text-muted-foreground">{rec.data} as {rec.hora}</p>
+                                                <p className="text-[11px] text-muted-foreground italic">{rec.responsavel}</p>
+                                              </div>
+                                              <span className="font-mono font-bold text-green-600 text-sm">
+                                                +{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(rec.valor)}
+                                              </span>
+                                            </div>
+                                          ))
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                                        <DollarSign className="w-3.5 h-3.5" /> Ajustar Saldo
+                                      </p>
+                                      <div className="bg-background rounded-lg border p-3 space-y-2">
+                                        <div className="flex gap-2">
+                                          <Input
+                                            type="number"
+                                            step="0.01"
+                                            placeholder="Novo saldo"
+                                            value={cardEditSaldo}
+                                            onChange={(e) => setCardEditSaldo(e.target.value)}
+                                            className="h-9"
+                                            onKeyDown={(e) => { if (e.key === 'Enter') handleEditSaldo(veiculo); }}
+                                          />
+                                          <Button
+                                            size="sm"
+                                            className="h-9"
+                                            disabled={cardIsSubmitting || !cardEditSaldo}
+                                            onClick={() => handleEditSaldo(veiculo)}
+                                          >
+                                            {cardIsSubmitting ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Salvar'}
+                                          </Button>
+                                        </div>
+                                        <p className="text-[10px] text-muted-foreground">Define o saldo diretamente. Use com cautela.</p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* OP Empresas Section */}
           {isOP && section === 'empresas' && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -922,8 +1248,15 @@ export default function AdminPage() {
                   )}
 
                   <div className="ml-auto flex gap-2">
-                    {section !== 'races' && section !== 'checklists' && (
-                      <Button onClick={() => openModal()} className="gap-2"><Plus className="w-4 h-4" /> Novo</Button>
+                    {section !== 'races' && section !== 'checklists' && section !== 'cards' && (
+                      <Button onClick={() => {
+                        if (section === 'schedules') {
+                          resetScheduleForm();
+                          setScheduleModalOpen(true);
+                        } else {
+                          openModal();
+                        }
+                      }} className="gap-2"><Plus className="w-4 h-4" /> Novo</Button>
                     )}
                   </div>
                 </div>
@@ -934,18 +1267,207 @@ export default function AdminPage() {
                       <tr>
                         {section === 'users' && ['Matrícula','Nome','Papel','Ações'].map(h => <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">{h}</th>)}
                         {section === 'vehicles' && ['Veículo','Placa','Status','KM','Combustível','Ações'].map(h => <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">{h}</th>)}
-                        {section === 'races' && ['Data','Veículo','Motorista','Destino','Início','Fim','Status','Ações'].map(h => <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">{h}</th>)}
+                        {section === 'races' && ['Data','Veículo','Motorista','Destino','Paradas','Início','Fim','Status',''].map(h => <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">{h}</th>)}
                         {section === 'checklists' && ['Data','Veículo','Motorista','Status','Hora','Fotos','Ações'].map(h => <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">{h}</th>)}
                         {section === 'schedules' && ['Data','Veículo','Motorista','Início','Fim','Status','Ações'].map(h => <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">{h}</th>)}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
                       {paginated.length === 0 && (
-                        <tr><td colSpan={8} className="text-center py-10 text-muted-foreground text-sm">Nenhum registro encontrado</td></tr>
+                        <tr><td colSpan={section === 'users' ? 4 : section === 'vehicles' ? 6 : section === 'races' ? 9 : section === 'checklists' ? 7 : section === 'schedules' ? 7 : 8} className="text-center py-10 text-muted-foreground text-sm">Nenhum registro encontrado</td></tr>
                       )}
-                      {paginated.map(([id, item]) => (
-                        <tr key={id} className="hover:bg-muted/30 transition-colors">
-                          {section === 'users' && <>
+                      {paginated.map(([id, item]) => {
+                        if (section === 'races') {
+                          return (() => {
+                            const raceDesvios = item.desvios;
+                            const hasDesvios = Array.isArray(raceDesvios) && raceDesvios.length > 0;
+                            const isExpanded = expandedRaceKey === id;
+                            const isActive = !item.horario_fim;
+                            const kmInicial = parseFloat(item.km_inicial) || 0;
+                            const kmFinal = parseFloat(item.km_final) || 0;
+                            const distancia = kmFinal > kmInicial ? (kmFinal - kmInicial).toFixed(1) : null;
+
+                            return (
+                              <React.Fragment key={id}>
+                                <tr
+                                  key={id}
+                                  className={cn(
+                                    'hover:bg-muted/30 transition-colors cursor-pointer',
+                                    isActive && 'border-l-4 border-l-blue-500 bg-blue-50/30 dark:bg-blue-950/10'
+                                  )}
+                                  onClick={() => setExpandedRaceKey(isExpanded ? null : id)}
+                                >
+                                  <td className="px-4 py-3">{item.data}</td>
+                                  <td className="px-4 py-3 font-medium">{item['veiculo'] || item.veiculo}</td>
+                                  <td className="px-4 py-3">{item.responsavel}</td>
+                                  <td className="px-4 py-3 max-w-[140px] truncate" title={item.destino}>{item.destino}</td>
+                                  <td className="px-4 py-3">
+                                    {hasDesvios ? (
+                                      <Badge className="bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 border-orange-200 dark:border-orange-800 gap-1 font-mono">
+                                        <GitBranch className="w-3 h-3" />
+                                        {raceDesvios.length}
+                                      </Badge>
+                                    ) : (
+                                      <span className="text-muted-foreground text-xs">&mdash;</span>
+                                    )}
+                                  </td>
+                                  <td className="px-4 py-3 font-mono text-xs">{item.horario_inicio}</td>
+                                  <td className="px-4 py-3 font-mono text-xs">{item.horario_fim || '—'}</td>
+                                  <td className="px-4 py-3">
+                                    <Badge variant="outline" className={item.horario_fim ? 'border-green-300 text-green-700' : 'border-blue-300 text-blue-700'}>
+                                      {item.horario_fim ? 'Finalizada' : 'Em andamento'}
+                                    </Badge>
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    {isExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+                                  </td>
+                                </tr>
+
+                                {isExpanded && (
+                                  <tr key={`${id}-detail`} className="bg-muted/20 border-b">
+                                    <td colSpan={9} className="px-6 py-4">
+                                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-in fade-in slide-in-from-top-2 duration-200">
+                                        {/* KM Info */}
+                                        <div className="space-y-2">
+                                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                                            <Gauge className="w-3.5 h-3.5" /> Quilometragem
+                                          </p>
+                                          <div className="bg-background rounded-lg border p-3 space-y-1.5">
+                                            <div className="flex justify-between text-xs">
+                                              <span className="text-muted-foreground">Inicial</span>
+                                              <span className="font-mono font-bold">{kmInicial.toLocaleString('pt-BR')} km</span>
+                                            </div>
+                                            {item.horario_fim && (
+                                              <div className="flex justify-between text-xs">
+                                                <span className="text-muted-foreground">Final</span>
+                                                <span className="font-mono font-bold">{kmFinal.toLocaleString('pt-BR')} km</span>
+                                              </div>
+                                            )}
+                                            {distancia && (
+                                              <div className="flex justify-between text-xs border-t pt-1.5 mt-1">
+                                                <span className="text-muted-foreground">Percorrido</span>
+                                                <span className="font-mono font-bold text-green-600">{distancia} km</span>
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+
+                                        {/* Gasolina */}
+                                        <div className="space-y-2">
+                                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                                            <Fuel className="w-3.5 h-3.5" /> Combustivel
+                                          </p>
+                                          <div className="bg-background rounded-lg border p-3">
+                                            {item.gasolina ? (
+                                              <div className="flex items-center gap-2">
+                                                <div className="flex gap-0.5 flex-1 h-5">
+                                                  {[1,2,3,4].map(i => {
+                                                    const g = parseInt(item.gasolina) || 0;
+                                                    return (
+                                                      <div key={i} className={cn(
+                                                        'h-full flex-1 rounded-sm transition-colors',
+                                                        i <= g
+                                                          ? (g <= 1 ? 'bg-red-500' : g === 2 ? 'bg-yellow-400' : 'bg-green-500')
+                                                          : 'bg-muted'
+                                                      )} />
+                                                    );
+                                                  })}
+                                                </div>
+                                                <span className="text-xs font-bold text-muted-foreground">
+                                                  {['', 'Vazio', '¼', '½', 'Cheio'][parseInt(item.gasolina)] || item.gasolina}
+                                                </span>
+                                              </div>
+                                            ) : (
+                                              <span className="text-xs text-muted-foreground">Nao informado</span>
+                                            )}
+                                          </div>
+                                        </div>
+
+                                        {/* Acoes */}
+                                        <div className="space-y-2">
+                                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Acoes</p>
+                                          <div className="flex gap-2">
+                                            <Button size="sm" variant="outline" className="h-8 gap-1 text-xs" onClick={(e) => { e.stopPropagation(); openModal(id); }}>
+                                              <Pencil className="w-3 h-3" /> Editar
+                                            </Button>
+                                            <Button size="sm" variant="destructive" className="h-8 gap-1 text-xs" onClick={(e) => { e.stopPropagation(); deleteItem(id); }}>
+                                              <Trash2 className="w-3 h-3" /> Excluir
+                                            </Button>
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      {/* Route Timeline */}
+                                      <div className="mt-4 pt-4 border-t">
+                                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5 mb-3">
+                                          <Navigation className="w-3.5 h-3.5" /> Rota da Corrida
+                                        </p>
+                                        <div className="space-y-0">
+                                          {/* Origem (saida) */}
+                                          <div className="flex items-start gap-3 pb-2">
+                                            <div className="flex flex-col items-center">
+                                              <div className="w-3 h-3 rounded-full bg-blue-500 shrink-0 ring-2 ring-blue-100 dark:ring-blue-900" />
+                                              <div className="w-0.5 flex-1 min-h-[16px] bg-blue-200 dark:bg-blue-800 mt-0.5" />
+                                            </div>
+                                            <div className="flex-1 min-w-0 pb-1">
+                                              <p className="text-sm font-semibold truncate">{item.destino}</p>
+                                              <p className="text-[11px] text-muted-foreground">{item.horario_inicio} — Saida</p>
+                                            </div>
+                                          </div>
+
+                                          {/* Desvios - sem hora */}
+                                          {hasDesvios && raceDesvios.map((d, i) => (
+                                            <div key={i} className="flex items-start gap-3 pb-2">
+                                              <div className="flex flex-col items-center">
+                                                <div className="w-3 h-3 rounded-full bg-orange-400 shrink-0 ring-2 ring-orange-100 dark:ring-orange-900" />
+                                                {i < raceDesvios.length - 1 || item.horario_fim ? (
+                                                  <div className="w-0.5 flex-1 min-h-[16px] bg-orange-200 dark:bg-orange-800 mt-0.5" />
+                                                ) : (
+                                                  <div className="w-0.5 flex-1 min-h-[16px] bg-orange-200/50 dark:bg-orange-800/50 mt-0.5" style={{ borderStyle: 'dashed' }} />
+                                                )}
+                                              </div>
+                                              <div className="flex-1 min-w-0 pb-1">
+                                                <p className="text-sm font-medium truncate">{d.destino}</p>
+                                              </div>
+                                            </div>
+                                          ))}
+
+                                          {/* Chegada (fim) */}
+                                          {item.horario_fim && (
+                                            <div className="flex items-start gap-3">
+                                              <div className="flex flex-col items-center">
+                                                <div className="w-3 h-3 rounded-full bg-green-500 shrink-0 ring-2 ring-green-100 dark:ring-green-900" />
+                                              </div>
+                                              <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-semibold text-green-700 dark:text-green-300">Chegada ao destino</p>
+                                                <p className="text-[11px] text-muted-foreground">{item.horario_fim}</p>
+                                              </div>
+                                            </div>
+                                          )}
+
+                                          {/* Active indicator when still in progress */}
+                                          {!item.horario_fim && (
+                                            <div className="flex items-start gap-3">
+                                              <div className="flex flex-col items-center">
+                                                <div className="w-3 h-3 rounded-full border-2 border-dashed border-blue-400 animate-pulse shrink-0" />
+                                              </div>
+                                              <div className="flex-1 min-w-0">
+                                                <p className="text-sm text-blue-600 dark:text-blue-400 font-medium animate-pulse">Em andamento...</p>
+                                              </div>
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )}
+                              </React.Fragment>
+                            );
+                          })();
+                        }
+                        return (
+                          <tr key={id} className="hover:bg-muted/30 transition-colors">
+                            {section === 'users' && <>
                             <td className="px-4 py-3 font-mono text-xs">{item.mat || id}</td>
                             <td className="px-4 py-3 font-medium">{item.nome}</td>
                             <td className="px-4 py-3"><Badge variant="outline" className={item.role === 'adm' ? 'border-blue-300 text-blue-700' : (item.op ? 'border-amber-300 text-amber-700' : '')}>{item.role || (item.op ? 'op' : 'user')}</Badge></td>
@@ -957,22 +1479,9 @@ export default function AdminPage() {
                           {section === 'vehicles' && <>
                             <td className="px-4 py-3 font-bold">{id}</td>
                             <td className="px-4 py-3 font-mono text-xs">{item.placa || '-'}</td>
-                            <td className="px-4 py-3"><Badge variant="outline" className={item.status === 'EM MANUTENÇÃO' ? 'border-yellow-300 text-yellow-700' : item.status === 'EM CORRIDA' ? 'border-red-300 text-red-700' : 'border-green-300 text-green-700'}>{item.status || '-'}</Badge></td>
+                            <td className="px-4 py-3"><Badge variant="outline" className={item.status === 'EM MANUTENCAO' ? 'border-yellow-300 text-yellow-700' : item.status === 'EM CORRIDA' ? 'border-red-300 text-red-700' : 'border-green-300 text-green-700'}>{item.status || '-'}</Badge></td>
                             <td className="px-4 py-3 text-sm">{item.km_rodados || '0'} km</td>
                             <td className="px-4 py-3"><div className="flex gap-0.5 w-16">{[1,2,3,4].map(i => { const g = parseInt(item.gasolina)||0; return <div key={i} className={cn('h-3 flex-1 rounded-sm', i<=g ? (g<=1?'bg-red-500':g===2?'bg-yellow-400':'bg-green-500') : 'bg-muted')} />; })}</div></td>
-                            <td className="px-4 py-3 flex gap-1">
-                              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openModal(id)}><Pencil className="w-3.5 h-3.5" /></Button>
-                              <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => deleteItem(id)}><Trash2 className="w-3.5 h-3.5" /></Button>
-                            </td>
-                          </>}
-                          {section === 'races' && <>
-                            <td className="px-4 py-3">{item.data}</td>
-                            <td className="px-4 py-3 font-medium">{item['veículo'] || item.veiculo}</td>
-                            <td className="px-4 py-3">{item.responsavel}</td>
-                            <td className="px-4 py-3">{item.destino}</td>
-                            <td className="px-4 py-3">{item.horario_inicio}</td>
-                            <td className="px-4 py-3">{item.horario_fim || '—'}</td>
-                            <td className="px-4 py-3"><Badge variant="outline" className={item.horario_fim ? 'border-green-300 text-green-700' : 'border-blue-300 text-blue-700'}>{item.horario_fim ? 'Finalizada' : 'Em andamento'}</Badge></td>
                             <td className="px-4 py-3 flex gap-1">
                               <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openModal(id)}><Pencil className="w-3.5 h-3.5" /></Button>
                               <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => deleteItem(id)}><Trash2 className="w-3.5 h-3.5" /></Button>
@@ -982,7 +1491,7 @@ export default function AdminPage() {
                             <td className="px-4 py-3">{item.DATA}</td>
                             <td className="px-4 py-3 font-medium">{item.VEICULO || '-'}</td>
                             <td className="px-4 py-3">{item.RESPONSAVEL}</td>
-                            <td className="px-4 py-3"><Badge variant="outline" className={['FRENTE','F_DIREITO','F_ESQUERDO','TRAS','T_DIREITO','T_ESQUERDO'].some(k => item[k] && item[k] !== 'OK') ? 'border-red-300 text-red-700' : 'border-green-300 text-green-700'}>{['FRENTE','F_DIREITO','F_ESQUERDO','TRAS','T_DIREITO','T_ESQUERDO'].some(k => item[k] && item[k] !== 'OK') ? 'Atenção' : 'OK'}</Badge></td>
+                            <td className="px-4 py-3"><Badge variant="outline" className={['FRENTE','F_DIREITO','F_ESQUERDO','TRAS','T_DIREITO','T_ESQUERDO'].some(k => item[k] && item[k] !== 'OK') ? 'border-red-300 text-red-700' : 'border-green-300 text-green-700'}>{['FRENTE','F_DIREITO','F_ESQUERDO','TRAS','T_DIREITO','T_ESQUERDO'].some(k => item[k] && item[k] !== 'OK') ? 'Atencao' : 'OK'}</Badge></td>
                             <td className="px-4 py-3">{item.HORA}</td>
                             <td className="px-4 py-3">{(item.anexos || []).length > 0 && <Button size="sm" variant="outline" className="h-6 text-xs px-2" onClick={() => setGallery({ open: true, images: item.anexos, idx: 0 })}>Ver {item.anexos.length} foto(s)</Button>}</td>
                             <td className="px-4 py-3 flex gap-1">
@@ -1005,8 +1514,9 @@ export default function AdminPage() {
                               )}
                             </td>
                           </>}
-                        </tr>
-                      ))}
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
 
@@ -1224,7 +1734,167 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* New Item Modal (empresa/setor) */}
+      {/* Schedule Modal */}
+      {scheduleModalOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-background rounded-2xl w-full max-w-md p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="font-bold text-lg">Novo Agendamento</h2>
+              <Button size="icon" variant="ghost" onClick={() => { setScheduleModalOpen(false); resetScheduleForm(); }}><X className="w-4 h-4" /></Button>
+            </div>
+            <form onSubmit={handleCreateSchedule} className="space-y-4">
+              {/* Veiculo */}
+              <div className="space-y-1">
+                <Label htmlFor="sched-veiculo" className="flex items-center gap-1.5">
+                  <Car className="h-3.5 w-3.5 text-primary" /> Veiculo
+                </Label>
+                <Select
+                  value={scheduleVeiculo}
+                  onValueChange={(v) => { setScheduleVeiculo(v); setScheduleConflictMsg(null); }}
+                >
+                  <SelectTrigger id="sched-veiculo" className="h-12">
+                    <SelectValue placeholder="Selecione o veiculo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.keys(vehicles).map((v) => (
+                      <SelectItem key={v} value={v}>{v}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Data */}
+              <div className="space-y-1">
+                <Label htmlFor="sched-data" className="flex items-center gap-1.5">
+                  <Calendar className="h-3.5 w-3.5" /> Data
+                </Label>
+                <Input
+                  id="sched-data"
+                  type="date"
+                  min={hoje}
+                  value={scheduleData}
+                  onChange={(e) => { setScheduleData(e.target.value); setScheduleConflictMsg(null); }}
+                  className="h-12"
+                />
+              </div>
+
+              {/* Hora Inicio / Hora Fim */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label htmlFor="sched-inicio" className="flex items-center gap-1.5">
+                    <Clock className="h-3.5 w-3.5" /> Hora Inicio
+                  </Label>
+                  <Input
+                    id="sched-inicio"
+                    type="time"
+                    value={scheduleHoraInicio}
+                    onChange={(e) => { setScheduleHoraInicio(e.target.value); setScheduleConflictMsg(null); }}
+                    onBlur={checkScheduleConflict}
+                    className="h-12"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="sched-fim" className="flex items-center gap-1.5">
+                    <Clock className="h-3.5 w-3.5" /> Hora Fim
+                  </Label>
+                  <Input
+                    id="sched-fim"
+                    type="time"
+                    value={scheduleHoraFim}
+                    onChange={(e) => { setScheduleHoraFim(e.target.value); setScheduleConflictMsg(null); }}
+                    onBlur={checkScheduleConflict}
+                    className="h-12"
+                  />
+                </div>
+              </div>
+
+              {/* Motivo */}
+              <div className="space-y-1">
+                <Label htmlFor="sched-motivo" className="flex items-center gap-1.5">
+                  <FileText className="h-3.5 w-3.5" /> Motivo
+                </Label>
+                <Input
+                  id="sched-motivo"
+                  placeholder="Ex: REUNIAO, VISITA TECNICA..."
+                  value={scheduleMotivo}
+                  onChange={(e) => setScheduleMotivo(e.target.value.toUpperCase())}
+                  className="h-12 font-medium"
+                />
+              </div>
+
+              {/* Conflict warning */}
+              {scheduleConflictMsg && (
+                <div className="bg-destructive/10 border border-destructive/20 p-3 rounded-lg flex items-start gap-2 text-destructive text-sm">
+                  <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                  <p>{scheduleConflictMsg}</p>
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-2">
+                <Button
+                  type="submit"
+                  className="flex-1 h-12 font-bold"
+                  disabled={scheduleIsSubmitting || !!scheduleConflictMsg}
+                >
+                  {scheduleIsSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Calendar className="mr-2 h-4 w-4" />}
+                  CONFIRMAR AGENDAMENTO
+                </Button>
+                <Button type="button" variant="outline" className="h-12" onClick={() => { setScheduleModalOpen(false); resetScheduleForm(); }}>
+                  Cancelar
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+            {/* Card Recarga Modal */}
+      {cardModalOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-background rounded-2xl w-full max-w-sm p-6 shadow-2xl">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="font-bold text-lg">Nova Recarga</h2>
+              <Button size="icon" variant="ghost" onClick={() => { setCardModalOpen(false); setCardModalVehicle(''); setCardRecargaValor(''); }}>
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+            <form onSubmit={handleCardRecarga} className="space-y-4">
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Veiculo</Label>
+                <p className="font-bold text-lg">{cardModalVehicle}</p>
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="recarga-valor">Valor da Recarga (R$)</Label>
+                <Input
+                  id="recarga-valor"
+                  type="number"
+                  step="0.01"
+                  min="1"
+                  placeholder="Ex: 100.00"
+                  value={cardRecargaValor}
+                  onChange={(e) => setCardRecargaValor(e.target.value)}
+                  className="h-12 text-xl font-bold"
+                  autoFocus
+                />
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                Saldo atual: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cardsData[cardModalVehicle]?.saldo ?? 0)}
+              </p>
+              <div className="flex gap-2">
+                <Button type="submit" className="flex-1 h-12 font-bold" disabled={cardIsSubmitting || !cardRecargaValor}>
+                  {cardIsSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CreditCard className="mr-2 h-4 w-4" />}
+                  REGISTRAR RECARGA
+                </Button>
+                <Button type="button" variant="outline" className="h-12" onClick={() => { setCardModalOpen(false); setCardModalVehicle(''); setCardRecargaValor(''); }}>
+                  Cancelar
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+{/* New Item Modal (empresa/setor) */}
       {newItemModal.open && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-background rounded-2xl w-full max-w-sm p-6 shadow-2xl">

@@ -462,6 +462,39 @@ export async function updateUsuarioStatus(
   return rtdbPatch(`${empresa}/user/${matricula}`, data);
 }
 
+/** Troca a senha de um usuario do modulo Carro */
+export async function trocarSenha(
+  empresa: string,
+  setor: string,
+  matricula: string,
+  novaSenha: string
+): Promise<void> {
+  // Verifica se o usuario existe
+  const userData = await rtdbGet<CarUsuario & { pass?: string }>(
+    `${empresa}/${setor}/users/${matricula}`
+  );
+  if (!userData) {
+    throw new Error('Usuario nao encontrado.');
+  }
+  // Aplica a nova senha via PATCH (mantem os outros campos)
+  await rtdbPatch(`${empresa}/${setor}/users/${matricula}`, {
+    pass: novaSenha,
+  });
+}
+
+/** Verifica se a senha do usuario e igual a matricula (senha padrao) */
+export async function verificarSenhaPadrao(
+  empresa: string,
+  setor: string,
+  matricula: string
+): Promise<boolean> {
+  const userData = await rtdbGet<CarUsuario & { pass?: string }>(
+    `${empresa}/${setor}/users/${matricula}`
+  );
+  if (!userData || !userData.pass) return false;
+  return userData.pass === matricula;
+}
+
 // ---------- Utils ------------------------------------------------------
 
 /** Verifica se um veículo está em corrida ativa */

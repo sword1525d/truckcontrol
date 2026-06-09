@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Car, ArrowLeft } from 'lucide-react';
+import { Loader2, Car, ArrowLeft, AlertTriangle, ShieldAlert } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Select,
@@ -24,6 +24,16 @@ import {
 } from '@/lib/car-rtdb';
 import Link from 'next/link';
 import { Footer } from '@/components/footer';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 type Company = { id: string; name: string };
 type Sector = { id: string; name: string };
@@ -43,6 +53,8 @@ export default function LoginCarPage() {
   const [setor, setSetor] = useState('');
   const [matricula, setMatricula] = useState('');
   const [senha, setSenha] = useState('');
+  const [showPasswordWarning, setShowPasswordWarning] = useState(false);
+  const [loggedInUser, setLoggedInUser] = useState<any>(null);
 
   // Se já logado, redireciona
   useEffect(() => {
@@ -104,6 +116,15 @@ export default function LoginCarPage() {
     setIsLoading(true);
     try {
       const usuario = await carLogin(empresa, setor, matricula.trim(), senha.trim());
+
+      // Check if password matches matricula (default password)
+      if (matricula.trim() === senha.trim()) {
+        setLoggedInUser(usuario);
+        setShowPasswordWarning(true);
+        setIsLoading(false);
+        return;
+      }
+
       toast({ title: 'Login realizado!', description: 'Bem-vindo ao Frotacontrol.' });
       const isAdminOrOP = usuario.adm || usuario.role === 'adm' || usuario.op;
       const isDesktop = typeof window !== 'undefined' && window.innerWidth >= 768;
@@ -213,6 +234,57 @@ export default function LoginCarPage() {
         </Card>
       </div>
       <Footer />
+
+      {/* Password Warning Dialog */}
+      <AlertDialog open={showPasswordWarning} onOpenChange={setShowPasswordWarning}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="bg-amber-100 dark:bg-amber-900/30 p-2 rounded-full">
+                <ShieldAlert className="h-6 w-6 text-amber-600 dark:text-amber-400" />
+              </div>
+            </div>
+            <AlertDialogTitle>Atencao: Senha Padrao</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-3">
+              <p>
+                Sua senha atual e igual a sua matricula (<span className="font-mono font-bold">{matricula}</span>).
+                Isso representa um risco de seguranca.
+              </p>
+              <p className="text-amber-600 dark:text-amber-400 font-medium">
+                Recomendamos fortemente que voce troque sua senha agora.
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+            <AlertDialogCancel
+              onClick={() => {
+                setShowPasswordWarning(false);
+                if (loggedInUser) {
+                  const isAdminOrOP = loggedInUser.adm || loggedInUser.role === 'adm' || loggedInUser.op;
+                  const isDesktop = typeof window !== 'undefined' && window.innerWidth >= 768;
+                  toast({ title: 'Login realizado!', description: 'Bem-vindo ao Frotacontrol.' });
+                  router.push(isAdminOrOP && isDesktop ? '/dashboard-car/admin' : '/dashboard-car');
+                }
+              }}
+            >
+              Ignorar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-primary"
+              onClick={() => {
+                setShowPasswordWarning(false);
+                if (loggedInUser) {
+                  toast({ title: 'Login realizado!', description: 'Redirecionando para troca de senha.' });
+                  router.push('/dashboard-car/profile');
+                }
+              }}
+            >
+              <AlertTriangle className="mr-2 h-4 w-4" />
+              Trocar Senha Agora
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

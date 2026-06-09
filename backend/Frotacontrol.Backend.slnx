@@ -1,8 +1,0 @@
-<Solution>
-  <Folder Name="/src/">
-    <Project Path="src/Frotacontrol.Api/Frotacontrol.Api.csproj" />
-    <Project Path="src/Frotacontrol.Core/Frotacontrol.Core.csproj" />
-    <Project Path="src/Frotacontrol.Infrastructure/Frotacontrol.Infrastructure.csproj" />
-    <Project Path="src/Frotacontrol.MigrationTool/Frotacontrol.MigrationTool.csproj" />
-  </Folder>
-</Solution>
