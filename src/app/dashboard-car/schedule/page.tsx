@@ -36,7 +36,7 @@ export default function CarSchedulePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [conflictMsg, setConflictMsg] = useState<string | null>(null);
 
-  // Data mínima = hoje
+  // Data minima = hoje
   const hoje = new Date().toISOString().split('T')[0];
 
   useEffect(() => {
@@ -60,7 +60,7 @@ export default function CarSchedulePage() {
         }
         setVeiculos(allVeiculos);
       } catch {
-        toast({ variant: 'destructive', title: 'Erro', description: 'Não foi possível carregar os veículos.' });
+        toast({ variant: 'destructive', title: 'Erro', description: 'Nao foi possivel carregar os veiculos.' });
       } finally {
         setIsLoading(false);
       }
@@ -68,38 +68,41 @@ export default function CarSchedulePage() {
     load();
   }, [router, toast]);
 
-  /** Verifica conflito de horário ao mudar horário/veiculo */
-  const checkConflict = async () => {
-    if (!usuario || !selectedVeiculo || !data || !horaInicio || !horaFim) {
-      setConflictMsg(null);
-      return;
-    }
-    if (horaInicio >= horaFim) {
-      setConflictMsg('A hora de início deve ser anterior à hora de fim.');
-      return;
-    }
+  /** Logica pura de verificacao de conflito - recebe valores explicitos */
+  const checkConflictValues = async (
+    veiculo: string,
+    dt: string,
+    inicio: string,
+    fim: string,
+  ): Promise<string | null> => {
+    if (!usuario || !veiculo || !dt || !inicio || !fim) return null;
+    if (inicio >= fim) return 'A hora de inicio deve ser anterior a hora de fim.';
     try {
-      const parts = selectedVeiculo.split('/');
+      const parts = veiculo.split('/');
       const targetSetor = parts.length > 1 ? parts[0] : usuario.setor;
-      const targetVeiculo = parts.length > 1 ? parts.slice(1).join('/') : selectedVeiculo;
+      const targetVeiculo = parts.length > 1 ? parts.slice(1).join('/') : veiculo;
       const agendamentos = await fetchAgendamentosVeiculo(usuario.empresa, targetSetor, targetVeiculo);
-      if (!agendamentos) { setConflictMsg(null); return; }
+      if (!agendamentos) return null;
 
-      const dataBR = (() => {
-        const [ano, mes, dia] = data.split('-');
-        return `${dia}/${mes}/${ano}`;
-      })();
+      const [ano, mes, dia] = dt.split('-');
+      const dataBR = `${dia}/${mes}/${ano}`;
 
       const temConflito = Object.values(agendamentos).some((ag) => {
         if (!ag || ag.status !== 'confirmado' || ag.data !== dataBR) return false;
-        // Sobreposição de intervalos
-        return !(horaFim <= ag.hora_inicio || horaInicio >= ag.hora_fim);
+        // Sobreposicao de intervalos
+        return !(fim <= ag.hora_inicio || inicio >= ag.hora_fim);
       });
 
-      setConflictMsg(temConflito ? 'Já existe um agendamento neste horário.' : null);
+      return temConflito ? 'Ja existe um agendamento neste horario.' : null;
     } catch {
-      setConflictMsg(null);
+      return null;
     }
+  };
+
+  /** Verifica conflito de horario ao mudar horario/veiculo (usa state atual) */
+  const checkConflict = async () => {
+    const msg = await checkConflictValues(selectedVeiculo, data, horaInicio, horaFim);
+    setConflictMsg(msg);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -108,15 +111,19 @@ export default function CarSchedulePage() {
       toast({ variant: 'destructive', title: 'Erro', description: 'Preencha todos os campos.' });
       return;
     }
-    if (conflictMsg) {
-      toast({ variant: 'destructive', title: 'Conflito', description: conflictMsg });
+
+    // Revalida conflito no momento do submit para evitar bypass
+    const finalConflict = await checkConflictValues(selectedVeiculo, data, horaInicio, horaFim);
+    if (finalConflict) {
+      setConflictMsg(finalConflict);
+      toast({ variant: 'destructive', title: 'Conflito', description: finalConflict });
       return;
     }
 
     const agora = new Date();
     const dataHoraInicio = new Date(`${data}T${horaInicio}`);
     if (dataHoraInicio <= agora) {
-      toast({ variant: 'destructive', title: 'Data inválida', description: 'Não é possível agendar para datas ou horários passados.' });
+      toast({ variant: 'destructive', title: 'Data invalida', description: 'Nao e possivel agendar para datas ou horarios passados.' });
       return;
     }
 
@@ -140,7 +147,7 @@ export default function CarSchedulePage() {
         motivo: motivo.trim().toUpperCase(),
       });
 
-      toast({ title: 'Agendado!', description: `${selectedVeiculo} reservado para ${dataBR} das ${horaInicio} às ${horaFim}.` });
+      toast({ title: 'Agendado!', description: `${selectedVeiculo} reservado para ${dataBR} das ${horaInicio} as ${horaFim}.` });
       router.push('/dashboard-car');
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Erro', description: err.message });
@@ -160,7 +167,7 @@ export default function CarSchedulePage() {
           </Button>
           <div>
             <h1 className="text-2xl font-bold">Agendar Corrida</h1>
-            <p className="text-sm text-muted-foreground">Reserve um veículo com antecedência</p>
+            <p className="text-sm text-muted-foreground">Reserve um veiculo com antecedencia</p>
           </div>
         </div>
 
@@ -168,20 +175,29 @@ export default function CarSchedulePage() {
           <Card className="border-t-4 border-t-primary shadow-md">
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
-                <Car className="h-4 w-4 text-primary" /> Veículo e Data
+                <Car className="h-4 w-4 text-primary" /> Veiculo e Data
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Veículo */}
+              {/* Veiculo */}
               <div className="space-y-1">
-                <Label htmlFor="sched-veiculo">Veículo</Label>
+                <Label htmlFor="sched-veiculo">Veiculo</Label>
                 <Select
                   value={selectedVeiculo}
-                  onValueChange={(v) => { setSelectedVeiculo(v); setConflictMsg(null); }}
+                  onValueChange={async (v) => {
+                    setSelectedVeiculo(v);
+                    // Revalida conflito com o novo veiculo se o restante do form estiver preenchido
+                    if (data && horaInicio && horaFim) {
+                      const msg = await checkConflictValues(v, data, horaInicio, horaFim);
+                      setConflictMsg(msg);
+                    } else {
+                      setConflictMsg(null);
+                    }
+                  }}
                   disabled={isLoading}
                 >
                   <SelectTrigger id="sched-veiculo" className="h-12">
-                    <SelectValue placeholder={isLoading ? 'Carregando...' : 'Selecione o veículo'} />
+                    <SelectValue placeholder={isLoading ? 'Carregando...' : 'Selecione o veiculo'} />
                   </SelectTrigger>
                   <SelectContent>
                     {veiculos.map((v) => (
@@ -206,11 +222,11 @@ export default function CarSchedulePage() {
                 />
               </div>
 
-              {/* Hora Início / Hora Fim */}
+              {/* Hora Inicio / Hora Fim */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label htmlFor="sched-inicio" className="flex items-center gap-1.5">
-                    <Clock className="h-3.5 w-3.5" /> Hora Início
+                    <Clock className="h-3.5 w-3.5" /> Hora Inicio
                   </Label>
                   <Input
                     id="sched-inicio"
@@ -243,7 +259,7 @@ export default function CarSchedulePage() {
                 </Label>
                 <Input
                   id="sched-motivo"
-                  placeholder="Ex: REUNIÃO, VISITA TÉCNICA..."
+                  placeholder="Ex: REUNIAO, VISITA TECNICA..."
                   value={motivo}
                   onChange={(e) => setMotivo(e.target.value.toUpperCase())}
                   className="h-12 font-medium"
@@ -274,3 +290,4 @@ export default function CarSchedulePage() {
     </div>
   );
 }
+
