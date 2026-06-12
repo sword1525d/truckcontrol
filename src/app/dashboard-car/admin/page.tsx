@@ -2,14 +2,14 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, LayoutDashboard, Users, Car, Play, ClipboardCheck, LogOut, Search, Plus, Pencil, Trash2, X, ChevronLeft, ChevronRight, Calendar, Clock, Building2, Grid, Layers, AlertCircle, FileText, MapPin, ChevronDown, ChevronUp, Gauge, GitBranch, Navigation, Fuel, CreditCard, DollarSign, History } from 'lucide-react';
+import { Loader2, LayoutDashboard, Users, Car, Play, ClipboardCheck, LogOut, Search, Plus, Pencil, Trash2, X, ChevronLeft, ChevronRight, Calendar, Clock, Building2, Grid, Layers, AlertCircle, FileText, MapPin, ChevronDown, ChevronUp, Gauge, GitBranch, Navigation, Fuel, CreditCard, DollarSign, History, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { getCarUsuario, clearCarUsuario, type CarUsuario, CAR_RTDB_URL, fetchEmpresas, fetchSetores, criarEmpresa, removerEmpresa, criarSetor, removerSetor, fetchGrupos, criarGrupo, removerGrupo, assignSetorToGrupo, removeSetorFromGrupo, criarAgendamento, fetchAgendamentosVeiculo, fetchTodosCartoes, registrarRecarga, type CartaoData, type CartaoRecarga } from '@/lib/car-rtdb';
+import { getCarUsuario, clearCarUsuario, type CarUsuario, CAR_RTDB_URL, fetchEmpresas, fetchSetores, criarEmpresa, removerEmpresa, criarSetor, removerSetor, fetchGrupos, criarGrupo, removerGrupo, assignSetorToGrupo, removeSetorFromGrupo, criarAgendamento, fetchAgendamentosVeiculo, fetchTodosCartoes, registrarRecarga, finalizarAgendamento, getEffectiveStatus, type CartaoData, type CartaoRecarga } from '@/lib/car-rtdb';
 import { cn } from '@/lib/utils';
 
 import {
@@ -97,6 +97,8 @@ export default function AdminPage() {
   const [scheduleHoraInicio, setScheduleHoraInicio] = useState('');
   const [scheduleHoraFim, setScheduleHoraFim] = useState('');
   const [scheduleMotivo, setScheduleMotivo] = useState('');
+  const [scheduleDriver, setScheduleDriver] = useState('');
+  const [scheduleExtraDrivers, setScheduleExtraDrivers] = useState<string[]>([]);
   const [scheduleConflictMsg, setScheduleConflictMsg] = useState<string | null>(null);
   const [scheduleIsSubmitting, setScheduleIsSubmitting] = useState(false);
   const [expandedRaceKey, setExpandedRaceKey] = useState<string | null>(null);
@@ -393,6 +395,33 @@ export default function AdminPage() {
     }
   };
 
+  const [isFinalizarDialogOpen, setIsFinalizarDialogOpen] = useState(false);
+  const [agToFinalizar, setAgToFinalizar] = useState<{ veiculo: string, id: string } | null>(null);
+
+  const confirmFinalizar = async () => {
+    if (!usuario || !agToFinalizar) return;
+    setIsLoading(true);
+    try {
+      const emp = isOP ? selectedEmpresa : usuario.empresa;
+      const set = isOP ? selectedSetor : usuario.setor;
+      if (!emp || !set) throw new Error('Empresa ou setor nao definido.');
+      await finalizarAgendamento(emp, set, agToFinalizar.veiculo, agToFinalizar.id);
+      toast({ title: 'Sucesso', description: 'Agendamento finalizado com sucesso.' });
+      loadData();
+    } catch {
+      toast({ variant: 'destructive', title: 'Erro', description: 'Falha ao finalizar agendamento.' });
+    } finally {
+      setIsLoading(false);
+      setIsFinalizarDialogOpen(false);
+      setAgToFinalizar(null);
+    }
+  };
+
+  const handleFinalizarClick = (veiculo: string, id: string) => {
+    setAgToFinalizar({ veiculo, id });
+    setIsFinalizarDialogOpen(true);
+  };
+
   const handleCancelClick = (veiculo: string, id: string) => {
     setAgToCancel({ veiculo, id });
     setIsCancelDialogOpen(true);
@@ -442,6 +471,10 @@ export default function AdminPage() {
       toast({ variant: 'destructive', title: 'Conflito', description: scheduleConflictMsg });
       return;
     }
+    if (!scheduleDriver) {
+      toast({ variant: 'destructive', title: 'Erro', description: 'Selecione o motorista responsavel.' });
+      return;
+    }
 
     const agora = new Date();
     const dataHoraInicio = new Date(`${scheduleData}T${scheduleHoraInicio}`);
@@ -463,11 +496,12 @@ export default function AdminPage() {
         data: dataBR,
         hora_inicio: scheduleHoraInicio,
         hora_fim: scheduleHoraFim,
-        responsavel: usuario.nome,
-        matricula: usuario.mat,
+        responsavel: allUsers[scheduleDriver]?.nome || usuario.nome,
+        matricula: scheduleDriver || usuario.mat,
         status: 'confirmado',
         veiculo: scheduleVeiculo,
         motivo: scheduleMotivo.trim().toUpperCase(),
+        permitidos_extra: scheduleExtraDrivers.length > 0 ? scheduleExtraDrivers : undefined,
       });
 
       toast({ title: 'Agendado!', description: `${scheduleVeiculo} reservado para ${dataBR} das ${scheduleHoraInicio} as ${scheduleHoraFim}.` });
@@ -487,6 +521,8 @@ export default function AdminPage() {
     setScheduleHoraInicio('');
     setScheduleHoraFim('');
     setScheduleMotivo('');
+    setScheduleDriver('');
+    setScheduleExtraDrivers([]);
     setScheduleConflictMsg(null);
   };
 
@@ -1505,7 +1541,7 @@ export default function AdminPage() {
                             <td className="px-4 py-3">{item.responsavel}</td>
                             <td className="px-4 py-3 font-mono text-xs">{item.hora_inicio}</td>
                             <td className="px-4 py-3 font-mono text-xs">{item.hora_fim}</td>
-                            <td className="px-4 py-3"><Badge variant="outline" className={item.status === 'cancelado' ? 'border-red-300 text-red-700' : 'border-green-300 text-green-700'}>{item.status?.toUpperCase() || 'CONFIRMADO'}</Badge></td>
+                            <td className="px-4 py-3">{(() => { const effStatus = getEffectiveStatus(item); return <Badge variant="outline" className={effStatus === 'cancelado' ? 'border-red-300 text-red-700' : effStatus === 'finalizado' ? 'border-blue-300 text-blue-700' : 'border-green-300 text-green-700'}>{effStatus.toUpperCase()}</Badge>; })()}</td>
                             <td className="px-4 py-3 flex gap-1">
                               {item.status !== 'cancelado' && (
                                 <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" title="Cancelar Agendamento" onClick={() => handleCancelClick(item.veiculo, item.id)}>
@@ -1820,6 +1856,60 @@ export default function AdminPage() {
                   onChange={(e) => setScheduleMotivo(e.target.value.toUpperCase())}
                   className="h-12 font-medium"
                 />
+              </div>
+
+              {/* Motorista Responsavel */}
+              <div className="space-y-1">
+                <Label htmlFor="sched-driver" className="flex items-center gap-1.5">
+                  <Users className="h-3.5 w-3.5 text-primary" /> Motorista Responsavel
+                </Label>
+                <Select
+                  value={scheduleDriver}
+                  onValueChange={(v) => setScheduleDriver(v)}
+                >
+                  <SelectTrigger id="sched-driver" className="h-12">
+                    <SelectValue placeholder="Selecione o motorista" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(allUsers).map(([mat, u]: [string, any]) => (
+                      <SelectItem key={mat} value={mat}>{u.nome || mat}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Motoristas Adicionais Permitidos */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1.5">
+                  <Users className="h-3.5 w-3.5 text-muted-foreground" /> Motoristas Adicionais Permitidos
+                </Label>
+                <div className="max-h-36 overflow-y-auto border rounded-lg p-2 space-y-1 bg-muted/20">
+                  {Object.entries(allUsers)
+                    .filter(([mat]) => mat !== scheduleDriver)
+                    .map(([mat, u]: [string, any]) => {
+                      const checked = scheduleExtraDrivers.includes(mat);
+                      return (
+                        <label key={mat} className="flex items-center gap-2 cursor-pointer hover:bg-accent/50 rounded px-1.5 py-1 transition-colors">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => {
+                              setScheduleExtraDrivers(prev =>
+                                prev.includes(mat) ? prev.filter(m => m !== mat) : [...prev, mat]
+                              );
+                            }}
+                            className="h-3.5 w-3.5 rounded"
+                          />
+                          <span className="text-xs">{u.nome || mat}</span>
+                          <span className="text-[10px] text-muted-foreground font-mono ml-auto">{mat}</span>
+                        </label>
+                      );
+                    })}
+                  {Object.keys(allUsers).length <= 1 && (
+                    <p className="text-xs text-muted-foreground p-2">Nenhum outro motorista cadastrado no setor.</p>
+                  )}
+                </div>
+                <p className="text-[10px] text-muted-foreground">Esses motoristas tambem poderao iniciar corrida neste horario.</p>
               </div>
 
               {/* Conflict warning */}

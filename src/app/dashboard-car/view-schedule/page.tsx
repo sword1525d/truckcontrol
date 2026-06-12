@@ -5,11 +5,13 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
-import { ArrowLeft, Loader2, Calendar, Car, Clock, ChevronDown, ChevronUp, FilterX, Search } from 'lucide-react';
+import { ArrowLeft, Loader2, Calendar, Car, Clock, ChevronDown, ChevronUp, FilterX, Search, CheckCircle2 } from 'lucide-react';
 import {
   getCarUsuario,
   fetchTodosAgendamentos,
   fetchAgendamentosMultiSetor,
+  finalizarAgendamento,
+  getEffectiveStatus,
   type CarUsuario,
   type CarAgendamento,
 } from '@/lib/car-rtdb';
@@ -94,6 +96,9 @@ export default function ViewSchedulePage() {
     loadAgendamentos(u);
   }, [router, toast]);
 
+  const [isFinalizarDialogOpen, setIsFinalizarDialogOpen] = useState(false);
+  const [agToFinalizar, setAgToFinalizar] = useState<{ veiculo: string, id: string } | null>(null);
+
   const confirmCancel = async () => {
     if (!usuario || !agToCancel) return;
 
@@ -111,6 +116,28 @@ export default function ViewSchedulePage() {
       setIsCancelDialogOpen(false);
       setAgToCancel(null);
     }
+  };
+
+  const confirmFinalizar = async () => {
+    if (!usuario || !agToFinalizar) return;
+    try {
+      const parts = agToFinalizar.veiculo.split('/');
+      const targetSetor = parts.length > 1 ? parts[0] : usuario.setor;
+      const targetVeiculo = parts.length > 1 ? parts.slice(1).join('/') : agToFinalizar.veiculo;
+      await finalizarAgendamento(usuario.empresa, targetSetor, targetVeiculo, agToFinalizar.id);
+      toast({ title: 'Sucesso', description: 'Agendamento finalizado com sucesso.' });
+      loadAgendamentos(usuario);
+    } catch {
+      toast({ variant: 'destructive', title: 'Erro', description: 'Falha ao finalizar agendamento.' });
+    } finally {
+      setIsFinalizarDialogOpen(false);
+      setAgToFinalizar(null);
+    }
+  };
+
+  const handleFinalizarClick = (veiculo: string, id: string) => {
+    setAgToFinalizar({ veiculo, id });
+    setIsFinalizarDialogOpen(true);
   };
 
   const handleCancelClick = (veiculo: string, id: string) => {
@@ -220,8 +247,11 @@ export default function ViewSchedulePage() {
           <div className="space-y-2">
             {displayed.map((ag) => {
               const isExpanded = expandedKey === ag.key;
-              const statusColor = ag.status === 'confirmado'
+              const effStatus = getEffectiveStatus(ag);
+              const statusColor = effStatus === 'confirmado'
                 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+                : effStatus === 'finalizado'
+                ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
                 : 'bg-muted text-muted-foreground';
 
               return (
@@ -242,7 +272,7 @@ export default function ViewSchedulePage() {
                       </div>
                       <div className="flex flex-col items-end gap-1 shrink-0">
                         <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full', statusColor)}>
-                          {ag.status.toUpperCase()}
+                          {effStatus.toUpperCase()}
                         </span>
                         {isExpanded ? <ChevronUp className="h-4 w-4 text-muted-foreground mt-1" /> : <ChevronDown className="h-4 w-4 text-muted-foreground mt-1" />}
                       </div>
@@ -256,18 +286,32 @@ export default function ViewSchedulePage() {
                           {ag.motivo && <div className="col-span-2"><span className="font-semibold text-foreground">Motivo:</span> {ag.motivo}</div>}
                         </div>
                         
-                        {(ag.matricula === usuario?.mat || usuario?.adm || usuario?.role === 'adm') && ag.status !== 'cancelado' && (
-                          <Button 
-                            variant="destructive" 
-                            size="sm" 
-                            className="w-full h-8 text-[10px] font-bold uppercase tracking-wider"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleCancelClick(ag.veiculo, ag.id);
-                            }}
-                          >
-                            {ag.matricula === usuario?.mat ? 'Cancelar Agendamento' : 'Cancelar (Admin)'}
-                          </Button>
+                        {(ag.matricula === usuario?.mat || usuario?.adm || usuario?.role === 'adm') && effStatus !== 'cancelado' && effStatus !== 'finalizado' && (
+                          <div className="flex gap-2">
+                            <Button 
+                              variant="default"
+                              size="sm" 
+                              className="flex-1 h-8 text-[10px] font-bold uppercase tracking-wider bg-green-600 hover:bg-green-700 text-white"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleFinalizarClick(ag.veiculo, ag.id);
+                              }}
+                            >
+                              <CheckCircle2 className="w-3 h-3 mr-1" />
+                              Finalizar
+                            </Button>
+                            <Button 
+                              variant="destructive" 
+                              size="sm" 
+                              className="flex-1 h-8 text-[10px] font-bold uppercase tracking-wider"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleCancelClick(ag.veiculo, ag.id);
+                              }}
+                            >
+                              {ag.matricula === usuario?.mat ? 'Cancelar' : 'Cancelar (Admin)'}
+                            </Button>
+                          </div>
                         )}
                       </div>
                     )}

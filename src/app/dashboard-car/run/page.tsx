@@ -127,10 +127,13 @@ export default function CarRunPage() {
         // Verificar agendamentos
         const agendamentos = await fetchAgendamentosVeiculo(usuario.empresa, targetSetor, targetVeiculo);
         const agendAtivo = agendamentoAtivoAgora(agendamentos);
-        if (agendAtivo && agendAtivo.matricula !== usuario.mat) {
-          setVeiculoBlockMsg(`Reservado por ${agendAtivo.responsavel} até ${agendAtivo.hora_fim}`);
-          setIsValidating(false);
-          return;
+        if (agendAtivo) {
+          const extraPermitidos: string[] = agendAtivo.permitidos_extra || [];
+          if (agendAtivo.matricula !== usuario.mat && !extraPermitidos.includes(usuario.mat)) {
+            setVeiculoBlockMsg(`Reservado por ${agendAtivo.responsavel} até ${agendAtivo.hora_fim}`);
+            setIsValidating(false);
+            return;
+          }
         }
 
         // Verificar corridas ativas

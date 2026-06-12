@@ -15,6 +15,9 @@ import {
   encerrarCorrida,
   updateVeiculo,
   updateUsuarioStatus,
+  fetchAgendamentosVeiculo,
+  agendamentoAtivoAgora,
+  finalizarAgendamento,
   type CarUsuario,
   type CarCorrida,
 } from '@/lib/car-rtdb';
@@ -125,6 +128,20 @@ export default function CarActiveRunPage() {
       });
 
       await updateUsuarioStatus(usuario.empresa, usuario.mat, { em_corrida: false });
+
+      // Auto-finalizar agendamento ativo para este veiculo
+      try {
+        const agendamentos = await fetchAgendamentosVeiculo(usuario.empresa, targetSetor, corrida['ve?culo']);
+        const agendAtivo = agendamentoAtivoAgora(agendamentos);
+        if (agendAtivo) {
+          const agendId = Object.entries(agendamentos || {}).find(
+            ([, a]) => a && a.status === 'confirmado' && a.data === agendAtivo.data && a.hora_inicio === agendAtivo.hora_inicio
+          )?.[0];
+          if (agendId) {
+            await finalizarAgendamento(usuario.empresa, targetSetor, corrida['ve?culo'], agendId);
+          }
+        }
+      } catch { /* agendamento finalize eh opcional, nao bloqueia o fluxo */ }
 
       toast({ title: 'Corrida encerrada!', description: `Km percorridos: ${(kmFinalNum - kmInicialNum).toFixed(1)} km` });
       router.push('/dashboard-car');

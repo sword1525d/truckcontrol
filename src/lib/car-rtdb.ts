@@ -65,9 +65,10 @@ export type CarAgendamento = {
   hora_fim: string;
   responsavel: string;
   matricula: string;
-  status: 'confirmado' | 'cancelado' | 'pendente';
+  status: 'confirmado' | 'cancelado' | 'pendente' | 'finalizado';
   veiculo?: string;
   motivo?: string;
+  permitidos_extra?: string[];
 };
 
 /** Lê JSON de um path do RTDB */
@@ -452,6 +453,17 @@ export async function cancelarAgendamento(
   });
 }
 
+export async function finalizarAgendamento(
+  empresa: string,
+  setor: string,
+  veiculoId: string,
+  agendamentoId: string
+): Promise<void> {
+  return rtdbPatch(`${empresa}/${setor}/agendamentos/${veiculoId}/${agendamentoId}`, {
+    status: 'finalizado',
+  });
+}
+
 // ---------- Usuário ---------------------------------------------------
 
 export async function updateUsuarioStatus(
@@ -532,6 +544,16 @@ export function agendamentoAtivoAgora(
         a.hora_fim >= horaAtual
     ) ?? null
   );
+}
+
+/** Retorna o status efetivo do agendamento: se confirmado mas o horario ja passou, trata como finalizado */
+export function getEffectiveStatus(ag: { status: string; data: string; hora_fim: string }): string {
+  if (ag.status !== 'confirmado') return ag.status;
+  const agora = new Date();
+  const [d, m, y] = ag.data.split('/').map(Number);
+  const [h, min] = ag.hora_fim.split(':').map(Number);
+  const endDate = new Date(y, m - 1, d, h, min);
+  return endDate < agora ? 'finalizado' : 'confirmado';
 }
 
 // ---------- Cartão de Abastecimento -----------------------------------
