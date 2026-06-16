@@ -57,6 +57,7 @@ export type CarCorrida = {
   veículo: string;
   gasolina?: string | number;
   desvios?: { destino: string; hora: string }[];
+  divergencia?: string;
 };
 
 export type CarAgendamento = {
@@ -391,6 +392,17 @@ export async function encerrarCorrida(
   data: Pick<CarCorrida, 'km_final' | 'horario_fim' | 'gasolina'>
 ): Promise<void> {
   return rtdbPatch(`${empresa}/${setor}/corridas/${corridaKey}`, data);
+}
+
+export async function updateCorridaDivergencia(
+  empresa: string,
+  setor: string,
+  corridaKey: string,
+  justificativa: string
+): Promise<void> {
+  return rtdbPatch(`${empresa}/${setor}/corridas/${corridaKey}`, {
+    divergencia: justificativa,
+  });
 }
 
 export async function getCorridaAtiva(

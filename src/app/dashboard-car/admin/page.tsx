@@ -2,14 +2,14 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, LayoutDashboard, Users, Car, Play, ClipboardCheck, LogOut, Search, Plus, Pencil, Trash2, X, ChevronLeft, ChevronRight, Calendar, Clock, Building2, Grid, Layers, AlertCircle, FileText, MapPin, ChevronDown, ChevronUp, Gauge, GitBranch, Navigation, Fuel, CreditCard, DollarSign, History, CheckCircle2 } from 'lucide-react';
+import { Loader2, LayoutDashboard, Users, Car, Play, ClipboardCheck, LogOut, Search, Plus, Pencil, Trash2, X, ChevronLeft, ChevronRight, Calendar, Clock, Building2, Grid, Layers, AlertCircle, FileText, MapPin, ChevronDown, ChevronUp, Gauge, GitBranch, Navigation, Fuel, CreditCard, DollarSign, History, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { getCarUsuario, clearCarUsuario, type CarUsuario, CAR_RTDB_URL, fetchEmpresas, fetchSetores, criarEmpresa, removerEmpresa, criarSetor, removerSetor, fetchGrupos, criarGrupo, removerGrupo, assignSetorToGrupo, removeSetorFromGrupo, criarAgendamento, fetchAgendamentosVeiculo, fetchTodosCartoes, registrarRecarga, finalizarAgendamento, getEffectiveStatus, type CartaoData, type CartaoRecarga } from '@/lib/car-rtdb';
+import { getCarUsuario, clearCarUsuario, type CarUsuario, CAR_RTDB_URL, fetchEmpresas, fetchSetores, criarEmpresa, removerEmpresa, criarSetor, removerSetor, fetchGrupos, criarGrupo, removerGrupo, assignSetorToGrupo, removeSetorFromGrupo, criarAgendamento, fetchAgendamentosVeiculo, fetchTodosCartoes, registrarRecarga, finalizarAgendamento, getEffectiveStatus, updateCorridaDivergencia, type CartaoData, type CartaoRecarga } from '@/lib/car-rtdb';
 import { cn } from '@/lib/utils';
 
 import {
@@ -102,6 +102,9 @@ export default function AdminPage() {
   const [scheduleConflictMsg, setScheduleConflictMsg] = useState<string | null>(null);
   const [scheduleIsSubmitting, setScheduleIsSubmitting] = useState(false);
   const [expandedRaceKey, setExpandedRaceKey] = useState<string | null>(null);
+  const [divergenciaEditingId, setDivergenciaEditingId] = useState<string | null>(null);
+  const [divergenciaText, setDivergenciaText] = useState('');
+  const [divergenciaSaving, setDivergenciaSaving] = useState(false);
   const [cardsData, setCardsData] = useState<Record<string, CartaoData>>({});
   const [expandedCardKey, setExpandedCardKey] = useState<string | null>(null);
   const [cardModalOpen, setCardModalOpen] = useState(false);
@@ -559,6 +562,25 @@ export default function AdminPage() {
       toast({ variant: 'destructive', title: 'Erro', description: err.message || 'Falha ao registrar recarga.' });
     } finally {
       setCardIsSubmitting(false);
+    }
+  };
+
+  const handleSaveDivergencia = async (raceId: string) => {
+    if (!usuario || !fbUrl || !divergenciaText.trim()) return;
+    setDivergenciaSaving(true);
+    try {
+      const emp = isOP ? selectedEmpresa : usuario.empresa;
+      const set = isOP ? selectedSetor : usuario.setor;
+      if (!emp || !set) throw new Error('Empresa ou setor nao definido.');
+      await updateCorridaDivergencia(emp, set, raceId, divergenciaText.trim());
+      toast({ title: 'Salvo', description: 'Justificativa registrada com sucesso.' });
+      setDivergenciaEditingId(null);
+      setDivergenciaText('');
+      loadData();
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Erro', description: err.message || 'Falha ao salvar justificativa.' });
+    } finally {
+      setDivergenciaSaving(false);
     }
   };
 
@@ -1199,6 +1221,36 @@ export default function AdminPage() {
               return b[0].localeCompare(a[0]);
             });
 
+            // KM divergence detection for races
+            const divergenceMap: Record<string, { prevKmFinal: number; currKmInicial: number; gap: number }> = {};
+            if (section === 'races') {
+              const racesByVehicle: Record<string, { id: string; km_inicial: number; km_final: number; hora: string }[]> = {};
+              allFiltered.forEach(([id, v]) => {
+                const veiculo = v['veículo'] || v.veiculo || '';
+                if (!racesByVehicle[veiculo]) racesByVehicle[veiculo] = [];
+                racesByVehicle[veiculo].push({
+                  id,
+                  km_inicial: parseFloat(v.km_inicial) || 0,
+                  km_final: parseFloat(v.km_final) || 0,
+                  hora: v.horario_inicio || '',
+                });
+              });
+              Object.values(racesByVehicle).forEach((races) => {
+                races.sort((a, b) => a.km_inicial - b.km_inicial);
+                for (let i = 1; i < races.length; i++) {
+                  const prev = races[i - 1];
+                  const curr = races[i];
+                  if (prev.km_final > 0 && curr.km_inicial > 0 && prev.km_final !== curr.km_inicial) {
+                    divergenceMap[curr.id] = {
+                      prevKmFinal: prev.km_final,
+                      currKmInicial: curr.km_inicial,
+                      gap: curr.km_inicial - prev.km_final,
+                    };
+                  }
+                }
+              });
+            }
+
             const totalPages = Math.ceil(allFiltered.length / PAGE_SIZE);
             const paginated = allFiltered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
@@ -1323,15 +1375,95 @@ export default function AdminPage() {
                             const kmFinal = parseFloat(item.km_final) || 0;
                             const distancia = kmFinal > kmInicial ? (kmFinal - kmInicial).toFixed(1) : null;
 
+                            const divInfo = section === 'races' ? divergenceMap[id] : null;
                             return (
                               <React.Fragment key={id}>
+                                {/* Divergence row */}
+                                {divInfo && !divergenciaEditingId && (
+                                  <tr className="bg-red-50 dark:bg-red-950/20 border-l-4 border-l-red-500">
+                                    <td colSpan={9} className="px-4 py-2.5">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+                                        <span className="text-xs font-semibold text-red-700 dark:text-red-400">
+                                          Divergência de KM detectada:
+                                        </span>
+                                        <span className="text-xs text-red-600 dark:text-red-400 font-mono">
+                                          KM final anterior: <strong>{divInfo.prevKmFinal.toLocaleString('pt-BR')}</strong>
+                                          {' → '}
+                                          KM inicial atual: <strong>{divInfo.currKmInicial.toLocaleString('pt-BR')}</strong>
+                                        </span>
+                                        <Badge variant="outline" className={divInfo.gap > 0 ? 'border-red-300 text-red-700 bg-red-100 dark:bg-red-900/20' : 'border-amber-300 text-amber-700 bg-amber-100 dark:bg-amber-900/20'}>
+                                          {divInfo.gap > 0 ? '+' : ''}{divInfo.gap.toFixed(1)} km
+                                        </Badge>
+                                        {item.divergencia ? (
+                                          <span className="text-[11px] text-muted-foreground italic ml-2">
+                                            Justificativa: &ldquo;{item.divergencia}&rdquo;
+                                            <button
+                                              onClick={(e) => { e.stopPropagation(); setDivergenciaEditingId(id); setDivergenciaText(item.divergencia || ''); }}
+                                              className="ml-1.5 text-primary hover:underline text-[10px] font-medium"
+                                            >editar</button>
+                                          </span>
+                                        ) : (
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="h-6 text-[10px] px-2 ml-2 border-red-300 text-red-700 hover:bg-red-100 dark:hover:bg-red-950"
+                                            onClick={(e) => { e.stopPropagation(); setDivergenciaEditingId(id); setDivergenciaText(''); }}
+                                          >
+                                            <Pencil className="w-3 h-3 mr-1" />
+                                            Adicionar Justificativa
+                                          </Button>
+                                        )}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )}
+                                {/* Divergence edit row */}
+                                {divInfo && divergenciaEditingId === id && (
+                                  <tr className="bg-red-50 dark:bg-red-950/20 border-l-4 border-l-red-500">
+                                    <td colSpan={9} className="px-4 py-2.5">
+                                      <div className="flex items-center gap-2">
+                                        <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+                                        <span className="text-xs font-semibold text-red-700 dark:text-red-400">
+                                          Divergência de KM: KM final ant. {divInfo.prevKmFinal.toLocaleString('pt-BR')} {'→'} KM inicial atual {divInfo.currKmInicial.toLocaleString('pt-BR')} ({divInfo.gap > 0 ? '+' : ''}{divInfo.gap.toFixed(1)} km)
+                                        </span>
+                                        <Input
+                                          className="flex-1 h-7 text-xs max-w-[320px]"
+                                          placeholder="Justificativa da divergência..."
+                                          value={divergenciaText}
+                                          onChange={(e) => { e.stopPropagation(); setDivergenciaText(e.target.value); }}
+                                          onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); handleSaveDivergencia(id); } }}
+                                          autoFocus
+                                          onClick={(e) => e.stopPropagation()}
+                                        />
+                                        <Button
+                                          size="sm"
+                                          className="h-7 text-[10px] px-2"
+                                          disabled={divergenciaSaving || !divergenciaText.trim()}
+                                          onClick={(e) => { e.stopPropagation(); handleSaveDivergencia(id); }}
+                                        >
+                                          {divergenciaSaving ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
+                                          Salvar
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          className="h-7 text-[10px] px-2"
+                                          onClick={(e) => { e.stopPropagation(); setDivergenciaEditingId(null); setDivergenciaText(''); }}
+                                        >
+                                          <X className="w-3 h-3" />
+                                        </Button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )}
                                 <tr
                                   key={id}
                                   className={cn(
                                     'hover:bg-muted/30 transition-colors cursor-pointer',
                                     isActive && 'border-l-4 border-l-blue-500 bg-blue-50/30 dark:bg-blue-950/10'
                                   )}
-                                  onClick={() => setExpandedRaceKey(isExpanded ? null : id)}
+                                  onClick={() => { setDivergenciaEditingId(null); setExpandedRaceKey(isExpanded ? null : id); }}
                                 >
                                   <td className="px-4 py-3">{item.data}</td>
                                   <td className="px-4 py-3 font-medium">{item['veiculo'] || item.veiculo}</td>
