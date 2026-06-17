@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, LayoutDashboard, Users, Car, Play, ClipboardCheck, LogOut, Search, Plus, Pencil, Trash2, X, ChevronLeft, ChevronRight, Calendar, Clock, Building2, Grid, Layers, AlertCircle, FileText, MapPin, ChevronDown, ChevronUp, Gauge, GitBranch, Navigation, Fuel, CreditCard, DollarSign, History, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Loader2, LayoutDashboard, Users, Car, Play, ClipboardCheck, LogOut, Search, Plus, Pencil, Trash2, X, ChevronLeft, ChevronRight, Calendar, Clock, Building2, Grid, Layers, AlertCircle, FileText, MapPin, ChevronDown, ChevronUp, Gauge, GitBranch, Navigation, Fuel, CreditCard, DollarSign, History, CheckCircle2, AlertTriangle, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -74,12 +74,16 @@ export default function AdminPage() {
   const [assignSetorData, setAssignSetorData] = useState<{ grupoId: string; setor: string } | null>(null);
   const [isOpLoading, setIsOpLoading] = useState(false);
 
+  // Default: mes atual
+  const mesAtualInicio = '2026-06-01';
+  const mesAtualFim = '2026-06-17';
+
   // Specific filters
   const [filterRole, setFilterRole] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterRace, setFilterRace] = useState('all');
-  const [filterDateStart, setFilterDateStart] = useState('');
-  const [filterDateEnd, setFilterDateEnd] = useState('');
+  const [filterDateStart, setFilterDateStart] = useState(mesAtualInicio);
+  const [filterDateEnd, setFilterDateEnd] = useState(mesAtualFim);
   const [filterDriver, setFilterDriver] = useState('all');
 
   const [modal, setModal] = useState<{ open: boolean; id: string | null }>({ open: false, id: null });
@@ -112,6 +116,7 @@ export default function AdminPage() {
   const [cardRecargaValor, setCardRecargaValor] = useState('');
   const [cardEditSaldo, setCardEditSaldo] = useState('');
   const [cardIsSubmitting, setCardIsSubmitting] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   const hoje = new Date().toISOString().split('T')[0];
 
@@ -193,12 +198,21 @@ export default function AdminPage() {
         return;
       }
 
+      // Carrega apenas os dados da secao atual para otimizar performance
+      const fetchUsers = fetch(`${fbUrl}/users.json`).then(r => r.json());
+      const fetchVehicles = fetch(`${fbUrl}/veiculos.json`).then(r => r.json());
+      const fetchRaces = (section === 'races' || section === 'dashboard')
+        ? fetch(`${fbUrl}/corridas.json`).then(r => r.json())
+        : Promise.resolve(null);
+      const fetchChecks = (section === 'checklists' || section === 'dashboard')
+        ? fetch(`${fbUrl}/relatorio.json`).then(r => r.json())
+        : Promise.resolve(null);
+      const fetchSchedules = (section === 'schedules' || section === 'dashboard')
+        ? fetch(`${fbUrl}/agendamentos.json`).then(r => r.json())
+        : Promise.resolve(null);
+
       const [resUsers, resVehicles, resRaces, resChecks, resSchedules] = await Promise.all([
-        fetch(`${fbUrl}/users.json`).then(r => r.json()),
-        fetch(`${fbUrl}/veiculos.json`).then(r => r.json()),
-        fetch(`${fbUrl}/corridas.json`).then(r => r.json()),
-        fetch(`${fbUrl}/relatorio.json`).then(r => r.json()),
-        fetch(`${fbUrl}/agendamentos.json`).then(r => r.json()),
+        fetchUsers, fetchVehicles, fetchRaces, fetchChecks, fetchSchedules,
       ]);
       const veh = resVehicles || {};
       const usr = resUsers || {};
@@ -619,8 +633,8 @@ export default function AdminPage() {
     setFilterRole('all');
     setFilterStatus('all');
     setFilterRace('all');
-    setFilterDateStart('');
-    setFilterDateEnd('');
+    setFilterDateStart(mesAtualInicio);
+    setFilterDateEnd(mesAtualFim);
     setFilterDriver('all');
     setSearch('');
     setPage(1);
@@ -645,8 +659,8 @@ export default function AdminPage() {
       if (filterRace === 'active' && isFinished) return false;
       if (filterRace === 'finished' && !isFinished) return false;
       if (filterDriver !== 'all' && v.responsavel !== filterDriver) return false;
-      const recordDateStr = v.data;
-      if (filterDateStart || filterDateEnd) {
+      const recordDateStr = v.data || '';
+      if ((filterDateStart || filterDateEnd) && recordDateStr.includes('/')) {
         const [d, m, y] = recordDateStr.split('/').map(Number);
         const recordDate = new Date(y, m - 1, d);
         if (filterDateStart) {
@@ -657,13 +671,15 @@ export default function AdminPage() {
           const end = new Date(filterDateEnd + 'T23:59:59');
           if (recordDate > end) return false;
         }
+      } else if (filterDateStart || filterDateEnd) {
+        return false;
       }
     }
 
     if (section === 'checklists') {
       if (filterDriver !== 'all' && v.RESPONSAVEL !== filterDriver) return false;
-      const recordDateStr = v.DATA;
-      if (filterDateStart || filterDateEnd) {
+      const recordDateStr = v.DATA || '';
+      if ((filterDateStart || filterDateEnd) && recordDateStr.includes('/')) {
         const [d, m, y] = recordDateStr.split('/').map(Number);
         const recordDate = new Date(y, m - 1, d);
         if (filterDateStart) {
@@ -674,11 +690,60 @@ export default function AdminPage() {
           const end = new Date(filterDateEnd + 'T23:59:59');
           if (recordDate > end) return false;
         }
+      } else if (filterDateStart || filterDateEnd) {
+        return false;
       }
     }
 
     return true;
   });
+
+  const handleExport = async () => {
+    if (!usuario) return;
+    setIsExporting(true);
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_EXPORT_API_URL || 'http://localhost:5000';
+      const emp = isOP ? selectedEmpresa : usuario.empresa;
+      const set = isOP ? selectedSetor : usuario.setor;
+      if (!emp || !set) return;
+
+      const body: Record<string, string> = { empresa: emp, setor: set };
+      if (filterDateStart) {
+        const [y, m, d] = filterDateStart.split('-');
+        body.data_inicio = `${d}/${m}/${y}`;
+      }
+      if (filterDateEnd) {
+        const [y, m, d] = filterDateEnd.split('-');
+        body.data_fim = `${d}/${m}/${y}`;
+      }
+
+      const res = await fetch(`${apiUrl}/api/export`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Erro desconhecido' }));
+        throw new Error(err.error || 'Falha na exportacao');
+      }
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `corridas_${emp}_${set}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      toast({ title: 'Exportado!', description: 'Planilha gerada com sucesso.' });
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Erro na exportacao', description: err.message || 'Verifique se o servidor de exportacao esta rodando.' });
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   if (!usuario) return <div className="flex items-center justify-center min-h-screen"><Loader2 className="animate-spin w-8 h-8" /></div>;
 
@@ -1336,6 +1401,17 @@ export default function AdminPage() {
                   )}
 
                   <div className="ml-auto flex gap-2">
+                    {section === 'races' && (
+                      <Button
+                        onClick={handleExport}
+                        disabled={isExporting}
+                        variant="outline"
+                        className="gap-2 border-green-300 text-green-700 hover:bg-green-50 dark:border-green-800 dark:text-green-400 dark:hover:bg-green-950"
+                      >
+                        {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                        Exportar Excel
+                      </Button>
+                    )}
                     {section !== 'races' && section !== 'checklists' && section !== 'cards' && (
                       <Button onClick={() => {
                         if (section === 'schedules') {

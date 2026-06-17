@@ -31,7 +31,7 @@ import { ArrowLeft, Loader2, Truck, Wrench, Camera, X } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import { CameraCapture } from '@/components/CameraCapture';
-import { supabase } from '@/lib/supabase';
+const UPLOAD_API_URL = process.env.NEXT_PUBLIC_EXPORT_API_URL || 'http://localhost:5000';
 
 type ChecklistItem = {
   id: string;
@@ -151,20 +151,24 @@ export default function ChecklistPage() {
     setIsSubmitting(true);
     try {
         const filename = `${Date.now()}_${itemId}.jpg`;
-        const { data, error } = await supabase.storage
-            .from('frotacontrol')
-            .upload(`fcde/${filename}`, blob, {
-                contentType: 'image/jpeg',
-                upsert: false
-            });
-            
-        if (error) throw error;
         
-        const { data: publicData } = supabase.storage
-            .from('frotacontrol')
-            .getPublicUrl(`fcde/${filename}`);
-            
-        const imageUrl = publicData.publicUrl;
+        const formData = new FormData();
+        formData.append('files', new File([blob], filename, { type: 'image/jpeg' }));
+        
+        const uploadRes = await fetch(`${UPLOAD_API_URL}/api/upload/checklist`, {
+            method: 'POST',
+            body: formData,
+        });
+        
+        if (!uploadRes.ok) {
+            const err = await uploadRes.json().catch(() => ({ error: 'Falha no upload' }));
+            throw new Error(err.error || err.details || 'Falha no upload da imagem');
+        }
+        
+        const uploadResult = await uploadRes.json();
+        const imageUrl = uploadResult.urls?.[0]
+            ? `${UPLOAD_API_URL}${uploadResult.urls[0]}`
+            : '';
         
         setChecklist(prev => prev.map(item => {
             if (item.id === itemId) {

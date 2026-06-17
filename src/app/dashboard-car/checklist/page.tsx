@@ -20,7 +20,7 @@ import {
 } from '@/lib/car-rtdb';
 import { CarHeader } from '@/components/car-header';
 import { cn } from '@/lib/utils';
-import { supabase } from '@/lib/supabase';
+const UPLOAD_API_URL = process.env.NEXT_PUBLIC_EXPORT_API_URL || 'http://localhost:5000';
 
 type ZoneKey = 'frente' | 'frente_esquerda' | 'frente_direita' | 'tras' | 'tras_esquerda' | 'tras_direita';
 
@@ -153,26 +153,24 @@ export default function CarChecklistPage() {
 
       if (images.length > 0) {
         toast({ title: 'Enviando imagens...', description: 'Aguarde o upload dos anexos.' });
+
+        const formData = new FormData();
         for (const img of images) {
-          const fileExtension = img.file.name.split('.').pop() || 'png';
-          const fileName = `${crypto.randomUUID()}.${fileExtension}`;
-          const filePath = `checklist/${fileName}`;
-
-          const { error } = await supabase.storage.from('frotacontrol').upload(filePath, img.file, {
-            cacheControl: '3600',
-            upsert: false,
-          });
-
-          if (error) {
-            console.error('Erro Supabase:', error);
-            throw new Error(`Falha no upload de ${img.file.name}: ${error.message}`);
-          }
-
-          const { data: publicUrlData } = supabase.storage.from('frotacontrol').getPublicUrl(filePath);
-          if (publicUrlData && publicUrlData.publicUrl) {
-            imageLinks.push(publicUrlData.publicUrl);
-          }
+          formData.append('files', img.file);
         }
+
+        const uploadRes = await fetch(`${UPLOAD_API_URL}/api/upload/checklist`, {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!uploadRes.ok) {
+          const err = await uploadRes.json().catch(() => ({ error: 'Falha no upload' }));
+          throw new Error(err.error || 'Falha no upload das imagens');
+        }
+
+        const uploadResult = await uploadRes.json();
+        imageLinks = (uploadResult.urls || []).map((url: string) => `${UPLOAD_API_URL}${url}`);
       }
 
       const agora = new Date();
