@@ -558,6 +558,127 @@ export function agendamentoAtivoAgora(
   );
 }
 
+/**
+ * Verifica se ha um agendamento que comeca dentro dos proximos minutosAntecedencia.
+ * Retorna o agendamento se o usuario atual NAO for o dono nem motorista permitido.
+ * Usado para garantir que o veiculo esteja disponivel antes de um agendamento.
+ */
+export function agendamentoAntecedencia(
+  agendamentos: Record<string, CarAgendamento> | null,
+  usuarioMat: string,
+  minutosAntecedencia: number = 15
+): CarAgendamento | null {
+  if (!agendamentos) return null;
+  const agora = new Date();
+  const dataAtual = agora.toLocaleDateString("pt-BR");
+
+  // Limite superior: agora + minutosAntecedencia
+  const limite = new Date(agora.getTime() + minutosAntecedencia * 60 * 1000);
+
+  // Converte hora "HH:MM" + data "dd/mm/aaaa" para timestamp
+  const toTimestamp = (data: string, hora: string): number => {
+    const [d, m, y] = data.split("/").map(Number);
+    const [hh, mm] = hora.split(":").map(Number);
+    return new Date(y, m - 1, d, hh, mm).getTime();
+  };
+
+  const agoraTs = agora.getTime();
+  const limiteTs = limite.getTime();
+
+  // Procura agendamento que comeca entre agora e o limite
+  const proximo = Object.values(agendamentos).find(
+    (a) =>
+      a &&
+      a.status === "confirmado" &&
+      a.data === dataAtual
+  );
+
+  if (!proximo) return null;
+
+  const inicioTs = toTimestamp(proximo.data, proximo.hora_inicio);
+  if (inicioTs <= agoraTs || inicioTs > limiteTs) return null;
+
+  // Se o usuario eh o dono ou motorista permitido, libera
+  const permitidos: string[] = proximo.permitidos_extra || [];
+  if (proximo.matricula === usuarioMat || permitidos.includes(usuarioMat)) {
+    return null;
+  }
+
+  return proximo;
+}
+
+/**
+ * Verifica se o checklist do usuario esta em dia.
+ * Exige checklist antes de CADA viagem: o ultimo checklist deve ser
+ * posterior ao horario de fim da ultima corrida do dia.
+ * Retorna { ok: boolean, motivo: string }
+ */
+export async function verificarChecklistHoje(
+  empresa: string,
+  setor: string,
+  matricula: string
+): Promise<{ ok: boolean; motivo: string }> {
+  try {
+    const hoje = new Date().toLocaleDateString("pt-BR");
+
+    // Busca checklists do usuario hoje
+    const relatorios = await rtdbGet<Record<string, any>>(
+      `${empresa}/${setor}/relatorio`
+    );
+
+    let ultimaHoraChecklist = "";
+    if (relatorios) {
+      const meus = Object.values(relatorios).filter(
+        (r) => r && r.matricula === matricula && r.DATA === hoje
+      );
+      // Pega a HORA mais recente
+      for (const r of meus) {
+        if (r.HORA && r.HORA > ultimaHoraChecklist) {
+          ultimaHoraChecklist = r.HORA;
+        }
+      }
+    }
+
+    if (!ultimaHoraChecklist) {
+      return { ok: false, motivo: "Voce ainda nao fez o checklist hoje." };
+    }
+
+    // Busca corridas finalizadas do usuario hoje
+    const corridas = await rtdbGet<Record<string, any>>(
+      `${empresa}/${setor}/corridas`
+    );
+
+    let ultimaHoraFim = "";
+    if (corridas) {
+      const minhas = Object.values(corridas).filter(
+        (c) => c && c.responsavel === matricula && c.data === hoje && c.horario_fim
+      );
+      for (const c of minhas) {
+        if (c.horario_fim && c.horario_fim > ultimaHoraFim) {
+          ultimaHoraFim = c.horario_fim;
+        }
+      }
+    }
+
+    // Se nao tem corrida anterior hoje, so precisa de um checklist
+    if (!ultimaHoraFim) {
+      return { ok: true, motivo: "" };
+    }
+
+    // Se ja fez corrida hoje, o checklist precisa ser posterior
+    if (ultimaHoraChecklist >= ultimaHoraFim) {
+      return { ok: true, motivo: "" };
+    }
+
+    return {
+      ok: false,
+      motivo: `Seu ultimo checklist foi as ${ultimaHoraChecklist}, mas voce finalizou uma corrida as ${ultimaHoraFim}. Recolo o checklist antes de iniciar outra.`,
+    };
+  } catch {
+    return { ok: false, motivo: "Erro ao verificar checklist." };
+  }
+}
+
 /** Retorna o status efetivo do agendamento: se confirmado mas o horario ja passou, trata como finalizado */
 export function getEffectiveStatus(ag: { status: string; data: string; hora_fim: string }): string {
   if (ag.status !== 'confirmado') return ag.status;

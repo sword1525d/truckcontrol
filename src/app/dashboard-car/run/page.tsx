@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,7 +15,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { ArrowLeft, Car, Loader2, MapPin, Milestone, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Car, Loader2, MapPin, Milestone, AlertCircle, ClipboardCheck } from 'lucide-react';
 import {
   getCarUsuario,
   fetchVeiculos,
@@ -27,7 +28,9 @@ import {
   updateUsuarioStatus,
   veiculoEmCorridaAtiva,
   agendamentoAtivoAgora,
+  agendamentoAntecedencia,
   fetchAgendamentosVeiculo,
+  verificarChecklistHoje,
   type CarUsuario,
   type CarVeiculo,
   CAR_RTDB_URL,
@@ -49,12 +52,34 @@ export default function CarRunPage() {
   const [isValidating, setIsValidating] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [veiculoBlockMsg, setVeiculoBlockMsg] = useState<string | null>(null);
+  const [checklistOk, setChecklistOk] = useState<boolean | null>(null);
+  const [checklistMotivo, setChecklistMotivo] = useState('');
+  const [checklistLoading, setChecklistLoading] = useState(true);
 
   useEffect(() => {
     const u = getCarUsuario();
     if (!u) { router.replace('/login-car'); return; }
     setUsuario(u);
   }, [router]);
+
+  // Verificar checklist obrigatorio
+  useEffect(() => {
+    if (!usuario) return;
+    const check = async () => {
+      setChecklistLoading(true);
+      try {
+        const result = await verificarChecklistHoje(usuario.empresa, usuario.setor, usuario.mat);
+        setChecklistOk(result.ok);
+        setChecklistMotivo(result.motivo);
+      } catch {
+        setChecklistOk(false);
+        setChecklistMotivo('Erro ao verificar checklist.');
+      } finally {
+        setChecklistLoading(false);
+      }
+    };
+    check();
+  }, [usuario]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Carrega veículos permitidos ao usuário
   useEffect(() => {
@@ -134,6 +159,16 @@ export default function CarRunPage() {
             setIsValidating(false);
             return;
           }
+        }
+
+        // Verificar agendamento proximo (15 min de antecedencia)
+        const agendProximo = agendamentoAntecedencia(agendamentos, usuario.mat, 15);
+        if (agendProximo) {
+          setVeiculoBlockMsg(
+            `Veiculo reservado para ${agendProximo.responsavel} as ${agendProximo.hora_inicio}. Aguarde o inicio do agendamento ou a liberacao.`
+          );
+          setIsValidating(false);
+          return;
         }
 
         // Verificar corridas ativas
@@ -232,6 +267,37 @@ export default function CarRunPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Checklist obrigatorio */}
+          {checklistOk === false && !checklistLoading && (
+            <Card className="border-t-4 border-t-amber-500 shadow-md bg-amber-50 dark:bg-amber-950/20">
+              <CardContent className="p-4">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-amber-800 dark:text-amber-300">
+                      Checklist obrigatorio nao realizado hoje
+                    </p>
+                    <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
+                      {checklistMotivo || 'Voce precisa preencher o checklist diario antes de iniciar qualquer corrida.'}
+                    </p>
+                    <Link
+                      href="/dashboard-car/checklist"
+                      className="inline-flex items-center gap-1.5 mt-2 text-sm font-bold text-amber-700 dark:text-amber-300 hover:text-amber-900 dark:hover:text-amber-100 underline"
+                    >
+                      <ClipboardCheck className="w-4 h-4" />
+                      Ir para o Checklist
+                    </Link>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          {checklistLoading && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground py-2 px-1">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Verificando checklist do dia...
+            </div>
+          )}
           {/* Veículo */}
           <Card className="border-t-4 border-t-primary shadow-md">
             <CardContent className="p-6 space-y-4">
@@ -312,7 +378,8 @@ export default function CarRunPage() {
           <Button
             type="submit"
             className="w-full h-14 text-base font-bold"
-            disabled={!canSubmit || isSubmitting}
+            disabled={!canSubmit || isSubmitting || checklistOk === false}
+            title={checklistOk === false ? 'Preencha o checklist diario antes de iniciar uma corrida' : undefined}
           >
             {isSubmitting ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : null}
             INICIAR CORRIDA

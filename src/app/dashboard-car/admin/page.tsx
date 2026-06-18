@@ -118,6 +118,14 @@ export default function AdminPage() {
   const [cardIsSubmitting, setCardIsSubmitting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
+  const subtractMinutes = (time: string, minutes: number): string => {
+    const [h, m] = time.split(':').map(Number);
+    const totalMin = h * 60 + m - minutes;
+    const newH = Math.floor(totalMin / 60);
+    const newM = totalMin % 60;
+    return `${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`;
+  };
+
   const hoje = new Date().toISOString().split('T')[0];
 
   useEffect(() => {
@@ -468,7 +476,10 @@ export default function AdminPage() {
 
       const temConflito = Object.values(agendamentos).some((ag) => {
         if (!ag || ag.status !== 'confirmado' || ag.data !== dataBR) return false;
-        return !(scheduleHoraFim <= ag.hora_inicio || scheduleHoraInicio >= ag.hora_fim);
+        // Se o agendamento existente eh do motorista selecionado, ignora a antecedencia
+        const isOwner = ag.matricula === scheduleDriver;
+        const bufferInicio = isOwner ? ag.hora_inicio : subtractMinutes(ag.hora_inicio, 15);
+        return !(scheduleHoraFim <= bufferInicio || scheduleHoraInicio >= ag.hora_fim);
       });
 
       setScheduleConflictMsg(temConflito ? 'Ja existe um agendamento neste horario.' : null);
