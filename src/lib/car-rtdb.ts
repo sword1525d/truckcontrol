@@ -616,48 +616,57 @@ export function agendamentoAntecedencia(
 export async function verificarChecklistHoje(
   empresa: string,
   setor: string,
-  matricula: string
+  matricula: string,
+  nome: string,
+  setoresGrupo?: string[]
 ): Promise<{ ok: boolean; motivo: string }> {
   try {
     const hoje = new Date().toLocaleDateString("pt-BR");
+    const setoresParaBuscar = setoresGrupo && setoresGrupo.length > 0 ? setoresGrupo : [setor];
 
-    // Busca checklists do usuario hoje
-    const relatorios = await rtdbGet<Record<string, any>>(
-      `${empresa}/${setor}/relatorio`
-    );
-
+    // Busca checklists do usuario hoje em todos os setores do grupo
     let ultimaHoraChecklist = "";
-    if (relatorios) {
-      const meus = Object.values(relatorios).filter(
-        (r) => r && r.matricula === matricula && r.DATA === hoje
-      );
-      // Pega a HORA mais recente
-      for (const r of meus) {
-        if (r.HORA && r.HORA > ultimaHoraChecklist) {
-          ultimaHoraChecklist = r.HORA;
+    for (const s of setoresParaBuscar) {
+      try {
+        const relatorios = await rtdbGet<Record<string, any>>(
+          `${empresa}/${s}/relatorio`
+        );
+        if (relatorios) {
+          const meus = Object.values(relatorios).filter(
+            (r) => r && r.matricula === matricula && r.DATA === hoje
+          );
+          // Pega a HORA mais recente
+          for (const r of meus) {
+            if (r.HORA && r.HORA > ultimaHoraChecklist) {
+              ultimaHoraChecklist = r.HORA;
+            }
+          }
         }
-      }
+      } catch { /* ignore */ }
     }
 
     if (!ultimaHoraChecklist) {
       return { ok: false, motivo: "Voce ainda nao fez o checklist hoje." };
     }
 
-    // Busca corridas finalizadas do usuario hoje
-    const corridas = await rtdbGet<Record<string, any>>(
-      `${empresa}/${setor}/corridas`
-    );
-
+    // Busca corridas finalizadas do usuario hoje em todos os setores do grupo
     let ultimaHoraFim = "";
-    if (corridas) {
-      const minhas = Object.values(corridas).filter(
-        (c) => c && c.responsavel === matricula && c.data === hoje && c.horario_fim
-      );
-      for (const c of minhas) {
-        if (c.horario_fim && c.horario_fim > ultimaHoraFim) {
-          ultimaHoraFim = c.horario_fim;
+    for (const s of setoresParaBuscar) {
+      try {
+        const corridas = await rtdbGet<Record<string, any>>(
+          `${empresa}/${s}/corridas`
+        );
+        if (corridas) {
+          const minhas = Object.values(corridas).filter(
+            (c) => c && c.responsavel === nome && c.data === hoje && c.horario_fim
+          );
+          for (const c of minhas) {
+            if (c.horario_fim && c.horario_fim > ultimaHoraFim) {
+              ultimaHoraFim = c.horario_fim;
+            }
+          }
         }
-      }
+      } catch { /* ignore */ }
     }
 
     // Se nao tem corrida anterior hoje, so precisa de um checklist
@@ -672,7 +681,7 @@ export async function verificarChecklistHoje(
 
     return {
       ok: false,
-      motivo: `Seu ultimo checklist foi as ${ultimaHoraChecklist}, mas voce finalizou uma corrida as ${ultimaHoraFim}. Recolo o checklist antes de iniciar outra.`,
+      motivo: `Seu ultimo checklist foi as ${ultimaHoraChecklist}, mas voce finalizou uma corrida as ${ultimaHoraFim}. Re-faca o checklist antes de iniciar outra.`,
     };
   } catch {
     return { ok: false, motivo: "Erro ao verificar checklist." };

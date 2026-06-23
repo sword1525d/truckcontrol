@@ -68,7 +68,13 @@ export default function CarRunPage() {
     const check = async () => {
       setChecklistLoading(true);
       try {
-        const result = await verificarChecklistHoje(usuario.empresa, usuario.setor, usuario.mat);
+        const result = await verificarChecklistHoje(
+          usuario.empresa,
+          usuario.setor,
+          usuario.mat,
+          usuario.nome,
+          usuario.setoresGrupo
+        );
         setChecklistOk(result.ok);
         setChecklistMotivo(result.motivo);
       } catch {
